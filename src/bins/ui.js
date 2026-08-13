@@ -216,6 +216,14 @@ function readControls() {
   $('edgeHint').style.display = t.solid ? 'none' : '';
   $('presetTray').style.display = t.solid ? 'none' : '';
   $('selActions').style.display = selected >= 0 ? '' : 'none';
+  const sel = selected >= 0 ? B()[selected] : null;
+  const needsSplit = !!sel && !fitsBed(sel.u, sel.v) && !!splitPlan(sel.u, sel.v);
+  $('splitFit').style.display = needsSplit ? '' : 'none';
+  $('splitHint').style.display = needsSplit ? '' : 'none';
+  if (needsSplit) {
+    const sp = describeSplit(sel.u, sel.v);
+    $('splitFit').textContent = `Split into ${sp.text} to fit the bed`;
+  }
   $('binPanelTitle').textContent = selected >= 0 ? 'Selected bin' : 'New bins';
   $('fillSize').textContent = `${state.u}×${state.v}`;
   $('delLayer').style.display = layers.length > 1 ? '' : 'none';
@@ -467,6 +475,25 @@ $('delBin').addEventListener('click', () => {
   B().splice(selected, 1); selected = -1;
   readControls(); drawLayerTabs(); drawMap(); refresh();
 });
+$('splitFit').addEventListener('click', () => {
+  if (selected < 0) return;
+  const b = B()[selected], sp = describeSplit(b.u, b.v);
+  if (!sp) return;
+  const src = Object.assign({}, b);
+  B().splice(selected, 1);
+  let oy = src.y;
+  for (const vv of sp.ys) {
+    let ox = src.x;
+    for (const uu of sp.xs) {
+      B().push(Object.assign({}, src, { x: ox, y: oy, u: uu, v: vv,
+                                        edges: Object.assign({}, src.edges) }));
+      ox += uu;
+    }
+    oy += vv;
+  }
+  selected = -1;
+  readControls(); drawLayerTabs(); drawMap(); refresh();
+});
 $('applyAll').addEventListener('click', () => {
   if (selected < 0) return;
   const s = B()[selected];
@@ -476,6 +503,40 @@ $('applyAll').addEventListener('click', () => {
     edges: Object.assign({}, s.edges) });
   drawMap(); refresh();
 });
+
+/* ---------- splitting an oversized bin ------------------------------------
+   Rotating on the bed never helps: a rectangle's bounding box is smallest at 0 or
+   90 degrees, so anything longer than the bed stays longer than the bed. The only
+   answer is fewer cells per piece. */
+const footW = (u) => (u - 1) * SPEC.pitch + 2 * SPEC.half;
+const fitsBed = (u, v) => {
+  const w = footW(u), d = footW(v);
+  return (w <= state.bedW && d <= state.bedD) || (d <= state.bedW && w <= state.bedD);
+};
+// fewest pieces that each fit; ties broken towards squarer pieces
+function splitPlan(u, v) {
+  let best = null;
+  for (let nx = 1; nx <= u; nx++)
+    for (let ny = 1; ny <= v; ny++) {
+      const pu = Math.ceil(u / nx), pv = Math.ceil(v / ny);
+      if (!fitsBed(pu, pv)) continue;
+      const n = nx * ny, ar = Math.max(pu, pv) / Math.min(pu, pv);
+      if (!best || n < best.n || (n === best.n && ar < best.ar)) best = { nx, ny, n, ar, pu, pv };
+    }
+  return best;
+}
+const evenParts = (total, n) => {
+  const base = Math.floor(total / n), extra = total % n;
+  return Array.from({ length: n }, (_, i) => base + (i < extra ? 1 : 0));
+};
+function describeSplit(u, v) {
+  const p = splitPlan(u, v);
+  if (!p) return null;
+  const xs = evenParts(u, p.nx), ys = evenParts(v, p.ny);
+  const names = [];
+  for (const b of ys) for (const a of xs) names.push(`${a}×${b}`);
+  return { plan: p, xs, ys, text: names.join(' + ') };
+}
 
 /* ---------- per-bin problems ----------------------------------------------
    One place decides what is wrong with a bin, so the badge on the map and the
@@ -541,7 +602,11 @@ function binIssues(b, k) {
   }
   const fw = (b.u - 1) * SPEC.pitch + 2 * SPEC.half, fd = (b.v - 1) * SPEC.pitch + 2 * SPEC.half;
   if (!((fw <= state.bedW && fd <= state.bedD) || (fd <= state.bedW && fw <= state.bedD)))
-    out.push(`is ${fw.toFixed(0)} × ${fd.toFixed(0)} mm, too big for your ${state.bedW} × ${state.bedD} mm bed in either orientation — split it into smaller bins`);
+  {
+    const sp = describeSplit(b.u, b.v);
+    out.push(`is ${fw.toFixed(0)} × ${fd.toFixed(0)} mm, too big for your ${state.bedW} × ${state.bedD} mm bed in either orientation` +
+      (sp ? ` — split it into ${sp.text}` : ''));
+  }
   if (st.z + b.hUnits * SPEC.unitH + LIP_H > g.avail + 0.001)
     out.push(`reaches ${(st.z + b.hUnits * SPEC.unitH + LIP_H).toFixed(1)} mm, past the ${g.avail.toFixed(1)} mm available`);
   if (!b.solid && b.wall < 0.8)
