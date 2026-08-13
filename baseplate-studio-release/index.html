@@ -1,0 +1,2675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Baseplate Studio — Gridfinity baseplates cut to your drawer</title>
+<style>
+:root{
+  --bg:#171c22; --panel:#1f262e; --panel2:#242c35; --line:#2c353f;
+  --ink:#e9eef4; --dim:#8b98a5; --cyan:#4fc3e8; --amber:#e8b34f; --red:#e87b6a;
+  --mono:ui-monospace,'SF Mono','Cascadia Code',Consolas,Menlo,monospace;
+  --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px}
+a{color:var(--cyan)}
+header{padding:22px 26px 16px;border-bottom:1px solid var(--line);
+  background:
+    repeating-linear-gradient(0deg,transparent,transparent 20px,rgba(79,195,232,.045) 20px,rgba(79,195,232,.045) 21px),
+    repeating-linear-gradient(90deg,transparent,transparent 20px,rgba(79,195,232,.045) 20px,rgba(79,195,232,.045) 21px),
+    var(--bg);}
+header h1{font-size:21px;letter-spacing:.16em;font-weight:700}
+header h1 .tm{color:var(--cyan)}
+header p{color:var(--dim);margin-top:5px;max-width:640px}
+header .privacy{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:7px}
+header .privacy::before{content:"● ";color:var(--cyan)}
+.app{display:grid;grid-template-columns:376px 1fr;gap:0;min-height:calc(100vh - 96px)}
+@media(max-width:980px){.app{grid-template-columns:1fr}}
+.rail{border-right:1px solid var(--line);padding:14px 16px 40px;overflow-y:auto;max-height:calc(100vh - 96px)}
+@media(max-width:980px){.rail{max-height:none;border-right:none;border-bottom:1px solid var(--line)}}
+.stage{padding:16px 20px 60px;overflow-y:auto;max-height:calc(100vh - 96px)}
+@media(max-width:980px){.stage{max-height:none}}
+section.p{background:var(--panel);border:1px solid var(--line);border-radius:8px;margin-bottom:12px;overflow:hidden}
+section.p>h2{font-size:11px;letter-spacing:.14em;color:var(--dim);padding:10px 13px;cursor:pointer;
+  display:flex;align-items:center;gap:9px;user-select:none;text-transform:uppercase}
+section.p>h2 .n{font-family:var(--mono);color:var(--cyan);font-size:11px}
+section.p>h2 .caret{margin-left:auto;transition:transform .15s;color:var(--dim)}
+section.p.closed .caret{transform:rotate(-90deg)}
+section.p .body{padding:2px 13px 13px;display:grid;gap:9px}
+section.p.closed .body{display:none}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+label.f{display:grid;gap:4px;font-size:11.5px;color:var(--dim)}
+label.f b{font-weight:500}
+input,select{background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+  border-radius:5px;padding:7px 8px;font-family:var(--mono);font-size:13px;width:100%}
+input:focus,select:focus{outline:1px solid var(--cyan);border-color:var(--cyan)}
+select{font-family:var(--sans)}
+.seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{flex:1;background:var(--panel2);color:var(--dim);border:none;padding:7px 4px;
+  cursor:pointer;font-size:12px;font-family:var(--sans)}
+.seg button.on{background:var(--cyan);color:#0c1116;font-weight:600}
+.seg button+button{border-left:1px solid var(--line)}
+.tog{display:flex;align-items:center;gap:9px;cursor:pointer;font-size:12.5px;color:var(--ink)}
+.tog input{appearance:none;-webkit-appearance:none;width:36px;height:20px;border-radius:20px;
+  background:var(--panel2);border:1px solid var(--line);position:relative;cursor:pointer;
+  transition:background .18s,border-color .18s;flex:none;margin:0}
+.tog input::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+  background:var(--dim);transition:transform .18s,background .18s}
+.tog input:checked{background:rgba(79,195,232,.25);border-color:var(--cyan)}
+.tog input:checked::after{transform:translateX(16px);background:var(--cyan)}
+.tog input:focus-visible{outline:1px solid var(--cyan)}
+.hint{font-size:11px;color:var(--dim);line-height:1.45}
+.hint.amber{color:var(--amber)}
+button.act{background:var(--cyan);color:#0c1116;border:none;border-radius:6px;padding:9px 12px;
+  font-weight:600;cursor:pointer;font-size:13px}
+button.act:disabled{opacity:.45;cursor:default}
+button.ghost{background:transparent;color:var(--cyan);border:1px solid var(--cyan);border-radius:6px;
+  padding:8px 12px;cursor:pointer;font-size:12.5px}
+button.ghost:disabled{opacity:.4;cursor:default}
+.export .body{gap:8px}
+.stagecard{background:var(--panel);border:1px solid var(--line);border-radius:8px;margin-bottom:14px}
+.stagecard h3{font-size:11px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase;
+  padding:10px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center}
+.stagecard h3 .tail{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--cyan);text-transform:none;letter-spacing:0}
+#mapwrap{padding:10px 14px 14px;overflow-x:auto}
+#cutmap{display:block;margin:0 auto;max-width:100%}
+#cutmap .gridline{stroke:var(--line);stroke-width:1}
+#cutmap .cutline{stroke:var(--cyan);stroke-width:2.5}
+#cutmap .hitline{stroke:transparent;stroke-width:11;cursor:pointer}
+#cutmap .hitline:hover{stroke:rgba(79,195,232,.28)}
+#cutmap text{font-family:var(--mono);fill:var(--dim)}
+#cutmap .dim{stroke:var(--dim);stroke-width:1}
+#cutmap .plabel{fill:var(--ink);font-size:13px;font-weight:600}
+#cutmap .psub{fill:var(--dim);font-size:10px}
+#cutmap .bad{fill:var(--red)}
+#threewrap{position:relative;height:380px}
+#three{width:100%;height:100%;display:block;border-radius:0 0 8px 8px;cursor:grab}
+#three:active{cursor:grabbing}
+#threehint{position:absolute;right:12px;bottom:10px;font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+#status{position:absolute;left:12px;bottom:10px;font-family:var(--mono);font-size:11px;color:var(--cyan)}
+table.pieces{width:100%;border-collapse:collapse}
+table.pieces th,table.pieces td{padding:8px 14px;text-align:left;font-size:12.5px;border-bottom:1px solid var(--line)}
+table.pieces th{color:var(--dim);font-weight:500;font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+table.pieces td.mono{font-family:var(--mono)}
+table.pieces .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:7px;vertical-align:-1px}
+table.pieces .bad{color:var(--red)}
+table.pieces button{padding:5px 10px;font-size:12px}
+#warnings{padding:0 14px}
+#warnings .w{font-size:12px;padding:8px 0;border-bottom:1px solid var(--line);display:flex;gap:8px}
+#warnings .w:last-child{border-bottom:none}
+#warnings .w::before{content:"⚠";color:var(--amber)}
+#warnings .w.err::before{content:"✕";color:var(--red)}
+footer{padding:18px 26px 30px;border-top:1px solid var(--line);color:var(--dim);font-size:12px;line-height:1.6}
+footer .mono{font-family:var(--mono);font-size:11px}
+.klabel{font-family:var(--mono);color:var(--cyan)}
+</style>
+</head>
+<body>
+<header>
+  <h1>BASEPLATE <span class="tm">STUDIO</span></h1>
+  <p>Gridfinity baseplates cut to your drawer — measured, split for your printer, joined, and ready to print. Start with the space you have; everything else follows.</p>
+  <div class="privacy">runs entirely in your browser — nothing is uploaded, no account, no tracking</div>
+</header>
+<div class="app">
+<div class="rail">
+
+<section class="p" id="s-drawer">
+  <h2><span class="n">01</span> Drawer &amp; grid <span class="caret">▾</span></h2>
+  <div class="body">
+    <div class="row">
+      <label class="f"><b>Drawer width (mm)</b><input id="drawerW" type="number" step="0.5" value="306"></label>
+      <label class="f"><b>Drawer depth (mm)</b><input id="drawerD" type="number" step="0.5" value="380"></label>
+    </div>
+    <div class="hint">Internal dimensions. Measure at the tightest point and subtract 1–2&nbsp;mm so the assembly slides in.</div>
+    <label class="f"><b>Leftover space (margins)</b>
+      <select id="marginMode">
+        <option value="auto">Fill with solid margin, aligned…</option>
+        <option value="none">Leave as gap (plate = grid only)</option>
+        <option value="custom">Custom per side…</option>
+      </select>
+    </label>
+    <div class="row" id="alignRow">
+      <label class="f"><b>Align width</b>
+        <select id="alignX"><option value="center">Centre</option><option value="start">Right (margin left)</option><option value="end">Left (margin right)</option></select></label>
+      <label class="f"><b>Align depth</b>
+        <select id="alignY"><option value="center">Centre</option><option value="start">Back (margin front)</option><option value="end">Front (margin back)</option></select></label>
+    </div>
+    <div class="row" id="customMargins" style="display:none">
+      <label class="f"><b>Left / Right (mm)</b><div class="row"><input id="mLeft" type="number" step="0.5" value="0"><input id="mRight" type="number" step="0.5" value="0"></div></label>
+      <label class="f"><b>Front / Back (mm)</b><div class="row"><input id="mFront" type="number" step="0.5" value="0"><input id="mBack" type="number" step="0.5" value="0"></div></label>
+    </div>
+    <div class="hint" id="gridSummary"></div>
+  </div>
+</section>
+
+<section class="p" id="s-printer">
+  <h2><span class="n">02</span> Printer <span class="caret">▾</span></h2>
+  <div class="body">
+    <label class="f"><b>Preset</b>
+      <select id="bedPreset">
+        <option value="256,256,256">256 × 256 × 256 (Elegoo CC/CC2, Bambu X1/P1)</option>
+        <option value="220,220,250">220 × 220 × 250 (Ender 3, A1 mini class)</option>
+        <option value="250,210,220">250 × 210 × 220 (Prusa MK4 class)</option>
+        <option value="300,300,300">300 × 300 × 300 (large format)</option>
+        <option value="180,180,180">180 × 180 × 180 (compact)</option>
+        <option value="custom">Custom…</option>
+      </select></label>
+    <div class="row3">
+      <label class="f"><b>Bed width</b><input id="bedW" type="number" value="256"></label>
+      <label class="f"><b>Bed depth</b><input id="bedD" type="number" value="256"></label>
+      <label class="f"><b>Height (Z)</b><input id="bedH" type="number" value="256"></label>
+    </div>
+  </div>
+</section>
+
+<section class="p" id="s-split">
+  <h2><span class="n">03</span> Split <span class="caret">▾</span></h2>
+  <div class="body">
+    <div class="seg" id="splitSeg">
+      <button data-v="balanced" class="on">Balanced</button>
+      <button data-v="staggered">Staggered</button>
+      <button data-v="plates">Fewest plates</button>
+      <button data-v="manual">Manual</button>
+    </div>
+    <div class="hint">Staggered offsets joints between rows like brickwork so seams never line up. Fewest plates searches split patterns and picks the one needing the fewest print beds — often pairing two narrow pieces on one plate. For full control click grid lines on the cut map; that switches to Manual.</div>
+  </div>
+</section>
+
+<section class="p" id="s-conn">
+  <h2><span class="n">04</span> Connectors <span class="caret">▾</span></h2>
+  <div class="body">
+    <label class="f"><b>Type</b>
+      <select id="connector">
+        <option value="dovetail">Dovetail tabs — drop-in, no extra filament</option>
+        <option value="puzzle">Puzzle tabs — jigsaw lock, strongest in-plane</option>
+        <option value="bowtie">Bowtie keys — separate keys, hidden underneath</option>
+        <option value="puzzlekey">Puzzle keys — separate jigsaw keys underneath</option>
+        <option value="snap">Snap clips — spring-fit keys, press to click in</option>
+        <option value="hclip">H-clips — tiny keys in the walls, no floor needed</option>
+        <option value="none">None — rely on drawer walls</option>
+      </select></label>
+    <div id="connHintDove" class="hint">Tabs on one piece drop into open-bottomed pockets on its neighbour. Assemble on a flat surface, then lower the whole plate into the drawer. Placed at every wall junction along each seam.</div>
+    <div id="connHintPuzzle" class="hint" style="display:none">Jigsaw lobes printed on one piece lock into matching cavities on its neighbour — the strongest in-plane joint. Adds a ~2.6&nbsp;mm solid floor that the lobes live in; assembles by lowering pieces together.</div>
+    <div id="connHintBow" class="hint" style="display:none">Recesses are cut into the underside of both pieces; printed keys bridge each seam. Adds a solid floor to house the keys — the keys STL is in Export and in the ZIP.</div>
+    <div id="connHintSnap" class="hint" style="display:none">Dog-bone recesses under both pieces take a sprung key: the slot through its middle lets it compress, so it clicks in and holds. Adds a solid floor. Keys STL in Export.</div>
+    <div id="connHintHclip" class="hint" style="display:none">Tiny H-shaped keys (≈3.6 × 3.8 mm) sink into pockets in the grid walls at each junction, pressed in from beneath during face-down assembly. No floor, almost no filament, invisible from above. Keys STL in Export.</div>
+    <label class="f" id="keyInsertRow" style="display:none"><b>Key insertion</b>
+      <select id="keyInsert">
+        <option value="bottom">From beneath — assemble face-down, then flip into the drawer</option>
+        <option value="top">From above — join the pieces inside the drawer, drop keys in</option>
+      </select></label>
+    <div class="hint" id="keyInsertHint" style="display:none">From above suits drawers you can't lower an assembled plate into: lay the pieces in place, then drop a key into each junction from the top. Keys sit just below flush; the rim gets a small opening at each junction, hidden under the bins' rounded corners.</div>
+    <label class="f" id="keyMountRow" style="display:none"><b>Key housing</b>
+      <select id="keyMount">
+        <option value="floor">Solid floor — full-size keys, strongest</option>
+        <option value="wall">Inside the walls — slim keys, no extra filament</option>
+      </select></label>
+    <div class="hint" id="keyMountHint" style="display:none">Wall housing sinks slim keys into the grid walls at each junction — the plate stays open-bottomed and uses no extra filament. Keys are smaller, so the hold is lighter; solid floor gives the strongest joint.</div>
+    <label class="f"><b>Fit clearance (mm per side)</b><input id="connClr" type="number" step="0.05" value="0.2"></label>
+    <div class="hint">0.2 suits most printers. Print the test tile pair first; tighten to 0.15 or loosen to 0.25 from there.</div>
+  </div>
+</section>
+
+<section class="p" id="s-mag">
+  <h2><span class="n">05</span> Magnets &amp; screws <span class="caret">▾</span></h2>
+  <div class="body">
+    <label class="tog"><input id="magnets" type="checkbox"> Magnet pockets (4 per cell)</label>
+    <div class="row3" id="magRow" style="display:none">
+      <label class="f"><b>Ø (mm)</b><input id="magnetD" type="number" step="0.5" value="6"></label>
+      <label class="f"><b>Depth</b><input id="magnetH" type="number" step="0.1" value="2"></label>
+      <label class="f"><b>Open from</b><select id="magnetSide"><option value="bottom">Below</option><option value="top">Above</option></select></label>
+    </div>
+    <label class="tog"><input id="screws" type="checkbox"> Screw holes (counterbored, 4 per cell)</label>
+    <div class="row3" id="screwRow" style="display:none">
+      <label class="f"><b>Hole Ø</b><input id="screwHoleD" type="number" step="0.5" value="3"></label>
+      <label class="f"><b>Head Ø</b><input id="screwHeadD" type="number" step="0.5" value="6"></label>
+      <label class="f"><b>Head depth</b><input id="screwHeadDepth" type="number" step="0.1" value="2"></label>
+    </div>
+    <label class="f" id="baseModeRow" style="display:none"><b>Mounting base</b>
+      <select id="baseMode">
+        <option value="solid">Solid floor — full 2.8 mm base under everything</option>
+        <option value="bosses">Corner pockets only — bosses at each position, saves filament</option>
+      </select></label>
+    <div class="hint">Corner pockets match the light-weight style of other generators: small rounded bosses at each cell corner instead of a full floor. Gravity-fit drawers need neither magnets nor screws.</div>
+  </div>
+</section>
+
+<section class="p closed" id="s-prof">
+  <h2><span class="n">06</span> Socket profile <span class="caret">▾</span></h2>
+  <div class="body">
+    <label class="f"><b>Bin fit</b>
+      <select id="tolerance"><option value="standard">Standard (spec 0.25 mm)</option><option value="tight">Tight (−0.1 mm)</option><option value="loose">Loose (+0.1 mm)</option></select></label>
+    <div class="row">
+      <label class="f"><b>Grid pitch (mm)</b><input id="pitch" type="number" step="0.5" value="42"></label>
+      <label class="f"><b>Corner radius</b><input id="outerRadius" type="number" step="0.5" value="4"></label>
+    </div>
+    <label class="tog"><input id="perCorner" type="checkbox"> Set each plate corner separately</label>
+    <div class="row" id="cornerRow" style="display:none">
+      <label class="f"><b>Front-left / Front-right</b><div class="row"><input id="rFL" type="number" step="0.5" value="4"><input id="rFR" type="number" step="0.5" value="4"></div></label>
+      <label class="f"><b>Back-left / Back-right</b><div class="row"><input id="rBL" type="number" step="0.5" value="4"><input id="rBR" type="number" step="0.5" value="4"></div></label>
+    </div>
+    <div class="hint" id="cornerHint" style="display:none">For drawers or containers with rounded corners — match each radius to the drawer, front of drawer at the bottom of the cut map.</div>
+    <div class="row">
+      <label class="f"><b>Extra floor (mm)</b><input id="bottomPad" type="number" step="0.1" value="0"></label>
+      <label class="f"><b>Rim cutoff (mm)</b><input id="topCutoff" type="number" step="0.1" value="0.4"></label>
+    </div>
+    <div class="hint">Defaults follow the Gridfinity spec (42&nbsp;mm pitch, three-part profile, 4.25&nbsp;mm plate). Change pitch only for non-standard bins.</div>
+  </div>
+</section>
+
+<section class="p export" id="s-export">
+  <h2><span class="n">07</span> Export <span class="caret">▾</span></h2>
+  <div class="body">
+    <button class="act" id="dlAll">Download all pieces (.zip)</button>
+    <button class="ghost" id="dlTile">Test tile — bin fit (.stl)</button>
+    <button class="ghost" id="dlFit" style="display:none">Joint fit sample — 4 clearances (.stl)</button>
+    <button class="ghost" id="dlKeys" style="display:none">Connector keys (.stl)</button>
+    <button class="ghost" id="shareBtn">Copy settings link</button>
+    <div class="hint">Each ZIP includes every piece, a README with assembly order, and your settings. STLs are millimetre-scale, print flat as oriented, no supports.</div>
+  </div>
+</section>
+
+</div>
+<div class="stage">
+
+<div class="stagecard">
+  <h3>Cut map — click grid lines to split <span class="tail" id="mapTail"></span></h3>
+  <div id="mapwrap"><svg id="cutmap"></svg></div>
+  <div id="warnings"></div>
+</div>
+
+<div class="stagecard">
+  <h3>Preview <span class="tail"><label class="tog" style="font-size:11px"><input type="checkbox" id="explode"> exploded</label></span></h3>
+  <div id="threewrap"><canvas id="three"></canvas><div id="status"></div><div id="threehint">drag rotate · wheel zoom · shift-drag pan</div></div>
+</div>
+
+<div class="stagecard">
+  <h3>Print plan <span class="tail" id="planTail"></span></h3>
+  <div style="padding:10px 14px;display:grid;gap:10px">
+    <div class="row3">
+      <label class="f"><b>Part spacing (mm)</b><input id="plateGap" type="number" step="0.5" value="4"></label>
+      <label class="f" style="align-self:end"><label class="tog"><input id="stackToggle" type="checkbox"> Stack identical pieces</label></label>
+      <label class="f"><b>Stack gap (mm)</b><input id="stackGap" type="number" step="0.02" value="0.24"></label>
+    </div>
+    <div class="hint" id="stackHint" style="display:none">Experimental: any piece that fits fully inside the footprint of the one below prints stacked on top, separated by the gap layer — snap apart afterwards. Needs well-tuned bridging (the layer above spans open sockets); test with two first. Respects your printer's Z height.</div>
+    <div id="platesRow" style="display:flex;gap:12px;flex-wrap:wrap"></div>
+    <button class="act" id="dlPlates" style="justify-self:start">Download all print plates (.3mf)</button>
+  </div>
+</div>
+
+<div class="stagecard">
+  <h3>Pieces <span class="tail" id="pieceTail"></span></h3>
+  <table class="pieces"><thead><tr>
+    <th>Piece</th><th>Grid</th><th>Size (mm)</th><th>Joints</th><th>Bed fit</th><th></th>
+  </tr></thead><tbody id="pieceRows"></tbody></table>
+</div>
+
+</div>
+</div>
+<footer>
+  <div><b>Baseplate Studio</b> is free and open. Gridfinity was created by <a href="https://www.youtube.com/c/ZackFreedman" rel="noopener">Zack Freedman</a> (Voidstar Lab) as an open standard — this tool implements the published baseplate profile and adds drawer-first workflow, split control, and printable connectors.</div>
+  <div style="margin-top:10px">Hey — thank you for using the tool! If you'd like to raise any issues or feature suggestions/requests, please raise them <a id="ghLink" href="https://github.com/YOUR_USERNAME/YOUR_REPO/issues" rel="noopener">on GitHub</a>. If it's saved you some time and you fancy it, you can also <a id="kofiLink" href="https://ko-fi.com/YOUR_KOFI" rel="noopener">buy me a coffee</a>.</div>
+  <div class="mono" style="margin-top:8px">All geometry is computed locally in your browser — nothing is uploaded. STL/3MF output is mm scale. v1.2</div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+/* Gridfinity Baseplate Studio — geometry core.
+   Self-contained CSG (BSP) + gridfinity builders + binary STL writer.
+   Runs in browser and Node (module.exports guard at bottom). */
+'use strict';
+
+const EPS = 1e-5;
+
+// ---------- vectors ----------
+const V = {
+  sub: (a, b) => [a[0]-b[0], a[1]-b[1], a[2]-b[2]],
+  add: (a, b) => [a[0]+b[0], a[1]+b[1], a[2]+b[2]],
+  scale: (a, s) => [a[0]*s, a[1]*s, a[2]*s],
+  dot: (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2],
+  cross: (a, b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]],
+  len: (a) => Math.hypot(a[0], a[1], a[2]),
+  unit: (a) => { const l = V.len(a); return [a[0]/l, a[1]/l, a[2]/l]; },
+  lerp: (a, b, t) => [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t],
+};
+
+// ---------- polygon / plane ----------
+function planeFromPoints(a, b, c) {
+  const n = V.unit(V.cross(V.sub(b, a), V.sub(c, a)));
+  return { n, w: V.dot(n, a) };
+}
+function makePoly(verts) {
+  // pick 3 well-spread verts for a stable plane
+  let plane = null;
+  for (let i = 2; i < verts.length; i++) {
+    const n = V.cross(V.sub(verts[1], verts[0]), V.sub(verts[i], verts[0]));
+    if (V.len(n) > 1e-9) { plane = planeFromPoints(verts[0], verts[1], verts[i]); break; }
+  }
+  if (!plane) return null;
+  return { verts, plane };
+}
+function flipPoly(p) {
+  return { verts: p.verts.slice().reverse(), plane: { n: V.scale(p.plane.n, -1), w: -p.plane.w } };
+}
+
+// ---------- BSP ----------
+const COPLANAR = 0, FRONT = 1, BACK = 2, SPANNING = 3;
+function splitPolygon(plane, poly, coplanarFront, coplanarBack, front, back) {
+  let polyType = 0;
+  const types = [];
+  for (const v of poly.verts) {
+    const t = V.dot(plane.n, v) - plane.w;
+    const type = (t < -EPS) ? BACK : (t > EPS) ? FRONT : COPLANAR;
+    polyType |= type; types.push(type);
+  }
+  switch (polyType) {
+    case COPLANAR:
+      (V.dot(plane.n, poly.plane.n) > 0 ? coplanarFront : coplanarBack).push(poly); break;
+    case FRONT: front.push(poly); break;
+    case BACK: back.push(poly); break;
+    case SPANNING: {
+      const f = [], b = [];
+      const n = poly.verts.length;
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        const ti = types[i], tj = types[j];
+        const vi = poly.verts[i], vj = poly.verts[j];
+        if (ti !== BACK) f.push(vi);
+        if (ti !== FRONT) b.push(vi);
+        if ((ti | tj) === SPANNING) {
+          const t = (plane.w - V.dot(plane.n, vi)) / V.dot(plane.n, V.sub(vj, vi));
+          const v = V.lerp(vi, vj, t);
+          f.push(v); b.push(v);
+        }
+      }
+      if (f.length >= 3) { const p = makePoly(f); if (p) { p.plane = poly.plane; front.push(p); } }
+      if (b.length >= 3) { const p = makePoly(b); if (p) { p.plane = poly.plane; back.push(p); } }
+      break;
+    }
+  }
+}
+class Node {
+  constructor(polys) { this.plane = null; this.front = null; this.back = null; this.polys = []; if (polys) this.build(polys); }
+  invert() {
+    const stack = [this];
+    while (stack.length) {
+      const nd = stack.pop();
+      for (let i = 0; i < nd.polys.length; i++) nd.polys[i] = flipPoly(nd.polys[i]);
+      if (nd.plane) nd.plane = { n: V.scale(nd.plane.n, -1), w: -nd.plane.w };
+      const t = nd.front; nd.front = nd.back; nd.back = t;
+      if (nd.front) stack.push(nd.front);
+      if (nd.back) stack.push(nd.back);
+    }
+  }
+  clipPolygons(polys) {
+    // iterative: worklist of (node, polys)
+    let out = [];
+    const stack = [[this, polys]];
+    while (stack.length) {
+      const [nd, ps] = stack.pop();
+      if (!nd.plane) { out = out.concat(ps); continue; }
+      const front = [], back = [];
+      for (const p of ps) splitPolygon(nd.plane, p, front, back, front, back);
+      if (nd.front) { if (front.length) stack.push([nd.front, front]); }
+      else out = out.concat(front);
+      if (nd.back && back.length) stack.push([nd.back, back]);
+      // no back child => back polys are inside: dropped
+    }
+    return out;
+  }
+  clipTo(bsp) {
+    const stack = [this];
+    while (stack.length) {
+      const nd = stack.pop();
+      nd.polys = bsp.clipPolygons(nd.polys);
+      if (nd.front) stack.push(nd.front);
+      if (nd.back) stack.push(nd.back);
+    }
+  }
+  allPolygons() {
+    let ps = [];
+    const stack = [this];
+    while (stack.length) {
+      const nd = stack.pop();
+      ps = ps.concat(nd.polys);
+      if (nd.front) stack.push(nd.front);
+      if (nd.back) stack.push(nd.back);
+    }
+    return ps;
+  }
+  build(polys) {
+    const stack = [[this, polys]];
+    while (stack.length) {
+      const [nd, ps] = stack.pop();
+      if (!ps.length) continue;
+      if (!nd.plane) {
+        const mid = ps[ps.length >> 1];
+        nd.plane = { n: mid.plane.n.slice(), w: mid.plane.w };
+      }
+      const front = [], back = [];
+      for (const p of ps) splitPolygon(nd.plane, p, nd.polys, nd.polys, front, back);
+      if (front.length) { if (!nd.front) nd.front = new Node(); stack.push([nd.front, front]); }
+      if (back.length) { if (!nd.back) nd.back = new Node(); stack.push([nd.back, back]); }
+    }
+  }
+}
+function csgSubtract(aPolys, bPolys) {
+  const a = new Node(aPolys), b = new Node(bPolys);
+  a.invert(); a.clipTo(b); b.clipTo(a); b.invert(); b.clipTo(a); b.invert();
+  a.build(b.allPolygons()); a.invert();
+  return a.allPolygons();
+}
+function csgUnion(aPolys, bPolys) {
+  const a = new Node(aPolys), b = new Node(bPolys);
+  a.clipTo(b); b.clipTo(a); b.invert(); b.clipTo(a); b.invert();
+  a.build(b.allPolygons());
+  return a.allPolygons();
+}
+
+// remove all material inside convex 2D polygon `cv` (CCW) above z0 — deterministic
+// half-space splitting only; safe through any geometry including cones.
+function clipConvexPrismTop(polys, cv, z0) {
+  let keep = [], work = polys;
+  // peel off parts outside each edge half-plane (those are kept)
+  for (let i = 0; i < cv.length; i++) {
+    const a = cv[i], b = cv[(i + 1) % cv.length];
+    // edge normal pointing OUTWARD (CCW poly): n = (dy, -dx)
+    const nx = b[1] - a[1], ny = a[0] - b[0];
+    const len = Math.hypot(nx, ny) || 1;
+    const plane = { n: [nx/len, ny/len, 0], w: (nx*a[0] + ny*a[1]) / len };
+    const front = [], back = [];
+    for (const p of work) splitPolygon(plane, p, front, back, front, back);
+    keep = keep.concat(front);   // outside this edge -> outside the prism
+    work = back;
+  }
+  // work is now inside the prism in XY: keep only below z0
+  const plane = { n: [0, 0, 1], w: z0 };
+  const below = [], above = [];
+  for (const p of work) splitPolygon(plane, p, above, below, above, below);
+  return keep.concat(below);
+}
+
+// convex decomposition of a keyed half-shape footprint (grown), piece-local coords
+function keyHalfConvexParts(type, edge, e, s, prm, grow) {
+  const g = (edge === '+x' || edge === '+y') ? -1 : 1;
+  const J = 0.0017, ss = s + J;
+  const rect = (d0, d1, w) => {
+    if (edge === '+x' || edge === '-x') {
+      const x0 = e + g*Math.max(d0, d1)* (g>0?0:1) , dummy=0;
+      const xa = e + g*d0, xb = e + g*d1;
+      const lo = Math.min(xa, xb), hi = Math.max(xa, xb);
+      return [[lo, ss - w], [hi, ss - w], [hi, ss + w], [lo, ss + w]];
+    }
+    const ya = e + g*d0, yb = e + g*d1;
+    const lo = Math.min(ya, yb), hi = Math.max(ya, yb);
+    return [[ss - w, lo], [ss - w, hi], [ss + w, hi], [ss + w, lo]];
+  };
+  if (type === 'bowtie') {
+    // one trapezoid (convex): approximate with its bounding rect segments? use exact trapezoid
+    const pts = keyHalf('bowtie', edge, e, s, prm, grow);
+    return [pts];   // bowtie half is convex already
+  }
+  if (type === 'puzzlekey') {
+    // waist rect + the lobe itself (a convex 16-gon)
+    const r = prm.lobeR + grow, cd = prm.len/2 - prm.lobeR;
+    const lobe = [];
+    for (let k = 0; k < 20; k++) {
+      const a = k * 2 * Math.PI / 20;
+      const dp = cd + r * Math.cos(a), lt = r * Math.sin(a);
+      if (edge === '+x' || edge === '-x') lobe.push([e + g*dp, ss + lt]);
+      else lobe.push([ss + lt, e + g*dp]);
+    }
+    if (g > 0) lobe.reverse();   // keep CCW after mirroring
+    return [rect(-0.5, cd, prm.waistW/2 + grow), lobe];
+  }
+  // snap/hclip dogbone: waist rect + end section (convex part)
+  const endStart = prm.len/2 - prm.endLen;
+  return [
+    rect(-0.5, endStart + 0.1, prm.wMid/2 + grow),
+    rect(endStart, prm.len/2 + grow, prm.wEnd/2 + grow),
+  ];
+}
+
+// clamp a poly soup to the half-space z >= z0 (drops sub-floor cutter leakage)
+function clampZ(polys, z0) {
+  const plane = { n: [0, 0, 1], w: z0 };
+  const out = [], coFront = [], coBack = [], back = [];
+  for (const p of polys) splitPolygon(plane, p, coFront, coFront, out, back);
+  return out.concat(coFront);
+}
+
+// ---------- 2D helpers ----------
+function polyArea2D(pts) {
+  let s = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const j = (i + 1) % pts.length;
+    s += pts[i][0]*pts[j][1] - pts[j][0]*pts[i][1];
+  }
+  return s / 2;
+}
+// ear clipping; pts = simple polygon (any winding); returns triangles as index triples of the (CCW-normalised) points, plus the points
+function earTriangulate(ptsIn) {
+  let pts = ptsIn.slice();
+  if (polyArea2D(pts) < 0) pts = pts.reverse();
+  const n0 = pts.length;
+  const idx = Array.from({ length: n0 }, (_, i) => i);
+  const tris = [];
+  const cross = (o, a, b) => (a[0]-o[0])*(b[1]-o[1]) - (a[1]-o[1])*(b[0]-o[0]);
+  const inTri = (p, a, b, c) =>
+    cross(a, b, p) >= -1e-9 && cross(b, c, p) >= -1e-9 && cross(c, a, p) >= -1e-9;
+  let guard = 0;
+  while (idx.length > 3 && guard++ < 20000) {
+    let clipped = false;
+    for (let i = 0; i < idx.length; i++) {
+      const ia = idx[(i - 1 + idx.length) % idx.length], ib = idx[i], ic = idx[(i + 1) % idx.length];
+      const a = pts[ia], b = pts[ib], c = pts[ic];
+      if (cross(a, b, c) <= 1e-9) continue;           // reflex or degenerate
+      let contains = false;
+      for (const k of idx) {
+        if (k === ia || k === ib || k === ic) continue;
+        if (inTri(pts[k], a, b, c)) { contains = true; break; }
+      }
+      if (contains) continue;
+      tris.push([ia, ib, ic]);
+      idx.splice(i, 1);
+      clipped = true;
+      break;
+    }
+    if (!clipped) break; // fallback: shouldn't happen for simple polygons
+  }
+  if (idx.length === 3) tris.push([idx[0], idx[1], idx[2]]);
+  return { pts, tris };
+}
+
+// extrude a simple 2D polygon (any winding) from z0 to z1 into closed triangle-soup polys
+function extrudePoly(pts2d, z0, z1) {
+  const { pts, tris } = earTriangulate(pts2d);      // pts is CCW
+  const polys = [];
+  const n = pts.length;
+  for (let i = 0; i < n; i++) {                     // sides (outward for CCW)
+    const j = (i + 1) % n;
+    const a0 = [pts[i][0], pts[i][1], z0], b0 = [pts[j][0], pts[j][1], z0];
+    const a1 = [pts[i][0], pts[i][1], z1], b1 = [pts[j][0], pts[j][1], z1];
+    const p = makePoly([a0, b0, b1, a1]); if (p) polys.push(p);
+  }
+  for (const t of tris) {                           // caps
+    const top = makePoly([
+      [pts[t[0]][0], pts[t[0]][1], z1],
+      [pts[t[1]][0], pts[t[1]][1], z1],
+      [pts[t[2]][0], pts[t[2]][1], z1]]);
+    if (top) polys.push(top);
+    const bot = makePoly([
+      [pts[t[2]][0], pts[t[2]][1], z0],
+      [pts[t[1]][0], pts[t[1]][1], z0],
+      [pts[t[0]][0], pts[t[0]][1], z0]]);
+    if (bot) polys.push(bot);
+  }
+  return polys;
+}
+
+function roundedSquareRing(cx, cy, half, r, n) {
+  n = n || 6;
+  r = Math.max(0.3, Math.min(r, half - 0.01));
+  const pts = [];
+  const cs = [[half-r, half-r, 0], [-half+r, half-r, 90], [-half+r, -half+r, 180], [half-r, -half+r, 270]];
+  for (const [ox, oy, a0] of cs) {
+    for (let k = 0; k < n; k++) {
+      const a = (a0 + 90*k/n) * Math.PI/180;
+      pts.push([cx + ox + r*Math.cos(a), cy + oy + r*Math.sin(a)]);
+    }
+  }
+  return pts;
+}
+
+// socket cutter: swept rounded-square through the gridfinity profile
+function socketCutter(cx, cy, prof, arcSegs) {
+  const zs = prof.zs, ds = prof.ds;
+  const rings = zs.map((z, i) => {
+    const d = ds[i];
+    const r = prof.rTop - (d - ds[ds.length-1]);
+    return roundedSquareRing(cx, cy, prof.pitchHalf - d, r, arcSegs).map(p => [p[0], p[1], z]);
+  });
+  const polys = [];
+  const n = rings[0].length;
+  for (let i = 0; i < rings.length - 1; i++) {
+    for (let j = 0; j < n; j++) {
+      const k = (j + 1) % n;
+      // triangles, not quads: corner-arc faces are conical (non-planar as quads)
+      let p = makePoly([rings[i][j], rings[i][k], rings[i+1][k]]); if (p) polys.push(p);
+      p = makePoly([rings[i][j], rings[i+1][k], rings[i+1][j]]); if (p) polys.push(p);
+    }
+  }
+  const c0 = [cx, cy, zs[0]], c1 = [cx, cy, zs[zs.length-1]];
+  for (let j = 0; j < n; j++) {
+    const k = (j + 1) % n;
+    let p = makePoly([c0, rings[0][k], rings[0][j]]); if (p) polys.push(p);
+    p = makePoly([c1, rings[rings.length-1][j], rings[rings.length-1][k]]); if (p) polys.push(p);
+  }
+  return polys;
+}
+
+function cylinder(cx, cy, r, z0, z1, seg) {
+  seg = seg || 14;
+  const ring0 = [], ring1 = [];
+  for (let i = 0; i < seg; i++) {
+    const a = 2*Math.PI*i/seg;
+    ring0.push([cx + r*Math.cos(a), cy + r*Math.sin(a), z0]);
+    ring1.push([cx + r*Math.cos(a), cy + r*Math.sin(a), z1]);
+  }
+  const polys = [];
+  for (let i = 0; i < seg; i++) {
+    const j = (i + 1) % seg;
+    let p = makePoly([ring0[i], ring0[j], ring1[j], ring1[i]]); if (p) polys.push(p);
+    p = makePoly([[cx, cy, z0], ring0[j], ring0[i]]); if (p) polys.push(p);
+    p = makePoly([[cx, cy, z1], ring1[i], ring1[j]]); if (p) polys.push(p);
+  }
+  return polys;
+}
+
+// counterbore: hole cylinder full height + wider recess from chosen face
+function screwCutter(cx, cy, holeD, headD, z0, z1, headDepth, fromTop) {
+  let polys = cylinder(cx, cy, holeD/2, z0 - 0.5, z1 + 0.5, 12);
+  if (headD > holeD) {
+    const rec = fromTop
+      ? cylinder(cx, cy, headD/2, z1 - headDepth, z1 + 0.5, 14)
+      : cylinder(cx, cy, headD/2, z0 - 0.5, z0 + headDepth, 14);
+    polys = csgUnion(polys, rec);
+  }
+  return polys;
+}
+
+// dovetail tab footprint (2D); edge: '+x'|'-x'|'+y'|'-y', e = edge coordinate, s = centre along edge
+function tabFootprint(edge, e, s, wr, wt, dp, back) {
+  let pts;
+  if (edge === '+x' || edge === '-x') {
+    const g = edge === '+x' ? 1 : -1;
+    pts = [[e - g*back, s - wr/2], [e, s - wr/2], [e + g*dp, s - wt/2],
+           [e + g*dp, s + wt/2], [e, s + wr/2], [e - g*back, s + wr/2]];
+  } else {
+    const g = edge === '+y' ? 1 : -1;
+    pts = [[s - wr/2, e - g*back], [s - wr/2, e], [s - wt/2, e + g*dp],
+           [s + wt/2, e + g*dp], [s + wr/2, e], [s + wr/2, e - g*back]];
+  }
+  return pts;
+}
+const OPP = { '+x': '-x', '-x': '+x', '+y': '-y', '-y': '+y' };
+
+// Sutherland–Hodgman: clip any simple polygon to an axis-aligned rect
+function clipToRect(pts, x0, y0, x1, y1) {
+  const planes = [
+    (p) => p[0] >= x0, (p) => p[0] <= x1, (p) => p[1] >= y0, (p) => p[1] <= y1,
+  ];
+  const inter = [
+    (a, b) => [x0, a[1] + (b[1]-a[1]) * (x0-a[0]) / (b[0]-a[0])],
+    (a, b) => [x1, a[1] + (b[1]-a[1]) * (x1-a[0]) / (b[0]-a[0])],
+    (a, b) => [a[0] + (b[0]-a[0]) * (y0-a[1]) / (b[1]-a[1]), y0],
+    (a, b) => [a[0] + (b[0]-a[0]) * (y1-a[1]) / (b[1]-a[1]), y1],
+  ];
+  let out = pts;
+  for (let k = 0; k < 4; k++) {
+    const inp = out; out = [];
+    if (!inp.length) break;
+    for (let i = 0; i < inp.length; i++) {
+      const cur = inp[i], prev = inp[(i + inp.length - 1) % inp.length];
+      const cIn = planes[k](cur), pIn = planes[k](prev);
+      if (cIn) { if (!pIn) out.push(inter[k](prev, cur)); out.push(cur); }
+      else if (pIn) out.push(inter[k](prev, cur));
+    }
+  }
+  // drop consecutive duplicates
+  const clean = [];
+  for (const p of out) {
+    const q = clean[clean.length-1];
+    if (!q || Math.abs(q[0]-p[0]) > 1e-7 || Math.abs(q[1]-p[1]) > 1e-7) clean.push(p);
+  }
+  if (clean.length > 2) {
+    const a = clean[0], b = clean[clean.length-1];
+    if (Math.abs(a[0]-b[0]) < 1e-7 && Math.abs(a[1]-b[1]) < 1e-7) clean.pop();
+  }
+  return clean.length >= 3 ? clean : null;
+}
+
+// ---------- layout ----------
+/* General layout: horizontal bands (rowCuts) and per-band column cuts (colCuts[b]).
+   splitMode: 'balanced' | 'staggered' | 'manual' (manual uses provided cuts). */
+function computeLayout(p) {
+  const pitch = p.pitch;
+  let nx, ny, mL, mR, mF, mB;
+  if (p.marginMode === 'custom') {
+    mL = p.mLeft; mR = p.mRight; mF = p.mFront; mB = p.mBack;
+    nx = Math.max(1, Math.floor((p.drawerW - mL - mR) / pitch + 1e-6));
+    ny = Math.max(1, Math.floor((p.drawerD - mF - mB) / pitch + 1e-6));
+    mR = p.drawerW - mL - nx*pitch;
+    mB = p.drawerD - mF - ny*pitch;
+  } else {
+    nx = Math.max(1, Math.floor(p.drawerW / pitch + 1e-6));
+    ny = Math.max(1, Math.floor(p.drawerD / pitch + 1e-6));
+    const remX = p.drawerW - nx*pitch, remY = p.drawerD - ny*pitch;
+    mL = p.alignX === 'start' ? remX : p.alignX === 'end' ? 0 : remX/2;
+    mR = remX - mL;
+    mF = p.alignY === 'start' ? remY : p.alignY === 'end' ? 0 : remY/2;
+    mB = remY - mF;
+  }
+  const maxCellsX = Math.max(1, Math.floor(p.bedW / pitch));
+  const maxCellsY = Math.max(1, Math.floor(p.bedD / pitch));
+
+  function balancedCuts(n, maxCells, m0, m1, bed, extra) {
+    // extra: allowance for tab protrusion etc.
+    const fits = (counts) => counts.every((c, i) => {
+      let w = c*pitch + extra;
+      if (i === 0) w += m0;
+      if (i === counts.length-1) w += m1;
+      return w <= bed + 1e-6;
+    });
+    for (let k = Math.max(1, Math.ceil(n / maxCells)); k <= n; k++) {
+      const base = Math.floor(n / k), ext = n % k;
+      const counts = Array.from({ length: k }, (_, i) => base + (i < ext ? 1 : 0));
+      if (fits(counts)) {
+        const cuts = []; let acc = 0;
+        for (let i = 0; i < k - 1; i++) { acc += counts[i]; cuts.push(acc); }
+        return cuts;
+      }
+    }
+    return [];
+  }
+  const extra = p.connector === 'dovetail' ? 2.5 : 0;
+
+  // row bands
+  let rowCuts;
+  if (p.splitMode === 'plates') {
+    const opt = optimizeForPlates(Object.assign({}, p, { splitMode: 'balanced' }));
+    if (opt) return computeLayout(Object.assign({}, p, { splitMode: 'manual', rowCuts: opt.rowCuts, colCuts: opt.colCuts }));
+    return computeLayout(Object.assign({}, p, { splitMode: 'balanced' }));
+  }
+  if (p.splitMode === 'manual' && Array.isArray(p.rowCuts)) {
+    rowCuts = p.rowCuts.filter(c => c > 0 && c < ny).sort((a, b) => a - b);
+  } else {
+    rowCuts = balancedCuts(ny, maxCellsY, mF, mB, p.bedD, extra);
+  }
+  const bandStarts = [0, ...rowCuts];
+  const bandEnds = [...rowCuts, ny];
+  const nBands = bandStarts.length;
+
+  // per-band column cuts
+  const segFits = (cuts) => {
+    const segs = cuts.length ? [cuts[0], ...cuts.slice(1).map((c, i) => c - cuts[i]), nx - cuts[cuts.length-1]] : [nx];
+    return segs.every((s, i) => {
+      let w = s*pitch + extra;
+      if (i === 0) w += mL;
+      if (i === segs.length-1) w += mR;
+      return s >= 1 && w <= p.bedW + 1e-6;
+    });
+  };
+  let colCuts = [];
+  for (let b = 0; b < nBands; b++) {
+    let cuts;
+    if (p.splitMode === 'manual' && p.colCuts && Array.isArray(p.colCuts[b])) {
+      cuts = p.colCuts[b].filter(c => c > 0 && c < nx).sort((a, bb) => a - bb);
+    } else {
+      cuts = balancedCuts(nx, maxCellsX, mL, mR, p.bedW, extra);
+      if (p.splitMode === 'staggered' && b % 2 === 1 && cuts.length) {
+        const nSeg = cuts.length + 1;
+        const halfSeg = Math.max(1, Math.round(nx / nSeg / 2));
+        const candidates = [halfSeg, -halfSeg, halfSeg+1, -(halfSeg+1), 1, -1, 2, -2];
+        let best = null;
+        for (const shift of candidates) {
+          const trial = cuts.map(c => c + shift);
+          if (trial.some(c => c <= 0 || c >= nx)) continue;
+          const sorted = trial.slice().sort((x, y) => x - y);
+          if (!segFits(sorted)) continue;
+          const segs = [sorted[0], ...sorted.slice(1).map((c, i) => c - sorted[i]), nx - sorted[sorted.length-1]];
+          const minSeg = Math.min(...segs);
+          if (!best || minSeg > best.minSeg) best = { cuts: sorted, minSeg };
+          if (minSeg >= 2) break;
+        }
+        if (best) cuts = best.cuts;
+      }
+    }
+    colCuts.push(cuts);
+  }
+  // pieces
+  const pieces = [];
+  for (let b = 0; b < nBands; b++) {
+    const segStarts = [0, ...colCuts[b]];
+    const segEnds = [...colCuts[b], nx];
+    for (let s = 0; s < segStarts.length; s++) {
+      pieces.push({
+        id: `${String.fromCharCode(65 + s)}${b + 1}`,
+        band: b, seg: s,
+        cellX0: segStarts[s], cellY0: bandStarts[b],
+        nx: segEnds[s] - segStarts[s], ny: bandEnds[b] - bandStarts[b],
+        mL: segStarts[s] === 0 ? mL : 0, mR: segEnds[s] === nx ? mR : 0,
+        mF: bandStarts[b] === 0 ? mF : 0, mB: bandEnds[b] === ny ? mB : 0,
+      });
+    }
+  }
+
+  // adjacency -> connector sites (global grid coords, cell units)
+  // vertical seams: between horizontally adjacent pieces in same band
+  // horizontal seams: between pieces of adjacent bands where x-ranges overlap
+  const seams = [];
+  for (const a of pieces) for (const c of pieces) {
+    if (a === c) continue;
+    if (a.band === c.band && a.cellX0 + a.nx === c.cellX0) {
+      const y0 = a.cellY0, y1 = a.cellY0 + a.ny;
+      const jts = [];
+      for (let j = y0 + 1; j < y1; j++) jts.push(j);
+      seams.push({ type: 'v', a: a.id, b: c.id, x: c.cellX0, y0, y1, junctions: jts });
+    }
+    if (a.cellY0 + a.ny === c.cellY0) {
+      const x0 = Math.max(a.cellX0, c.cellX0), x1 = Math.min(a.cellX0 + a.nx, c.cellX0 + c.nx);
+      if (x1 > x0) {
+        const jts = [];
+        for (let i = x0 + 1; i < x1; i++) jts.push(i);
+        // if the overlap is a single cell wide, use its midpoint so the seam still gets a connector
+        if (!jts.length && x1 - x0 === 1) jts.push(x0 + 0.5);
+        seams.push({ type: 'h', a: a.id, b: c.id, y: c.cellY0, x0, x1, junctions: jts });
+      }
+    }
+  }
+  return { nx, ny, mL, mR, mF, mB, rowCuts, colCuts, pieces, seams,
+           bands: nBands, gridW: nx*pitch, gridD: ny*pitch,
+           maxCellsX, maxCellsY };
+}
+
+/* Per-piece connector lists in piece-local coordinates.
+   dovetail: male on left piece (v-seams) / bottom piece (h-seams); notch on the other.
+   bowtie: both sides get half-recesses; separate keys are exported. */
+function pieceConnectors(cfg, layout, piece) {
+  const pitch = cfg.pitch;
+  const tabs = [], notches = [], ptabs = [], pnotches = [], keyed = [];
+  const t = cfg.connector;
+  if (t === 'none') return { tabs, notches, ptabs, pnotches, keyed };
+  const W = piece.mL + piece.nx*pitch + piece.mR;
+  const D = piece.mF + piece.ny*pitch + piece.mB;
+  const lx = (gx) => piece.mL + (gx - piece.cellX0) * pitch;
+  const ly = (gy) => piece.mF + (gy - piece.cellY0) * pitch;
+  const isTab = t === 'dovetail' || t === 'puzzle';   // everything else keyed (incl. hclip)
+  const male = isTab ? { dovetail: tabs, puzzle: ptabs }[t] : null;
+  const female = isTab ? { dovetail: notches, puzzle: pnotches }[t] : null;
+  for (const s of layout.seams) {
+    if (s.type === 'v') {
+      if (s.a === piece.id) for (const j of s.junctions)
+        (isTab ? male : keyed).push({ edge: '+x', e: W, s: ly(j) });
+      else if (s.b === piece.id) for (const j of s.junctions)
+        (isTab ? female : keyed).push({ edge: '-x', e: 0, s: ly(j) });
+    } else {
+      if (s.a === piece.id) for (const j of s.junctions)
+        (isTab ? male : keyed).push({ edge: '+y', e: D, s: lx(j) });
+      else if (s.b === piece.id) for (const j of s.junctions)
+        (isTab ? female : keyed).push({ edge: '-y', e: 0, s: lx(j) });
+    }
+  }
+  return { tabs, notches, ptabs, pnotches, keyed };
+}
+
+// bowtie half footprint on an edge (recess opens across the seam)
+function bowtieHalf(edge, e, s, bw) {
+  // bw: {len, wEnd, wWaist, clr} ; half extends dp = len/2 into this piece
+  const dp = bw.len/2 + bw.clr, wE = bw.wEnd + 2*bw.clr, wW = bw.wWaist + 2*bw.clr;
+  let pts;
+  if (edge === '+x' || edge === '-x') {
+    const g = edge === '+x' ? 1 : -1;
+    pts = [[e + g*0.5, s - wW/2], [e - g*dp, s - wE/2], [e - g*dp, s + wE/2], [e + g*0.5, s + wW/2]];
+  } else {
+    const g = edge === '+y' ? 1 : -1;
+    pts = [[s - wW/2, e + g*0.5], [s - wE/2, e - g*dp], [s + wE/2, e - g*dp], [s + wW/2, e + g*0.5]];
+  }
+  return pts;
+}
+
+// ---- connector shape library ----
+// puzzle male footprint protruding OUT from edge (grow>0 => female cavity, cut INTO the edge)
+function puzzleShape(edge, e, s, pz, grow, inward) {
+  const nw = pz.neckW/2 + grow, r = pz.lobeR + grow;
+  const nl = pz.neckL, cd = pz.neckL + pz.lobeR * 0.55;   // lobe centre depth
+  const g0 = (edge === '+x' || edge === '+y') ? 1 : -1;
+  const g = inward ? -g0 : g0;
+  // half-angle where circle meets neck width
+  const th = Math.asin(Math.min(0.95, nw / r));
+  const pts = [];
+  pts.push([-0.4, -nw]);                                   // start behind edge
+  pts.push([nl * 0.55, -nw]);
+  for (let k = 0; k <= 18; k++) {                          // lobe arc through the far pole
+    const a = -(Math.PI - th) + k * (2 * (Math.PI - th)) / 18;
+    pts.push([cd + r * Math.cos(a), r * Math.sin(a)]);
+  }
+  pts.push([nl * 0.55, nw]);
+  pts.push([-0.4, nw]);
+  // map (depth, lateral) into world
+  return pts.map(([dp, lt]) => {
+    if (edge === '+x' || edge === '-x') return [e + g * dp, s + lt];
+    return [s + lt, e + g * dp];
+  });
+}
+// generic underside key halves (recess cut into one piece's edge region)
+function keyHalf(type, edge, e, s, prm, grow) {
+  // returns polygon extending prm depth into the piece, 0.5 past the seam
+  let prof;   // list of [depth(from seam, +into piece), halfwidth]
+  if (type === 'bowtie') {
+    prof = [[-0.5, prm.wWaist/2 + grow], [prm.len/2 + grow, prm.wEnd/2 + grow]];
+  } else if (type === 'snap') {
+    const endStart = prm.len/2 - prm.endLen, tp = prm.taper !== undefined ? prm.taper : 0.8;
+    prof = [[-0.5, prm.wMid/2 + grow], [endStart, prm.wMid/2 + grow],
+            [endStart + tp, prm.wEnd/2 + grow], [prm.len/2 + grow, prm.wEnd/2 + grow]];
+  } else {    // puzzlekey: waist then lobe (approximated polygonal)
+    const r = prm.lobeR + grow, cd = prm.len/2 - prm.lobeR;
+    prof = [[-0.5, prm.waistW/2 + grow]];
+    const th = Math.asin(Math.min(0.95, (prm.waistW/2 + grow) / r));
+    for (let k = 0; k <= 14; k++) {
+      const a = -(Math.PI/2 - th) + k * (Math.PI - 2*th) / 14;
+      prof.push([cd + r * Math.sin(a + Math.PI/2 - Math.PI/2)*0 + r*Math.cos(a - Math.PI/2 + Math.PI/2)*0, 0]); // placeholder replaced below
+    }
+    // build lobe explicitly instead
+    prof = null;
+  }
+  let pts;
+  if (prof) {
+    pts = prof.map(([d, w]) => [d, -w]).concat(prof.slice().reverse().map(([d, w]) => [d, w]));
+  } else {
+    // puzzle key half: waist to lobe circle
+    const r = prm.lobeR + grow, cd = prm.len/2 - prm.lobeR, ww = prm.waistW/2 + grow;
+    const th = Math.asin(Math.min(0.95, ww / r));
+    pts = [[-0.5, -ww]];
+    for (let k = 0; k <= 16; k++) {
+      const a = -(Math.PI - th) + k * (2*(Math.PI - th)) / 16;
+      pts.push([cd + r * Math.cos(a), r * Math.sin(a)]);
+    }
+    pts.push([-0.5, ww]);
+  }
+  const g = (edge === '+x' || edge === '+y') ? -1 : 1;   // recess extends INTO this piece
+  return pts.map(([dp, lt]) => {
+    if (edge === '+x' || edge === '-x') return [e + g * dp, s + lt];
+    return [s + lt, e + g * dp];
+  });
+}
+// prism along an arbitrary horizontal axis from a (u,z) profile — for clip keys
+function profilePrism(profile, v0, v1, mapUV) {
+  // profile: list of [u, z], normalized to CCW; mapUV(u, v) -> [x, y]
+  const ar = profile.reduce((acc, p, i) => { const q = profile[(i+1)%profile.length]; return acc + p[0]*q[1] - q[0]*p[1]; }, 0);
+  if (ar < 0) profile = profile.slice().reverse();
+  const polys = [];
+  const n = profile.length;
+  for (let i = 0; i < n; i++) {
+    const a = profile[i], b = profile[(i + 1) % n];
+    const p = makePoly([
+      [...mapUV(a[0], v0), a[1]], [...mapUV(b[0], v0), b[1]],
+      [...mapUV(b[0], v1), b[1]], [...mapUV(a[0], v1), a[1]]]);
+    if (p) polys.push(p);
+  }
+  const { pts, tris } = earTriangulate(profile);
+  for (const t of tris) {
+    let p = makePoly([t[2], t[1], t[0]].map(i => [...mapUV(pts[i][0], v0), pts[i][1]]));
+    if (p) polys.push(p);
+    p = makePoly(t.map(i => [...mapUV(pts[i][0], v1), pts[i][1]]));
+    if (p) polys.push(p);
+  }
+  return polys;
+}
+
+/* Top-snap (click-lock) system, adapted from the Gridfinity Layout Tool sample.
+   Per piece: leg slot with barb undercut + bridge rebate, built from box shells.
+   prm: { legT:1.0, legLen:1.35(along), legC:1.35(center from seam), barb:0.18,
+          bridgeW:1.7, bridgeD:0.85, wall:0.6, clr } */
+function snapTopParts(edge, e, s, prm, H) {
+  const c = prm.clr;
+  const zf = H - 2.35, zLip0 = H - 1.1, zLip1 = H - 0.85, zReb = H - 0.85;
+  const legIn = prm.legC - prm.legT/2 - c;          // near flank (toward seam)
+  const legOut = prm.legC + prm.legT/2 + c;         // far flank (throat line)
+  const cavOut = legOut + prm.barb + 0.05;          // barb cavity far wall
+  const hw = prm.legLen/2 + c;                      // slot half-width along seam
+  const W = prm.wall;
+  const boxes = [];   // each: [d0, d1, s0, s1, z0, z1] in (across-depth, along, z)
+  // floor slab under the whole pocket
+  boxes.push([legIn - W, cavOut + W, -hw - W, hw + W, zf - 0.6, zf]);
+  // near wall (seam side of the leg slot) — stops at the rebate so the bridge seats on it
+  boxes.push([legIn - W, legIn, -hw - W, hw + W, zf, zReb]);
+  // side walls (along-seam flanks) full height
+  boxes.push([legIn - W, cavOut + W, -hw - W, -hw, zf, H]);
+  boxes.push([legIn - W, cavOut + W, hw, hw + W, zf, H]);
+  // far wall below the lip (cavity outer)
+  boxes.push([cavOut, cavOut + W, -hw - W, hw + W, zf, H]);
+  // the lip itself: protrudes 0.12 past the throat line so the barb must click past
+  const lipIn = legOut - 0.12;
+  boxes.push([lipIn, cavOut + W, -hw - W, hw + W, zLip1, H]);
+  const wedge = { d0: lipIn, d1: cavOut, z0: zLip0, z1: zLip1, s0: -hw, s1: hw };
+  // bridge rebate: opening from the seam to the near wall at the top —
+  // realised by NOT rebuilding material there; envelope clip creates it.
+  const env = [ -0.5, cavOut + W + 0.02, -hw - W - 0.02, hw + W + 0.02, zf - 0.62 ];
+  return { boxes, wedge, env, zf };
+}
+function snapTopPocket(edge, e, s, prm, H) {
+  const { boxes, wedge } = snapTopParts(edge, e, s, prm, H);
+  const g = (edge === '+x' || edge === '+y') ? -1 : 1;   // depth direction into the piece
+  const J = 0.0017, ss = s + J;
+  const map = (d, t) => {
+    if (edge === '+x' || edge === '-x') return [e + g*d, ss + t];
+    return [ss + t, e + g*d];
+  };
+  const polys = [];
+  const ccw = (pts) => {
+    const a = pts.reduce((acc, p, i) => { const q = pts[(i+1)%pts.length]; return acc + p[0]*q[1] - q[0]*p[1]; }, 0);
+    return a > 0 ? pts : pts.slice().reverse();
+  };
+  for (const [d0, d1, s0, s1, z0, z1] of boxes) {
+    const pts = ccw([map(d0, s0), map(d1, s0), map(d1, s1), map(d0, s1)]);
+    for (const p of extrudePoly(pts, z0, z1)) polys.push(p);
+  }
+  // barb-lip wedge: 45° underside so it prints without support
+  const wpts = (z, d) => [map(d, wedge.s0), map(d, wedge.s1)];
+  const [A0, A1] = wpts(0, wedge.d0), [B0, B1] = wpts(0, wedge.d1);
+  const tri = [
+    [[...A0, wedge.z1], [...B0, wedge.z0], [...B0, wedge.z1]],
+    [[...B1, wedge.z1], [...B1, wedge.z0], [...A1, wedge.z1]],
+  ];
+  for (const t of tri) { const p = makePoly(t); if (p) polys.push(p); }
+  // wedge slope + top + back faces
+  let p = makePoly([[...A0, wedge.z1], [...A1, wedge.z1], [...B1, wedge.z0], [...B0, wedge.z0]]);
+  if (p) polys.push(p);
+  p = makePoly([[...B0, wedge.z0], [...B1, wedge.z0], [...B1, wedge.z1], [...B0, wedge.z1]]);
+  if (p) polys.push(p);
+  p = makePoly([[...A0, wedge.z1], [...B0, wedge.z1], [...B1, wedge.z1], [...A1, wedge.z1]]);
+  if (p) polys.push(p);
+  return polys;
+}
+// the printed U-clip: cross-section in (across, z), extruded along the seam
+function snapTopClip(prm, H) {
+  const t = prm.legT, bd = prm.bridgeD, barb = prm.barb;
+  const li = prm.legC - t/2, lo = prm.legC + t/2;
+  const bl = lo + 0.15;
+  // easier: define with z measured downward then flip
+  const legDrop = 1.5;                       // floor 1.9 .. bridge underside 3.4
+  const P = [];
+  P.push([-bl, 0]); P.push([bl, 0]);                      // top of bridge
+  P.push([bl, -bd]); P.push([lo, -bd]);                   // bridge right end, underside
+  P.push([lo, -(bd + 0.28)]);                             // leg outer, short shank
+  P.push([lo + barb, -(bd + 0.40)]);                      // barb ramp out
+  P.push([lo + barb, -(bd + 0.62)]);                      // barb flat (catches lip underside)
+  P.push([lo - 0.05, -(bd + 0.92)]);                      // ramp back in (insertion lead)
+  P.push([lo - 0.05, -(bd + legDrop - 0.12)]);            // lower shank
+  P.push([lo - 0.18, -(bd + legDrop)]);                   // tip chamfer
+  P.push([li, -(bd + legDrop)]);                          // tip inner
+  P.push([li, -bd]);                                      // leg inner up to bridge
+  P.push([-li, -bd]);                                     // across the bridge underside
+  P.push([-li, -(bd + legDrop)]);
+  P.push([-lo + 0.18, -(bd + legDrop)]);
+  P.push([-lo + 0.05, -(bd + legDrop - 0.12)]);
+  P.push([-lo + 0.05, -(bd + 0.92)]);
+  P.push([-lo - barb, -(bd + 0.62)]);
+  P.push([-lo - barb, -(bd + 0.40)]);
+  P.push([-lo, -(bd + 0.28)]);
+  P.push([-lo, -bd]); P.push([-bl, -bd]);
+  const zTopClip = bd + legDrop;
+  const prof2 = P.map(([u, z]) => [u, z + zTopClip]);     // shift so bottom = 0
+  const w = prm.legLen / 2;
+  return profilePrism(prof2, -w, w, (u, v) => [u, v]);
+}
+
+// top-insert pocket cup at a keyed site: floor slab + U-shaped walls + rim, direct mesh
+function topPocketCup(type, edge, e, s, prm, clr, zf, zTop) {
+  const polys = [];
+  const inner = keyHalf(type, edge, e, s, prm, clr);
+  const outer = keyHalf(type, edge, e, s, prm, clr + 0.6);
+  // trim both polylines flush at the seam plane (drop the -0.5 protrusion)
+  const axis = (edge === '+x' || edge === '-x') ? 0 : 1;
+  const dirOut = (edge === '+x' || edge === '+y') ? 1 : -1;   // direction pointing out of the piece
+  const clampP = (pts) => pts.map(p => {
+    const q = p.slice();
+    if ((q[axis] - e) * dirOut > 1e-9) q[axis] = e;   // clamp only points past the seam
+    return q;
+  });
+  const inn = clampP(inner), out = clampP(outer);
+  const n = inn.length;   // same topology (same generator)
+  // U-walls between inner & outer (skip the seam-side closing edge: indices 0..n-1 path;
+  // generator returns closed polygon whose first & last points sit on the seam)
+  for (let i = 0; i < n - 1; i++) {
+    let p = makePoly([[inn[i][0], inn[i][1], zf], [inn[i+1][0], inn[i+1][1], zf],
+                      [inn[i+1][0], inn[i+1][1], zTop], [inn[i][0], inn[i][1], zTop]]);
+    if (p) polys.push(p);   // inner wall (faces pocket)
+    p = makePoly([[out[i+1][0], out[i+1][1], zf - 0.6], [out[i][0], out[i][1], zf - 0.6],
+                  [out[i][0], out[i][1], zTop], [out[i+1][0], out[i+1][1], zTop]]);
+    if (p) polys.push(p);   // outer wall
+    // top ring quad
+    p = makePoly([[inn[i][0], inn[i][1], zTop], [inn[i+1][0], inn[i+1][1], zTop],
+                  [out[i+1][0], out[i+1][1], zTop], [out[i][0], out[i][1], zTop]]);
+    if (p) polys.push(p);
+  }
+  // seam-face end caps (between inner & outer at both ends)
+  for (const [ia, ib] of [[0, 0], [n-1, n-1]]) {
+    const p = makePoly([[inn[ia][0], inn[ia][1], zf], [out[ib][0], out[ib][1], zf - 0.6],
+                        [out[ib][0], out[ib][1], zTop], [inn[ia][0], inn[ia][1], zTop]]);
+    if (p) polys.push(p);
+  }
+  // floor slab: outer outline area, top face at zf (pocket floor), bottom at zf-0.6
+  const { pts: fp, tris: ft } = earTriangulate(out);
+  for (const t of ft) {
+    let p = makePoly(t.map(i => [fp[i][0], fp[i][1], zf]));           // up
+    if (p) polys.push(p);
+    p = makePoly([t[2], t[1], t[0]].map(i => [fp[i][0], fp[i][1], zf - 0.6]));  // down
+    if (p) polys.push(p);
+  }
+  // seam-face edge of the floor slab
+  const pA = makePoly([[inn[0][0], inn[0][1], zf], [inn[n-1][0], inn[n-1][1], zf],
+                       [out[n-1][0], out[n-1][1], zf - 0.6], [out[0][0], out[0][1], zf - 0.6]]);
+  if (pA) polys.push(pA);
+  return polys;
+}
+
+// H-clip proportions expressed as a snap (dogbone) profile — proven-clean cut path
+function hclipPrm(hc) {
+  const endLen = hc.flangeT + 0.25;
+  return { len: hc.waistL + 2*endLen, wMid: hc.waistW, wEnd: hc.flangeW,
+           endLen, taper: 0.25, depth: 2.15, clr: hc.clr };
+}
+// (legacy two-rect version, unused)
+function hclipHalfRects(edge, e, s, hc, grow) {
+  const J = 0.0017;
+  const tW = hc.waistW/2 + grow, pW = hc.flangeW/2 + grow;
+  const t0 = -0.5, t1 = hc.waistL/2 + grow + 0.05;          // throat span from seam
+  const p0 = hc.waistL/2 - 0.05, p1 = hc.waistL/2 + hc.flangeT + grow;  // pocket span
+  const g = (edge === '+x' || edge === '+y') ? -1 : 1;      // into the piece
+  const mk = (d0, d1, w) => {
+    const ss = s + J;
+    if (edge === '+x' || edge === '-x')
+      return [[e + g*d0, ss - w], [e + g*d1, ss - w], [e + g*d1, ss + w], [e + g*d0, ss + w]];
+    return [[ss - w, e + g*d0], [ss - w, e + g*d1], [ss + w, e + g*d1], [ss + w, e + g*d0]];
+  };
+  return [mk(t0, t1, tW), mk(p0, p1, pW)];
+}
+
+// full key outlines (for export)
+function keyOutline(type, prm) {
+  if (type === 'bowtie')
+    return [[-prm.len/2, -prm.wEnd/2], [0, -prm.wWaist/2], [prm.len/2, -prm.wEnd/2],
+            [prm.len/2, prm.wEnd/2], [0, prm.wWaist/2], [-prm.len/2, prm.wEnd/2]];
+  if (type === 'hclip') {
+    const wl = prm.waistL/2, ft = prm.flangeT, fw = prm.flangeW/2, ww = prm.waistW/2;
+    return [[-wl-ft, -fw], [-wl, -fw], [-wl, -ww], [wl, -ww], [wl, -fw], [wl+ft, -fw],
+            [wl+ft, fw], [wl, fw], [wl, ww], [-wl, ww], [-wl, fw], [-wl-ft, fw]];
+  }
+  if (type === 'snap') {
+    const es = prm.len/2 - prm.endLen, tp = prm.taper !== undefined ? prm.taper : 0.8;
+    return [[-prm.len/2, -prm.wEnd/2], [-es - tp, -prm.wEnd/2], [-es, -prm.wMid/2],
+            [es, -prm.wMid/2], [es + tp, -prm.wEnd/2], [prm.len/2, -prm.wEnd/2],
+            [prm.len/2, prm.wEnd/2], [es + tp, prm.wEnd/2], [es, prm.wMid/2],
+            [-es, prm.wMid/2], [-es - tp, prm.wEnd/2], [-prm.len/2, prm.wEnd/2]];
+  }
+  // puzzlekey: two lobes joined at x = ±0.5 (guaranteed simple polygon)
+  const r = prm.lobeR, cd = prm.len/2 - r;
+  const aj = Math.acos(Math.max(-0.98, (0.5 - cd) / r));
+  const pts = [];
+  for (let k = 0; k <= 16; k++) {   // right lobe, CCW from lower junction
+    const a = -aj + k * (2*aj) / 16;
+    pts.push([cd + r * Math.cos(a), r * Math.sin(a)]);
+  }
+  for (let k = 0; k <= 16; k++) {   // left lobe
+    const a = (Math.PI - aj) + k * (2*aj) / 16;
+    pts.push([-cd + r * Math.cos(a), r * Math.sin(a)]);
+  }
+  return pts;
+}
+function buildKey(type, prm, height) {
+  let polys = extrudePoly(keyOutline(type, prm), 0, height);
+  if (type === 'snap') {   // spring slot through the middle
+    const sl = prm.len * 0.62, sw = 1.3;
+    polys = csgSubtract(polys, extrudePoly(
+      [[-sl/2, -sw/2], [sl/2, -sw/2], [sl/2, sw/2], [-sl/2, sw/2]], -0.5, height + 0.5));
+  }
+  return polys;
+}
+
+// full bowtie key (both halves), centred at origin along x
+function bowtieKey(bw, height) {
+  const dp = bw.len/2, wE = bw.wEnd, wW = bw.wWaist;
+  const pts = [[-dp, -wE/2], [0, -wW/2], [dp, -wE/2], [dp, wE/2], [0, wW/2], [-dp, wE/2]];
+  return extrudePoly(pts, 0, height);
+}
+
+// triangulate an annular region between outer loop (CCW) and inner loop (CCW)
+// via keyhole bridging, then ear clipping
+function triangulateRing(outer, inner) {
+  // bridge from inner's rightmost vertex to a visible outer vertex
+  let mi = 0;
+  for (let i = 1; i < inner.length; i++) if (inner[i][0] > inner[mi][0]) mi = i;
+  const M = inner[mi];
+  const segInt = (a, b, c, d) => {
+    const d1 = [b[0]-a[0], b[1]-a[1]], d2 = [d[0]-c[0], d[1]-c[1]];
+    const den = d1[0]*d2[1] - d1[1]*d2[0];
+    if (Math.abs(den) < 1e-12) return false;
+    const t = ((c[0]-a[0])*d2[1] - (c[1]-a[1])*d2[0]) / den;
+    const u = ((c[0]-a[0])*d1[1] - (c[1]-a[1])*d1[0]) / den;
+    return t > 1e-7 && t < 1-1e-7 && u > 1e-7 && u < 1-1e-7;
+  };
+  const cand = outer.map((p, i) => [i, (p[0]-M[0])**2 + (p[1]-M[1])**2])
+                    .sort((a, b) => a[1] - b[1]);
+  let oi = cand[0][0];
+  for (const [i] of cand) {
+    const O = outer[i];
+    let blocked = false;
+    for (let k = 0; k < outer.length && !blocked; k++) {
+      const k2 = (k+1) % outer.length;
+      if (k === i || k2 === i) continue;
+      if (segInt(M, O, outer[k], outer[k2])) blocked = true;
+    }
+    for (let k = 0; k < inner.length && !blocked; k++) {
+      const k2 = (k+1) % inner.length;
+      if (k === mi || k2 === mi) continue;
+      if (segInt(M, O, inner[k], inner[k2])) blocked = true;
+    }
+    if (!blocked) { oi = i; break; }
+  }
+  // splice: outer[0..oi], M, inner reversed from mi, M, outer[oi..]
+  const innerCW = [];
+  for (let k = 0; k < inner.length; k++) innerCW.push(inner[(mi - k + inner.length) % inner.length]);
+  const merged = [];
+  for (let k = 0; k <= oi; k++) merged.push(outer[k]);
+  merged.push(...innerCW, inner[mi].slice(), outer[oi].slice());
+  for (let k = oi + 1; k < outer.length; k++) merged.push(outer[k]);
+  const { pts, tris } = earTriangulate(merged);
+  return { pts, tris };
+}
+
+// direct watertight mesh for a cell region (no CSG); supports closed floor (pad>0)
+function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs) {
+  const polys = [];
+  const { pts: oc } = earTriangulate(clipped);
+  const n = oc.length;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const p = makePoly([[oc[i][0], oc[i][1], 0], [oc[j][0], oc[j][1], 0],
+                        [oc[j][0], oc[j][1], H], [oc[i][0], oc[i][1], H]]);
+    if (p) polys.push(p);
+  }
+  const zs = prof.zs.slice(1, 5), ds = prof.ds.slice(1, 5);
+  const rings = zs.map((z, i) => {
+    const d = ds[i];
+    const r = prof.rTop - (d - ds[ds.length-1]);
+    return roundedSquareRing(cx, cy, prof.pitchHalf - d, r, arcSegs).map(p => [p[0], p[1], z]);
+  });
+  const rn = rings[0].length;
+  for (let i = 0; i < rings.length - 1; i++) {
+    for (let j = 0; j < rn; j++) {
+      const k = (j + 1) % rn;
+      let p = makePoly([rings[i][k], rings[i][j], rings[i+1][k]]); if (p) polys.push(p);
+      p = makePoly([rings[i+1][k], rings[i][j], rings[i+1][j]]); if (p) polys.push(p);
+    }
+  }
+  const topR = triangulateRing(oc, rings[rings.length-1].map(v => [v[0], v[1]]));
+  for (const t of topR.tris) {
+    const p = makePoly(t.map(i => [topR.pts[i][0], topR.pts[i][1], H]));
+    if (p) polys.push(p);
+  }
+  if (pad > 0.01) {
+    // full bottom cap + socket floor disc
+    const { pts: bp, tris: bt } = earTriangulate(clipped);
+    for (const t of bt) {
+      const p = makePoly([t[2], t[1], t[0]].map(i => [bp[i][0], bp[i][1], 0]));
+      if (p) polys.push(p);
+    }
+    const fl = rings[0];
+    const c = [cx, cy, fl[0][2]];
+    for (let j = 0; j < rn; j++) {
+      const k = (j + 1) % rn;
+      const p = makePoly([c, fl[j], fl[k]]); if (p) polys.push(p);
+    }
+  } else {
+    const botR = triangulateRing(oc, rings[0].map(v => [v[0], v[1]]));
+    for (const t of botR.tris) {
+      const p = makePoly([t[2], t[1], t[0]].map(i => [botR.pts[i][0], botR.pts[i][1], 0]));
+      if (p) polys.push(p);
+    }
+  }
+  return polys;
+}
+
+// ---------- plate builder ----------
+/* Region-decomposed build: no global CSG. Each piece = margin/corner regions (plain
+   extrusions) + one region per cell (extrusion minus its socket cutter and holes).
+   Regions are clipped from the global outline (rounded corners, connector bites)
+   and bloated 0.05mm so shells overlap; slicers union overlapping shells. */
+function buildPiece(cfg, layout, piece, onStatus) {
+  const pitch = cfg.pitch, half = pitch/2;
+  const solidBase = cfg.baseMode !== 'bosses';
+  let pad = ((cfg.magnets || cfg.screws) && solidBase) ? Math.max(cfg.bottomPad, cfg.magnetBase || 2.8) : cfg.bottomPad;
+  const isHclip = cfg.connector === 'hclip';
+  const topInsert = cfg.keyInsert === 'top';
+  const keyedConn = ['bowtie', 'snap', 'puzzlekey'].includes(cfg.connector);
+  const wallKeys = (keyedConn && cfg.keyMount === 'wall');
+  const keyDims = wallKeys ? cfg.keySlim : cfg.key;
+  if (keyedConn && !wallKeys) pad = Math.max(pad, cfg.key.depth + 0.8);
+  if (cfg.connector === 'puzzle') pad = Math.max(pad, 2.6);
+  const H = pad + cfg.plateHeight;
+  const tol = cfg.tolerance === 'tight' ? +0.1 : cfg.tolerance === 'loose' ? -0.1 : 0;
+  const dTop = cfg.topCutoff, dMid = 2.15 + tol, dBot = 2.85 + tol;
+  const prof = {
+    pitchHalf: half, rTop: cfg.socketRadius,
+    zs: [pad > 0 ? pad : -1, pad, pad + 0.7, pad + 2.5, H, H + 1.5],
+    ds: [dBot, dBot, dMid, dMid, dTop, dTop],
+  };
+
+  const W = piece.mL + piece.nx*pitch + piece.mR;
+  const D = piece.mF + piece.ny*pitch + piece.mB;
+  const gx0 = piece.mL, gy0 = piece.mF;
+
+  // ---- connectors ----
+  const conn = pieceConnectors(cfg, layout, piece);
+  const tabs = conn.tabs, notches = conn.notches;
+  const ptabs = conn.ptabs, pnotches = conn.pnotches, keyed = conn.keyed;
+  const t = cfg.tab;
+  // ---- global outline: rect + rounded outer corners + notch bites ----
+  const rr = cfg.cornerRadii || {};
+  const rOf = (k) => Math.max(0, Math.min(rr[k] !== undefined ? rr[k] : cfg.outerRadius, half));
+  const NARC = 10;
+  const round = {
+    ll: piece.col === 0 && piece.row === 0,
+    lr: piece.col === layout.cols-1 && piece.row === 0,
+    ur: piece.col === layout.cols-1 && piece.row === layout.rows-1,
+    ul: piece.col === 0 && piece.row === layout.rows-1,
+  };
+  function corner(cx, cy, a0, doRound, key) {
+    const rc = rOf(key);
+    if (!doRound || rc <= 0.01) return [[cx, cy]];
+    const ccx = cx + (cx < 1 ? rc : -rc), ccy = cy + (cy < 1 ? rc : -rc);
+    const out = [];
+    for (let k = 0; k <= NARC; k++) {
+      const a = (a0 + 90*k/NARC) * Math.PI/180;
+      out.push([ccx + rc*Math.cos(a), ccy + rc*Math.sin(a)]);
+    }
+    return out;
+  }
+  const nWr = t.wr + 2*t.clr, nWt = t.wt + 2*t.clr, nDp = t.dp + t.clr;
+  const outline = [];
+  outline.push(...corner(0, 0, 180, round.ll, 'll'));
+  outline.push(...corner(W, 0, 270, round.lr, 'lr'));
+  outline.push(...corner(W, D, 0, round.ur, 'ur'));
+  outline.push(...corner(0, D, 90, round.ul, 'ul'));
+  if (onStatus) onStatus('outline');
+
+  // ---- region grid: x cuts and y cuts ----
+  const xs = [0]; if (piece.mL > 0.01) xs.push(piece.mL);
+  for (let i = 1; i <= piece.nx; i++) xs.push(gx0 + i*pitch);
+  if (piece.mR > 0.01) xs.push(W); else xs[xs.length-1] = W;
+  const ys = [0]; if (piece.mF > 0.01) ys.push(piece.mF);
+  for (let j = 1; j <= piece.ny; j++) ys.push(gy0 + j*pitch);
+  if (piece.mB > 0.01) ys.push(D); else ys[ys.length-1] = D;
+  const cellXi = piece.mL > 0.01 ? 1 : 0;         // index offset of first cell column
+  const cellYi = piece.mF > 0.01 ? 1 : 0;
+  const BLOAT = 0.05;
+
+  let allPolys = [];
+  let done = 0;
+  for (let ix = 0; ix < xs.length-1; ix++) {
+    for (let iy = 0; iy < ys.length-1; iy++) {
+      const x0 = Math.max(0, xs[ix] - BLOAT), x1 = Math.min(W, xs[ix+1] + BLOAT);
+      const y0 = Math.max(0, ys[iy] - BLOAT), y1 = Math.min(D, ys[iy+1] + BLOAT);
+      const clipped = clipToRect(outline, x0, y0, x1, y1);
+      if (!clipped) continue;
+      const ci = ix - cellXi, cj = iy - cellYi;
+      const isCell = ci >= 0 && ci < piece.nx && cj >= 0 && cj < piece.ny;
+      if (!isCell) {                                 // margin / corner: plain extrusion
+        for (const p of extrudePoly(clipped, 0, H)) allPolys.push(p);
+        continue;
+      }
+      const cx = gx0 + ci*pitch + half, cy = gy0 + cj*pitch + half;
+      let region = directCellRegion(clipped, prof, cx, cy, H, pad, cfg.arcSegs || 6);
+      // small convex cutters local to this cell
+      let small = [];
+      const seqCuts = [];
+      for (const nb of notches) {
+        const near = (nb.edge === '+x' || nb.edge === '-x')
+          ? (nb.s > y0 - nWt && nb.s < y1 + nWt &&
+             (nb.edge === '+x' ? Math.abs(x1 - W) : Math.abs(x0)) < nDp + 0.2)
+          : (nb.s > x0 - nWt && nb.s < x1 + nWt &&
+             (nb.edge === '+y' ? Math.abs(y1 - D) : Math.abs(y0)) < nDp + 0.2);
+        if (near) {
+          // 4-pt taper: no vertex sits exactly on the region side plane; jitter breaks
+          // residual coincidences with ring geometry
+          const J = 0.0017, BK = 1.0, e = nb.e, s = nb.s + J;
+          let pts;
+          if (nb.edge === '+x' || nb.edge === '-x') {
+            const g = nb.edge === '-x' ? 1 : -1;   // cut extends INTO the piece
+            pts = [[e - g*BK, s - nWr/2], [e + g*nDp, s - nWt/2],
+                   [e + g*nDp, s + nWt/2], [e - g*BK, s + nWr/2]];
+          } else {
+            const g = nb.edge === '-y' ? 1 : -1;
+            pts = [[s - nWr/2, e - g*BK], [s - nWt/2, e + g*nDp],
+                   [s + nWt/2, e + g*nDp], [s + nWr/2, e - g*BK]];
+          }
+          small = small.concat(extrudePoly(pts, -0.503, Math.min(t.h + 0.2, H - 0.8)));
+        }
+      }
+      for (const bo of keyed) {
+        if ((wallKeys || isHclip) && Math.abs(bo.s / pitch - Math.round(bo.s / pitch)) > 0.25 &&
+            Math.abs((bo.s - (bo.edge === '+x' || bo.edge === '-x' ? gy0 : gx0)) / pitch -
+                     Math.round((bo.s - (bo.edge === '+x' || bo.edge === '-x' ? gy0 : gx0)) / pitch)) > 0.25)
+          continue;   // wall mode: keys need a wall junction, skip mid-cell seams
+        const halfW = isHclip ? cfg.hclip.flangeW : keyDims.wEnd;
+        const reach = isHclip ? hclipPrm(cfg.hclip).len/2 + 1 : keyDims.len/2 + 1;
+        const near = (bo.edge === '+x' || bo.edge === '-x')
+          ? (bo.s > y0 - halfW && bo.s < y1 + halfW &&
+             (bo.edge === '+x' ? Math.abs(x1 - W) : Math.abs(x0)) < reach)
+          : (bo.s > x0 - halfW && bo.s < x1 + halfW &&
+             (bo.edge === '+y' ? Math.abs(y1 - D) : Math.abs(y0)) < reach);
+        if (!near) continue;
+        if ((isHclip || wallKeys) && topInsert) {
+          continue;   // handled as a post-pass (clip + cup)
+        }
+        if (isHclip) {
+          // bottom-insert H pocket via the snap profile (ceiling below rim geometry)
+          small = small.concat(extrudePoly(
+            keyHalf('snap', bo.edge, bo.e, bo.s, hclipPrm(cfg.hclip), cfg.hclip.clr),
+            -0.5, Math.min(2.3, H - 0.8)));
+        } else {
+          small = small.concat(
+            extrudePoly(keyHalf(cfg.keyType, bo.edge, bo.e, bo.s, keyDims, keyDims.clr),
+                        -0.5, wallKeys ? 2.0 : Math.min(cfg.key.depth, pad - 0.6)));
+        }
+      }
+      for (const pn of pnotches) {
+        const reach = cfg.puzzle.neckL + cfg.puzzle.lobeR * 1.6 + 1;
+        const near = (pn.edge === '+x' || pn.edge === '-x')
+          ? (pn.s > y0 - cfg.puzzle.lobeR*2 && pn.s < y1 + cfg.puzzle.lobeR*2 &&
+             (pn.edge === '+x' ? Math.abs(x1 - W) : Math.abs(x0)) < reach)
+          : (pn.s > x0 - cfg.puzzle.lobeR*2 && pn.s < x1 + cfg.puzzle.lobeR*2 &&
+             (pn.edge === '+y' ? Math.abs(y1 - D) : Math.abs(y0)) < reach);
+        if (near) small = small.concat(
+          extrudePoly(puzzleShape(pn.edge, pn.e, pn.s, cfg.puzzle, cfg.puzzle.clr, true),
+                      -0.5, pad - 0.4));
+      }
+      if ((cfg.magnets || cfg.screws) && solidBase) {
+        const off = cfg.holeOffset;
+        for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+          const hx = cx + sx*off, hy = cy + sy*off;
+          if (cfg.magnets) {
+            small = small.concat(cfg.magnetSide === 'top'
+              ? cylinder(hx, hy, cfg.magnetD/2 + 0.1, pad - cfg.magnetH, pad + 0.02, 14)
+              : cylinder(hx, hy, cfg.magnetD/2 + 0.1, -0.5, cfg.magnetH, 14));
+          }
+          if (cfg.screws) {
+            small = small.concat(cylinder(hx, hy, cfg.screwHoleD/2, -0.5, H + 0.5, 12));
+            if (cfg.screwHeadD > cfg.screwHoleD)
+              small = small.concat(cylinder(hx, hy, cfg.screwHeadD/2, -0.5, cfg.screwHeadDepth, 14));
+          }
+        }
+      }
+      if (small.length) region = csgSubtract(region, small);
+      for (const cut of seqCuts) region = csgSubtract(region, cut);
+      for (const p of region) allPolys.push(p);
+      done++;
+      if (onStatus && done % 8 === 0) onStatus(`cells ${done}`);
+    }
+  }
+
+  // magnet 'top' pockets  // magnet 'top' pockets sit in the socket floor: they need pad and were cut
+  // relative to pad above; screw counterbores cut from the bottom face.
+
+  // ---- corner bosses (pocket-style mounting, saves filament) ----
+  if ((cfg.magnets || cfg.screws) && !solidBase) {
+    const off = cfg.holeOffset;
+    const bossW = 12.5, rIn = 3.5;
+    const bossH = Math.min(2.6, Math.max(
+      cfg.magnets ? cfg.magnetH + 0.8 : 0,
+      cfg.screws ? cfg.screwHeadDepth + 1.0 : 0));
+    for (let i = 0; i < piece.nx; i++) for (let j = 0; j < piece.ny; j++) {
+      const ccx = gx0 + i*pitch + half, ccy = gy0 + j*pitch + half;
+      for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+        const cxr = ccx + sx*half, cyr = ccy + sy*half;    // cell corner
+        // quarter boss with rounded inner corner, oriented into the cell
+        const pts = [];
+        pts.push([0, 0], [bossW, 0], [bossW, bossW - rIn]);
+        for (let k = 1; k <= 6; k++) {
+          const a = k * (Math.PI/2) / 6;
+          pts.push([bossW - rIn + rIn*Math.cos(a), bossW - rIn + rIn*Math.sin(a)]);
+        }
+        pts.push([0, bossW]);
+        const world = pts.map(([u, v]) => [cxr - sx*u, cyr - sy*v]);
+        let boss = extrudePoly(world, 0, bossH);
+        const hx = ccx + sx*off, hy = ccy + sy*off;
+        let cuts = [];
+        if (cfg.magnets) cuts = cuts.concat(
+          cfg.magnetSide === 'top'
+            ? cylinder(hx, hy, cfg.magnetD/2 + 0.1, bossH - cfg.magnetH, bossH + 0.5, 14)
+            : cylinder(hx, hy, cfg.magnetD/2 + 0.1, -0.5, cfg.magnetH, 14));
+        if (cfg.screws) {
+          cuts = cuts.concat(cylinder(hx, hy, cfg.screwHoleD/2, -0.5, bossH + 0.5, 12));
+          if (cfg.screwHeadD > cfg.screwHoleD)
+            cuts = cuts.concat(cylinder(hx, hy, cfg.screwHeadD/2, -0.5, cfg.screwHeadDepth, 14));
+        }
+        if (cuts.length) boss = csgSubtract(boss, cuts);
+        for (const p of boss) allPolys.push(p);
+      }
+    }
+  }
+
+  // ---- puzzle male tabs (protrude at floor level) ----
+  for (const pt of ptabs) {
+    const fp = puzzleShape(pt.edge, pt.e, pt.s, cfg.puzzle, 0, false);
+    for (const p of extrudePoly(fp, 0, Math.max(1.2, pad - 0.65))) allPolys.push(p);
+  }
+
+  // ---- tabs (separate overlapping shells) ----
+  for (const tb of tabs) {
+    const fp = tabFootprint(tb.edge, tb.e, tb.s, t.wr, t.wt, t.dp, 0.8);
+    for (const p of extrudePoly(fp, 0, t.h)) allPolys.push(p);
+  }
+  // top-insert keyed pockets: BSP-free clip + direct pocket cups
+  if (cfg.connector === 'snap' && topInsert) {
+    const prm = Object.assign({ legT: 1.0, legLen: 1.35, legC: 1.4, barb: 0.18,
+                                bridgeW: 1.7, bridgeD: 0.85, wall: 0.6 },
+                              { clr: cfg.key.clr });
+    let ps = allPolys;
+    for (const bo of keyed) {
+      if (Math.abs(bo.s / pitch - Math.round(bo.s / pitch)) > 0.25 &&
+          Math.abs((bo.s - (bo.edge === '+x' || bo.edge === '-x' ? gy0 : gx0)) / pitch -
+                   Math.round((bo.s - (bo.edge === '+x' || bo.edge === '-x' ? gy0 : gx0)) / pitch)) > 0.25)
+        continue;
+      const { env } = snapTopParts(bo.edge, bo.e, bo.s, prm, H);
+      const g2 = (bo.edge === '+x' || bo.edge === '+y') ? -1 : 1;
+      const ss2 = bo.s + 0.0017;
+      const rect = (bo.edge === '+x' || bo.edge === '-x')
+        ? [[bo.e + g2*env[0], ss2 + env[2]], [bo.e + g2*env[1], ss2 + env[2]],
+           [bo.e + g2*env[1], ss2 + env[3]], [bo.e + g2*env[0], ss2 + env[3]]]
+        : [[ss2 + env[2], bo.e + g2*env[0]], [ss2 + env[3], bo.e + g2*env[0]],
+           [ss2 + env[3], bo.e + g2*env[1]], [ss2 + env[2], bo.e + g2*env[1]]];
+      // ensure CCW for the clipper
+      const area = rect.reduce((a, p, i) => { const q = rect[(i+1)%4]; return a + p[0]*q[1] - q[0]*p[1]; }, 0);
+      ps = clipConvexPrismTop(ps, area > 0 ? rect : rect.slice().reverse(), env[4]);
+      for (const p of snapTopPocket(bo.edge, bo.e, bo.s, prm, H)) ps.push(p);
+    }
+    allPolys = ps;
+  } else if ((isHclip || wallKeys) && topInsert) {
+    const type = isHclip ? 'snap' : cfg.keyType;
+    const prm = isHclip ? hclipPrm(cfg.hclip) : keyDims;
+    const clr = isHclip ? cfg.hclip.clr : keyDims.clr;
+    const zf = Math.max(1.2, H - 2.25), zTop = H - 0.85;
+    let ps = allPolys;
+    for (const bo of keyed) {
+      if (Math.abs(bo.s / pitch - Math.round(bo.s / pitch)) > 0.25 &&
+          Math.abs((bo.s - (bo.edge === '+x' || bo.edge === '-x' ? gy0 : gx0)) / pitch -
+                   Math.round((bo.s - (bo.edge === '+x' || bo.edge === '-x' ? gy0 : gx0)) / pitch)) > 0.25)
+        continue;
+      for (const cv of keyHalfConvexParts(type, bo.edge, bo.e, bo.s, prm, clr + 0.55))
+        ps = clipConvexPrismTop(ps, cv, zf - 0.55);
+      for (const p of topPocketCup(type, bo.edge, bo.e, bo.s, prm, clr, zf, zTop)) ps.push(p);
+    }
+    allPolys = ps;
+  }
+  if (onStatus) onStatus('done');
+  const outPolys = clampZ(allPolys, 0);
+  const protr = { l: 0, r: 0, f: 0, b: 0 };
+  for (const tb of tabs) {
+    if (tb.edge === '+x') protr.r = t.dp; else if (tb.edge === '-x') protr.l = t.dp;
+    else if (tb.edge === '+y') protr.b = t.dp; else protr.f = t.dp;
+  }
+  const pzOut = cfg.puzzle.neckL + cfg.puzzle.lobeR * 1.6;
+  for (const tb of ptabs) {
+    if (tb.edge === '+x') protr.r = pzOut; else if (tb.edge === '-x') protr.l = pzOut;
+    else if (tb.edge === '+y') protr.b = pzOut; else protr.f = pzOut;
+  }
+  return { polys: outPolys, W, D, H, tabs: tabs.length, notches: notches.length,
+           bowties: keyed.length, puzzles: ptabs.length + pnotches.length, protrusion: protr };
+}
+
+// 1x1 test tile: single-cell plate, no margins/connectors
+function buildTestTile(cfg) {
+  const layout = { cols: 1, rows: 1 };
+  const piece = { id: 'TEST', col: 0, row: 0, cellX0: 0, cellY0: 0, nx: 1, ny: 1, mL: 0, mR: 0, mF: 0, mB: 0 };
+  const c2 = Object.assign({}, cfg, { connector: 'none' });
+  return buildPiece(c2, layout, piece);
+}
+
+// ---------- STL ----------
+function polysToTriangles(polys) {
+  const tris = [];
+  for (const p of polys) {
+    for (let i = 2; i < p.verts.length; i++) tris.push([p.verts[0], p.verts[i-1], p.verts[i]]);
+  }
+  return tris;
+}
+function stlBinary(polys, name) {
+  const tris = polysToTriangles(polys);
+  const buf = new ArrayBuffer(84 + tris.length * 50);
+  const dv = new DataView(buf);
+  const header = (name || 'gridfinity').slice(0, 79);
+  for (let i = 0; i < header.length; i++) dv.setUint8(i, header.charCodeAt(i));
+  dv.setUint32(80, tris.length, true);
+  let o = 84;
+  for (const t of tris) {
+    const n = V.unit(V.cross(V.sub(t[1], t[0]), V.sub(t[2], t[0])));
+    dv.setFloat32(o, n[0], true); dv.setFloat32(o+4, n[1], true); dv.setFloat32(o+8, n[2], true); o += 12;
+    for (const v of t) { dv.setFloat32(o, v[0], true); dv.setFloat32(o+4, v[1], true); dv.setFloat32(o+8, v[2], true); o += 12; }
+    dv.setUint16(o, 0, true); o += 2;
+  }
+  return buf;
+}
+
+// manifold sanity: every edge shared by exactly 2 triangles (within rounding)
+function checkManifold(polys) {
+  const tris = polysToTriangles(polys);
+  const key = (v) => v.map(x => Math.round(x * 1000) / 1000).join(',');
+  const edges = new Map();
+  for (const t of tris) {
+    for (let i = 0; i < 3; i++) {
+      const a = key(t[i]), b = key(t[(i+1)%3]);
+      const k = a < b ? a + '|' + b : b + '|' + a;
+      edges.set(k, (edges.get(k) || 0) + 1);
+    }
+  }
+  let bad = 0;
+  for (const c of edges.values()) if (c !== 2) bad++;
+  return { edges: edges.size, bad, tris: tris.length };
+}
+
+// ---------- connector fit sample ----------
+/* Small test strip: N tile pairs with graduated clearance + one key (keyed types).
+   Tiles are plain rounded slabs (fast print) with the joint on the mating edges. */
+function buildFitSample(cfg, H) {
+  H = H || 4.25;
+  const clrs = [-0.05, 0, 0.05, 0.1].map(d => {
+    const base = cfg.connector === 'hclip' ? cfg.hclip.clr :
+      ['bowtie','puzzlekey','snap'].includes(cfg.connector)
+        ? (cfg.keyMount === 'wall' ? cfg.keySlim.clr : cfg.key.clr)
+      : cfg.connector === 'puzzle' ? cfg.puzzle.clr : cfg.tab.clr;
+    return Math.max(0.02, base + d);
+  });
+  const tileW = 18, tileD = 8, gapX = 7, seamGap = 1.2;
+  const polys = [];
+  const rounded = (x0, y0, w, d) => {
+    const r = 1.6, pts = [];
+    const cs = [[x0+r, y0+r, 180], [x0+w-r, y0+r, 270], [x0+w-r, y0+d-r, 0], [x0+r, y0+d-r, 90]];
+    for (const [ccx, ccy, a0] of cs)
+      for (let k = 0; k <= 5; k++) {
+        const a = (a0 + 90*k/5) * Math.PI/180;
+        pts.push([ccx + r*Math.cos(a), ccy + r*Math.sin(a)]);
+      }
+    return pts;
+  };
+  clrs.forEach((clr, i) => {
+    const x0 = i * (tileW + gapX);
+    // pair: tile A below (y<0 side), tile B above; seam at y=0
+    for (const side of [-1, 1]) {
+      const y0 = side < 0 ? -seamGap/2 - tileD : seamGap/2;
+      let tile = extrudePoly(rounded(x0, y0, tileW, tileD), 0, H);
+      const edge = side < 0 ? '+y' : '-y';
+      const e = side < 0 ? -seamGap/2 : seamGap/2;
+      const s = x0 + tileW/2;
+      let cuts = [];
+      if (cfg.connector === 'snap' && cfg.keyInsert === 'top') {
+        const prm = Object.assign({ legT: 1.0, legLen: 1.35, legC: 1.4, barb: 0.18,
+                                    bridgeW: 1.7, bridgeD: 0.85, wall: 0.6 }, { clr });
+        const { env } = snapTopParts(edge, e, s, prm, H);
+        const g2 = (edge === '+x' || edge === '+y') ? -1 : 1;
+        const ss2 = s + 0.0017;
+        let rect = (edge === '+x' || edge === '-x')
+          ? [[e + g2*env[0], ss2 + env[2]], [e + g2*env[1], ss2 + env[2]],
+             [e + g2*env[1], ss2 + env[3]], [e + g2*env[0], ss2 + env[3]]]
+          : [[ss2 + env[2], e + g2*env[0]], [ss2 + env[3], e + g2*env[0]],
+             [ss2 + env[3], e + g2*env[1]], [ss2 + env[2], e + g2*env[1]]];
+        const ar = rect.reduce((a2, p, i) => { const q = rect[(i+1)%4]; return a2 + p[0]*q[1] - q[0]*p[1]; }, 0);
+        tile = clipConvexPrismTop(tile, ar > 0 ? rect : rect.slice().reverse(), env[4]);
+        for (const p of snapTopPocket(edge, e, s, prm, H)) tile.push(p);
+        cuts = [];
+      } else if (cfg.connector === 'hclip') {
+        cuts = cuts.concat(extrudePoly(
+          keyHalf('snap', edge, e, s, hclipPrm(cfg.hclip), clr), -0.5, Math.min(2.3, H - 0.8)));
+      } else if (['bowtie','puzzlekey','snap'].includes(cfg.connector)) {
+        const kd = cfg.keyMount === 'wall' ? cfg.keySlim : cfg.key;
+        cuts = cuts.concat(extrudePoly(
+          keyHalf(cfg.connector, edge, e, s, kd, clr), -0.5, Math.min(kd.depth, H - 1.2)));
+      } else if (cfg.connector === 'puzzle') {
+        if (side > 0) cuts = cuts.concat(extrudePoly(
+          puzzleShape(edge, e, s, cfg.puzzle, clr, true), -0.5, H - 1.2));
+        else for (const p of extrudePoly(
+          puzzleShape(edge, e, s, cfg.puzzle, 0, false), 0, Math.min(2.0, H - 1.4))) tile.push(p);
+      } else {   // dovetail
+        const t = cfg.tab;
+        if (side > 0) {
+          const nWr = t.wr + 2*clr, nWt = t.wt + 2*clr, nDp = t.dp + clr;
+          const g = 1;
+          cuts = cuts.concat(extrudePoly(
+            [[s - nWr/2, e - 1], [s - nWt/2, e + nDp], [s + nWt/2, e + nDp], [s + nWr/2, e - 1]],
+            -0.5, Math.min(t.h + 0.2, H - 0.8)));
+        } else {
+          for (const p of extrudePoly(tabFootprint('+y', e, s, t.wr, t.wt, t.dp, 0.6), 0, t.h))
+            tile.push(p);
+        }
+      }
+      if (cuts.length) tile = csgSubtract(tile, cuts);
+      for (const p of clampZ(tile, 0)) polys.push(p);
+    }
+  });
+  // one key alongside (keyed + hclip types)
+  if (cfg.connector === 'snap' && cfg.keyInsert === 'top') {
+    const prm = Object.assign({ legT: 1.0, legLen: 1.35, legC: 1.4, barb: 0.18,
+                                bridgeW: 1.7, bridgeD: 0.85, wall: 0.6 }, { clr: cfg.key.clr });
+    const clip = snapTopClip(prm, H);
+    const kx = clrs.length * (tileW + gapX) + 4;
+    for (const p of clip) polys.push({ verts: p.verts.map(v => [v[0] + kx, v[1], v[2]]), plane: p.plane });
+    return { polys, clrs };
+  }
+  if (cfg.connector === 'hclip' || ['bowtie','puzzlekey','snap'].includes(cfg.connector)) {
+    const kd = cfg.connector === 'hclip' ? hclipPrm(cfg.hclip) :
+      (cfg.keyMount === 'wall' ? cfg.keySlim : cfg.key);
+    const kh = cfg.connector === 'hclip' ? 2.15 : kd.depth - 0.15;
+    const key = buildKey(cfg.connector === 'hclip' ? 'snap' : cfg.connector, kd, kh);
+    const kx = clrs.length * (tileW + gapX) + 4;
+    for (const p of key) polys.push({ verts: p.verts.map(v => [v[0] + kx, v[1], v[2]]), plane: p.plane });
+  }
+  return { polys, clrs };
+}
+
+// ---------- 3MF export ----------
+/* items: [{name, polys, tx, ty, tz, rot}] rot in {0,90}. Returns {model, contentTypes, rels} XML strings. */
+function build3mfXML(items) {
+  let objs = '', builds = '';
+  items.forEach((it, idx) => {
+    const id = idx + 1;
+    const vmap = new Map(); const verts = []; const tris = [];
+    const key = (v) => (Math.round(v[0]*1000)/1000) + ',' + (Math.round(v[1]*1000)/1000) + ',' + (Math.round(v[2]*1000)/1000);
+    const vidx = (v) => {
+      const k = key(v);
+      let i = vmap.get(k);
+      if (i === undefined) { i = verts.length; vmap.set(k, i); verts.push(v); }
+      return i;
+    };
+    for (const p of it.polys)
+      for (let i = 2; i < p.verts.length; i++)
+        tris.push([vidx(p.verts[0]), vidx(p.verts[i-1]), vidx(p.verts[i])]);
+    objs += `<object id="${id}" type="model" name="${it.name}"><mesh><vertices>` +
+      verts.map(v => `<vertex x="${v[0].toFixed(3)}" y="${v[1].toFixed(3)}" z="${v[2].toFixed(3)}"/>`).join('') +
+      `</vertices><triangles>` +
+      tris.map(t => `<triangle v1="${t[0]}" v2="${t[1]}" v3="${t[2]}"/>`).join('') +
+      `</triangles></mesh></object>`;
+    // row-major 4x3: rotation about z then translate
+    const c = it.rot === 90 ? 0 : 1, s = it.rot === 90 ? 1 : 0;
+    const T = `${c} ${s} 0 ${-s} ${c} 0 0 0 1 ${(it.tx||0).toFixed(3)} ${(it.ty||0).toFixed(3)} ${(it.tz||0).toFixed(3)}`;
+    builds += `<item objectid="${id}" transform="${T}"/>`;
+  });
+  const model = `<?xml version="1.0" encoding="UTF-8"?>\n` +
+    `<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">` +
+    `<resources>${objs}</resources><build>${builds}</build></model>`;
+  const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+    `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
+    `<Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>`;
+  const rels = `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+    `<Relationship Target="/3D/3dmodel.model" Id="rel0" ` +
+    `Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>`;
+  return { model, contentTypes, rels };
+}
+
+// ---------- print-plate packing ----------
+/* items: [{id, w, d, h, qty, stackable}] -> plates: [{items:[{id, x, y, rot, z}], used}]
+   Shelf packing with rotation; stackable identical footprints pile up with zGap. */
+function packPlates(items, bedW, bedD, gap, opts) {
+  opts = opts || {};
+  const zGap = opts.zGap || 0.24;
+  const bedH = opts.bedH || 1e9;
+  const stack = !!opts.stack;
+  // expand qty into units
+  const units = [];
+  for (const it of items) {
+    const q = it.qty || 1;
+    for (let i = 0; i < q; i++)
+      units.push({ id: it.id, w: it.w, d: it.d, h: it.h,
+                   ids: it.ids ? [it.ids[Math.min(i, it.ids.length-1)]] : [it.id],
+                   stackable: it.stackable !== false });
+  }
+  units.sort((a, b) => b.w * b.d - a.w * a.d);
+  const plates = [];
+  function tryShelf(pl, u) {
+    for (const rot of [0, 90]) {
+      const w = rot ? u.d : u.w, d = rot ? u.w : u.d;
+      if (w > bedW || d > bedD || u.h > bedH) continue;
+      for (const sh of pl.shelves) {
+        if (d <= sh.h + 1e-6 && sh.x + w <= bedW + 1e-6) {
+          const t = { id: u.ids[0], x: sh.x, y: sh.y, rot, w, d, z: 0, h: u.h, topW: w, topD: d, topZ: u.h };
+          sh.x += w + gap;
+          return t;
+        }
+      }
+      const yTop = pl.shelves.length ? pl.shelves[pl.shelves.length-1].y + pl.shelves[pl.shelves.length-1].h + gap : 0;
+      if (yTop + d <= bedD + 1e-6) {
+        pl.shelves.push({ y: yTop, h: d, x: w + gap });
+        return { id: u.ids[0], x: 0, y: yTop, rot, w, d, z: 0, h: u.h, topW: w, topD: d, topZ: u.h };
+      }
+    }
+    return null;
+  }
+  function tryStack(pl, u) {
+    if (!stack || !u.stackable) return null;
+    // smallest tower top that still fits the piece (either rotation)
+    let best = null;
+    for (const base of pl.towers) {
+      for (const rot of [0, 90]) {
+        const w = rot ? u.d : u.w, d = rot ? u.w : u.d;
+        if (w <= base.topW + 1e-6 && d <= base.topD + 1e-6 &&
+            base.topZ + zGap + u.h <= bedH + 1e-6) {
+          const waste = base.topW * base.topD - w * d;
+          if (!best || waste < best.waste) best = { base, rot, w, d, waste };
+        }
+      }
+    }
+    if (!best) return null;
+    const b = best.base;
+    const t = { id: u.ids[0], x: b.x + (b.topW - best.w) / 2, y: b.y + (b.topD - best.d) / 2,
+                rot: best.rot, w: best.w, d: best.d, z: b.topZ + zGap, h: u.h };
+    b.topW = best.w; b.topD = best.d; b.topZ = t.z + u.h;
+    return t;
+  }
+  for (const u of units) {
+    let placed = null, host = null;
+    for (const pl of plates) { placed = tryStack(pl, u); if (placed) { host = pl; break; } }
+    if (!placed) for (const pl of plates) { placed = tryShelf(pl, u); if (placed) { host = pl; pl.towers.push(placed); break; } }
+    if (!placed) {
+      const pl = { shelves: [], towers: [], placed: [] };
+      placed = tryShelf(pl, u);
+      if (placed) { pl.towers.push(placed); plates.push(pl); host = pl; }
+      else { plates.push({ shelves: [], towers: [], placed: [], overflow: u.id }); continue; }
+    }
+    host.placed.push(placed);
+  }
+  return plates;
+}
+
+// ---- split optimizer: choose cuts minimizing print plates ----
+function compositions(n, maxPart, maxParts) {
+  const out = [];
+  function rec(rem, parts) {
+    if (parts.length > maxParts) return;
+    if (rem === 0) { if (parts.length) out.push(parts.slice()); return; }
+    for (let p = Math.min(rem, maxPart); p >= 1; p--) { parts.push(p); rec(rem - p, parts); parts.pop(); }
+  }
+  rec(n, []);
+  return out;
+}
+function optimizeForPlates(p) {
+  // enumerate banded splits, pack each, keep the best
+  const probe = computeLayout(Object.assign({}, p, { splitMode: 'balanced' }));
+  const { nx, ny, mL, mR, mF, mB } = probe;
+  const pitch = p.pitch;
+  const extra = p.connector === 'dovetail' ? 2.5 : 0;
+  const maxRows = Math.max(1, Math.floor((p.bedD - extra) / pitch));
+  const maxCols = Math.max(1, Math.floor((p.bedW - extra) / pitch));
+  const kRowMin = Math.ceil(ny / maxRows), kColMin = Math.ceil(nx / maxCols);
+  const rowComps = compositions(ny, maxRows, Math.min(kRowMin + 1, 4))
+    .filter(c => c.every((v, i) => v*pitch + extra + (i === 0 ? mF : 0) + (i === c.length-1 ? mB : 0) <= p.bedD + 1e-6));
+  const colComps = compositions(nx, maxCols, Math.min(kColMin + 1, 4))
+    .filter(c => c.every((v, i) => v*pitch + extra + (i === 0 ? mL : 0) + (i === c.length-1 ? mR : 0) <= p.bedW + 1e-6));
+  let best = null, tried = 0;
+  for (const rc of rowComps) {
+    if (tried > 4000) break;
+    const rowCuts = []; let acc = 0;
+    for (let i = 0; i < rc.length - 1; i++) { acc += rc[i]; rowCuts.push(acc); }
+    // per-band col comps: cap combination count
+    const perBand = Math.max(1, Math.floor(Math.pow(400, 1 / rc.length)));
+    const colSubset = colComps.slice(0, Math.max(perBand, 6));
+    const idx = new Array(rc.length).fill(0);
+    while (true) {
+      tried++;
+      if (tried > 4000) break;
+      const colCuts = idx.map(i => {
+        const cc = colSubset[i]; const cuts = []; let a2 = 0;
+        for (let k = 0; k < cc.length - 1; k++) { a2 += cc[k]; cuts.push(a2); }
+        return cuts;
+      });
+      const trial = Object.assign({}, p, { splitMode: 'manual', rowCuts, colCuts });
+      const L = computeLayout(trial);
+      const items = L.pieces.map(pc => ({
+        id: pc.id, w: pc.mL + pc.nx*pitch + pc.mR + extra, d: pc.mF + pc.ny*pitch + pc.mB + extra,
+        h: 4.25, qty: 1, stackable: false }));
+      const fitsAll = items.every(it =>
+        (it.w <= p.bedW && it.d <= p.bedD) || (it.d <= p.bedW && it.w <= p.bedD));
+      if (fitsAll) {
+        const plates = packPlates(items, p.bedW, p.bedD, 4, {});
+        const minDim = Math.min(...L.pieces.map(pc => Math.min(pc.nx, pc.ny)));
+        const score = [plates.length, L.pieces.length, -minDim];
+        if (!best || score[0] < best.score[0] ||
+            (score[0] === best.score[0] && (score[1] < best.score[1] ||
+             (score[1] === best.score[1] && score[2] < best.score[2])))) {
+          best = { rowCuts: rowCuts.slice(), colCuts: colCuts.map(c => c.slice()), score, plates: plates.length };
+        }
+      }
+      // advance mixed-radix index
+      let d = idx.length - 1;
+      while (d >= 0) { idx[d]++; if (idx[d] < colSubset.length) break; idx[d] = 0; d--; }
+      if (d < 0) break;
+    }
+  }
+  return best;   // {rowCuts, colCuts, plates} or null
+}
+
+// transform polys for merged plate export// transform polys for merged plate export
+function transformPolys(polys, tx, ty, tz, rot) {
+  const c = rot === 90 ? 0 : 1, s = rot === 90 ? 1 : 0;
+  return polys.map(p => ({
+    verts: p.verts.map(v => [c*v[0] - s*v[1] + tx, s*v[0] + c*v[1] + ty, v[2] + tz]),
+    plane: p.plane,
+  }));
+}
+
+const DEFAULTS = {
+  drawerW: 306, drawerD: 380, pitch: 42,
+  alignX: 'center', alignY: 'center', marginMode: 'auto',
+  mLeft: 0, mRight: 0, mFront: 0, mBack: 0,
+  bedW: 256, bedD: 256,
+  plateHeight: 4.25, topCutoff: 0.4, bottomPad: 0,
+  socketRadius: 4.0, outerRadius: 4.0, tolerance: 'standard',
+  connector: 'dovetail',
+  splitMode: 'balanced', rowCuts: null, colCuts: null,
+  bowtie: { len: 14, wEnd: 8, wWaist: 5, depth: 2.0, clr: 0.15 },
+  key: { len: 14, wEnd: 8, wWaist: 5, wMid: 6.5, endLen: 4, waistW: 4.5, lobeR: 4.2, depth: 2.0, clr: 0.15 },
+  keySlim: { len: 13, wEnd: 3.8, wWaist: 2.4, wMid: 3.0, endLen: 3.5, waistW: 2.0, lobeR: 1.85, depth: 2.0, clr: 0.12 },
+  keyType: 'bowtie', keyMount: 'floor', keyInsert: 'bottom',
+  hclip: { waistL: 1.3, waistW: 1.8, flangeT: 0.9, flangeW: 3.8, clr: 0.15 },
+  puzzle: { neckW: 6, neckL: 1.6, lobeR: 4.6, clr: 0.2 },
+  baseMode: 'solid', cornerRadii: null,
+  magnetBase: 2.8,
+  tab: { wr: 8, wt: 11, dp: 1.9, h: 2.2, clr: 0.2 },
+  magnets: false, magnetD: 6, magnetH: 2, magnetSide: 'bottom',
+  screws: false, screwHoleD: 3, screwHeadD: 6, screwHeadDepth: 2,
+  holeOffset: 13, arcSegs: 6,
+};
+
+if (typeof module !== 'undefined') {
+  module.exports = { computeLayout, pieceConnectors, buildPiece, buildTestTile, buildFitSample, bowtieKey, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles };
+}
+
+</script>
+<script>
+'use strict';
+/* Baseplate Studio UI. Core geometry functions are in scope from the previous script tag. */
+const $ = (id) => document.getElementById(id);
+
+// ---------- state ----------
+const state = Object.assign({}, DEFAULTS, {
+  marginMode: 'auto', splitMode: 'balanced', rowCuts: null, colCuts: null,
+});
+let layout = null;
+let builds = {};            // pieceId -> {polys, meta}
+let buildToken = 0;
+const PIECE_COLORS = ['#4fc3e8','#e8b34f','#7fd8a5','#e88a8a','#b18ae8','#7fb5e8','#e8d47f','#8ae8d4'];
+
+// ---------- read/write controls ----------
+const numIds = ['drawerW','drawerD','bedW','bedD','bedH','mLeft','mRight','mFront','mBack',
+  'pitch','outerRadius','bottomPad','topCutoff','magnetD','magnetH',
+  'screwHoleD','screwHeadD','screwHeadDepth'];
+function readControls() {
+  for (const id of numIds) state[id] = parseFloat($(id).value) || 0;
+  state.alignX = $('alignX').value; state.alignY = $('alignY').value;
+  const mm = $('marginMode').value;
+  state.marginMode = mm === 'custom' ? 'custom' : 'auto';
+  state.noMargin = mm === 'none';
+  if (state.noMargin) { state.marginMode = 'custom'; state.mLeft = state.mRight = state.mFront = state.mBack = 0; }
+  state.connector = $('connector').value;
+  state.keyType = ['bowtie','puzzlekey','snap'].includes(state.connector) ? state.connector : 'bowtie';
+  state.keyMount = $('keyMount').value;
+  state.keyInsert = $('keyInsert').value;
+  state.baseMode = $('baseMode').value;
+  if ($('perCorner').checked) {
+    state.cornerRadii = { ll: parseFloat($('rFL').value)||0, lr: parseFloat($('rFR').value)||0,
+                          ul: parseFloat($('rBL').value)||0, ur: parseFloat($('rBR').value)||0 };
+  } else state.cornerRadii = null;
+  state.tolerance = $('tolerance').value;
+  state.magnets = $('magnets').checked;
+  state.screws = $('screws').checked;
+  state.magnetSide = $('magnetSide').value;
+  const clr = parseFloat($('connClr').value) || 0.2;
+  state.tab = Object.assign({}, DEFAULTS.tab, { clr });
+  state.bowtie = Object.assign({}, DEFAULTS.bowtie, { clr: Math.max(0.1, clr - 0.05) });
+  state.key = Object.assign({}, DEFAULTS.key, { clr: Math.max(0.1, clr - 0.05) });
+  state.hclip = Object.assign({}, DEFAULTS.hclip, { clr: Math.max(0.08, clr - 0.05) });
+  state.puzzle = Object.assign({}, DEFAULTS.puzzle, { clr });
+  $('alignRow').style.display = mm === 'auto' ? '' : 'none';
+  $('customMargins').style.display = mm === 'custom' ? '' : 'none';
+  $('magRow').style.display = state.magnets ? '' : 'none';
+  $('screwRow').style.display = state.screws ? '' : 'none';
+  $('connHintDove').style.display = state.connector === 'dovetail' ? '' : 'none';
+  $('connHintPuzzle').style.display = state.connector === 'puzzle' ? '' : 'none';
+  $('connHintBow').style.display = (state.connector === 'bowtie' || state.connector === 'puzzlekey') ? '' : 'none';
+  $('connHintSnap').style.display = state.connector === 'snap' ? '' : 'none';
+  $('connHintHclip').style.display = state.connector === 'hclip' ? '' : 'none';
+  const hasKeys = ['bowtie','puzzlekey','snap'].includes(state.connector);
+  $('dlKeys').style.display = hasKeys ? '' : 'none';
+  $('keyMountRow').style.display = hasKeys ? '' : 'none';
+  $('keyMountHint').style.display = hasKeys ? '' : 'none';
+  $('dlKeys').textContent = state.connector === 'snap' ? 'Snap clips (.stl)' : 'Connector keys (.stl)';
+  $('baseModeRow').style.display = (state.magnets || state.screws) ? '' : 'none';
+  $('cornerRow').style.display = $('perCorner').checked ? '' : 'none';
+  $('cornerHint').style.display = $('perCorner').checked ? '' : 'none';
+}
+
+// ---------- layout & validation ----------
+function recomputeLayout() {
+  readControls();
+  layout = computeLayout(state);
+  // clamp stored manual cuts to the current grid
+  if (state.splitMode === 'manual') {
+    state.rowCuts = layout.rowCuts.slice();
+    state.colCuts = layout.colCuts.map(c => c.slice());
+  }
+  drawMap();
+  drawWarnings();
+  drawPieceTable();
+  scheduleBuild();
+}
+
+function pieceFits(pc) {
+  const pitch = state.pitch;
+  const ext = state.connector === 'dovetail' ? state.tab.dp + 0.4 : 0;
+  const w = pc.mL + pc.nx*pitch + pc.mR + ext;
+  const d = pc.mF + pc.ny*pitch + pc.mB + ext;
+  return w <= state.bedW + 1e-6 && d <= state.bedD + 1e-6;
+}
+
+function warningsList() {
+  const out = [];
+  if (layout.nx < 1 || layout.ny < 1 || state.drawerW < state.pitch || state.drawerD < state.pitch)
+    out.push({ err: true, t: `Drawer smaller than one ${state.pitch} mm cell — nothing to generate.` });
+  for (const pc of layout.pieces) if (!pieceFits(pc))
+    out.push({ err: true, t: `Piece ${pc.id} (${(pc.mL+pc.nx*state.pitch+pc.mR).toFixed(0)} × ${(pc.mF+pc.ny*state.pitch+pc.mB).toFixed(0)} mm) exceeds the ${state.bedW} × ${state.bedD} bed — add a cut through it.` });
+  if (layout.pieces.some(pc => pc.nx*pc.ny === 1))
+    out.push({ t: 'A piece is a single cell — printable, but consider moving a cut for a sturdier layout.' });
+  const remX = state.drawerW - layout.nx*state.pitch, remY = state.drawerD - layout.ny*state.pitch;
+  if (remX > state.pitch * 0.75 || remY > state.pitch * 0.75)
+    out.push({ t: `Leftover space is large (${remX.toFixed(0)} × ${remY.toFixed(0)} mm) — nearly another cell. Double-check the drawer measurement.` });
+  const keyedC = ['bowtie','puzzlekey','snap'].includes(state.connector);
+  const wallishC = (keyedC && state.keyMount === 'wall') || state.connector === 'hclip';
+  if ((keyedC && state.keyMount === 'floor' || state.connector === 'puzzle') && layout.pieces.length > 1) {
+    const padV = state.connector === 'puzzle' ? 2.6 : state.key.depth + 0.8;
+    const what = state.connector === 'puzzle' ? 'the jigsaw lobes' :
+      state.connector === 'snap' ? 'the snap clips' : 'the keys';
+    out.push({ t: `This joint adds a ${Math.max(state.bottomPad, padV).toFixed(1)} mm solid floor to house ${what}. Prefer no floor? Pick a keyed joint and set Key housing to "Inside the walls".` });
+  }
+  if (wallishC &&
+      layout.seams.some(s => s.junctions.some(j => Math.abs(j - Math.round(j)) > 0.25)))
+    out.push({ t: 'One seam overlaps by a single cell — wall-housed keys need a wall junction, so that seam gets no connector. The neighbouring joints still hold the assembly.' });
+  if (state.noMargin && (remX > 0.5 || remY > 0.5))
+    out.push({ t: 'No margin selected: the plate will sit loose by the leftover amount. The drawer walls still contain it.' });
+  return out;
+}
+function drawWarnings() {
+  const el = $('warnings');
+  el.innerHTML = warningsList().map(w => `<div class="w${w.err ? ' err' : ''}">${w.t}</div>`).join('');
+}
+
+// ---------- interactive cut map ----------
+function drawMap() {
+  const svg = $('cutmap');
+  const pitch = state.pitch;
+  const Wmm = state.drawerW, Dmm = state.drawerD;
+  const availW = Math.min(680, ($('mapwrap').clientWidth || 680) - 10);
+  const sc = Math.min(availW / (Wmm + 90), 460 / (Dmm + 90));
+  const ox = 58, oy = 26;
+  const X = (mm) => ox + mm * sc;
+  const Y = (mm) => oy + (Dmm - mm) * sc;     // front of drawer at the bottom
+  const w = ox + Wmm * sc + 34, h = oy + Dmm * sc + 56;
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  svg.setAttribute('width', w); svg.setAttribute('height', h);
+  let s = '';
+  const gx0 = layout.mL, gy0 = layout.mF;
+
+  // piece fills
+  layout.pieces.forEach((pc, i) => {
+    const x0 = pc.cellX0 === 0 ? 0 : gx0 + pc.cellX0 * pitch;
+    const x1 = pc.cellX0 + pc.nx === layout.nx ? Wmm : gx0 + (pc.cellX0 + pc.nx) * pitch;
+    const y0 = pc.cellY0 === 0 ? 0 : gy0 + pc.cellY0 * pitch;
+    const y1 = pc.cellY0 + pc.ny === layout.ny ? Dmm : gy0 + (pc.cellY0 + pc.ny) * pitch;
+    const col = PIECE_COLORS[i % PIECE_COLORS.length];
+    const bad = !pieceFits(pc);
+    s += `<rect x="${X(x0)}" y="${Y(y1)}" width="${(x1-x0)*sc}" height="${(y1-y0)*sc}" fill="${col}" opacity="${bad?0.28:0.16}"/>`;
+    s += `<text class="plabel${bad?' bad':''}" x="${X((x0+x1)/2)}" y="${Y((y0+y1)/2)-2}" text-anchor="middle">${pc.id}</text>`;
+    s += `<text class="psub" x="${X((x0+x1)/2)}" y="${Y((y0+y1)/2)+11}" text-anchor="middle">${pc.nx}×${pc.ny}</text>`;
+  });
+
+  // grid lines + hit targets
+  for (let i = 1; i < layout.nx; i++) {
+    const xm = gx0 + i * pitch;
+    s += `<line class="gridline" x1="${X(xm)}" y1="${Y(gy0)}" x2="${X(xm)}" y2="${Y(gy0 + layout.ny*pitch)}"/>`;
+  }
+  for (let j = 1; j < layout.ny; j++) {
+    const ym = gy0 + j * pitch;
+    s += `<line class="gridline" x1="${X(gx0)}" y1="${Y(ym)}" x2="${X(gx0 + layout.nx*pitch)}" y2="${Y(ym)}"/>`;
+  }
+  // active cuts: rows
+  const bandStarts = [0, ...layout.rowCuts];
+  for (const rc of layout.rowCuts) {
+    const ym = gy0 + rc * pitch;
+    s += `<line class="cutline" x1="${X(0)}" y1="${Y(ym)}" x2="${X(Wmm)}" y2="${Y(ym)}"/>`;
+  }
+  // active cuts: columns per band
+  layout.colCuts.forEach((cuts, b) => {
+    const yA = gy0 + bandStarts[b] * pitch;
+    const yB = b + 1 < bandStarts.length ? gy0 + bandStarts[b+1] * pitch
+                                         : gy0 + layout.ny * pitch;
+    const y0 = b === 0 ? 0 : yA;
+    const y1 = b + 1 < bandStarts.length ? yB : Dmm;
+    for (const c of cuts)
+      s += `<line class="cutline" x1="${X(gx0 + c*pitch)}" y1="${Y(y0)}" x2="${X(gx0 + c*pitch)}" y2="${Y(y1)}"/>`;
+  });
+  // hit targets — horizontal (whole-plate row cuts)
+  for (let j = 1; j < layout.ny; j++) {
+    const ym = gy0 + j * pitch;
+    s += `<line class="hitline" data-row="${j}" x1="${X(0)}" y1="${Y(ym)}" x2="${X(Wmm)}" y2="${Y(ym)}"/>`;
+  }
+  // hit targets — vertical, per band segment
+  layout.colCuts.forEach((cuts, b) => {
+    const yA = bandStarts[b], yB = b + 1 < bandStarts.length ? bandStarts[b+1] : layout.ny;
+    for (let i = 1; i < layout.nx; i++) {
+      const xm = gx0 + i * pitch;
+      s += `<line class="hitline" data-band="${b}" data-col="${i}" x1="${X(xm)}" y1="${Y(gy0 + yA*pitch)}" x2="${X(xm)}" y2="${Y(gy0 + yB*pitch)}"/>`;
+    }
+  });
+
+  // outline + dimension lines
+  s += `<rect x="${X(0)}" y="${Y(Dmm)}" width="${Wmm*sc}" height="${Dmm*sc}" fill="none" stroke="var(--ink)" stroke-width="1.4"/>`;
+  const dy = Y(0) + 22;
+  s += `<line class="dim" x1="${X(0)}" y1="${dy}" x2="${X(Wmm)}" y2="${dy}"/>`
+     + `<line class="dim" x1="${X(0)}" y1="${dy-4}" x2="${X(0)}" y2="${dy+4}"/>`
+     + `<line class="dim" x1="${X(Wmm)}" y1="${dy-4}" x2="${X(Wmm)}" y2="${dy+4}"/>`
+     + `<text x="${X(Wmm/2)}" y="${dy+14}" text-anchor="middle" font-size="11">${Wmm} mm</text>`;
+  const dx = X(0) - 20;
+  s += `<line class="dim" x1="${dx}" y1="${Y(0)}" x2="${dx}" y2="${Y(Dmm)}"/>`
+     + `<line class="dim" x1="${dx-4}" y1="${Y(0)}" x2="${dx+4}" y2="${Y(0)}"/>`
+     + `<line class="dim" x1="${dx-4}" y1="${Y(Dmm)}" x2="${dx+4}" y2="${Y(Dmm)}"/>`
+     + `<text x="${dx-6}" y="${Y(Dmm/2)}" text-anchor="middle" font-size="11" transform="rotate(-90 ${dx-6} ${Y(Dmm/2)})">${Dmm} mm</text>`;
+  s += `<text x="${X(Wmm/2)}" y="${h-6}" text-anchor="middle" font-size="10">▾ front of drawer</text>`;
+  svg.innerHTML = s;
+  $('mapTail').textContent = `${layout.nx} × ${layout.ny} cells · ${layout.pieces.length} piece${layout.pieces.length>1?'s':''}`;
+  $('gridSummary').innerHTML = `Grid: <span class="klabel">${layout.nx} × ${layout.ny}</span> cells (${(layout.nx*state.pitch).toFixed(0)} × ${(layout.ny*state.pitch).toFixed(0)} mm) · margins L ${layout.mL.toFixed(1)} / R ${layout.mR.toFixed(1)} / F ${layout.mF.toFixed(1)} / B ${layout.mB.toFixed(1)} mm`;
+
+  svg.querySelectorAll('.hitline').forEach(el => el.addEventListener('click', onMapClick));
+}
+
+function onMapClick(ev) {
+  const el = ev.currentTarget;
+  // seed manual state from the current layout
+  if (state.splitMode !== 'manual') {
+    state.splitMode = 'manual';
+    state.rowCuts = layout.rowCuts.slice();
+    state.colCuts = layout.colCuts.map(c => c.slice());
+    setSplitSeg('manual');
+  }
+  if (el.dataset.row !== undefined) {
+    const j = parseInt(el.dataset.row);
+    const i = state.rowCuts.indexOf(j);
+    const oldStarts = [0, ...state.rowCuts];
+    if (i >= 0) state.rowCuts.splice(i, 1); else { state.rowCuts.push(j); state.rowCuts.sort((a,b)=>a-b); }
+    // remap per-band col cuts onto the new bands by band start position
+    const newStarts = [0, ...state.rowCuts];
+    const byStart = {};
+    oldStarts.forEach((st, k) => byStart[st] = state.colCuts[k] || []);
+    state.colCuts = newStarts.map(st => {
+      if (byStart[st]) return byStart[st].slice();
+      // new band from a split: inherit the cuts of the band it came from
+      const src = oldStarts.filter(s0 => s0 < st).pop();
+      return (byStart[src] || []).slice();
+    });
+  } else {
+    const b = parseInt(el.dataset.band), c = parseInt(el.dataset.col);
+    if (!state.colCuts[b]) state.colCuts[b] = [];
+    const i = state.colCuts[b].indexOf(c);
+    if (i >= 0) state.colCuts[b].splice(i, 1); else { state.colCuts[b].push(c); state.colCuts[b].sort((a,bb)=>a-bb); }
+  }
+  recomputeLayout();
+}
+
+function setSplitSeg(v) {
+  document.querySelectorAll('#splitSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+}
+
+// ---------- piece table ----------
+function drawPieceTable() {
+  const tb = $('pieceRows');
+  const pitch = state.pitch;
+  tb.innerHTML = layout.pieces.map((pc, i) => {
+    const w = pc.mL + pc.nx*pitch + pc.mR, d = pc.mF + pc.ny*pitch + pc.mB;
+    const fit = pieceFits(pc);
+    const built = builds[pc.id];
+    let joints = '…';
+    if (built) {
+      const m = built.meta, parts = [];
+      if (m.tabs) parts.push(`${m.tabs} tab`);
+      if (m.notches) parts.push(`${m.notches} pocket`);
+      if (m.puzzles) parts.push(`${m.puzzles} puzzle`);
+      if (m.bowties) parts.push(`${m.bowties} key`);
+      joints = parts.join(' + ') || '—';
+    }
+    return `<tr>
+      <td><span class="sw" style="background:${PIECE_COLORS[i%PIECE_COLORS.length]}"></span><b>${pc.id}</b></td>
+      <td class="mono">${pc.nx} × ${pc.ny}</td>
+      <td class="mono">${w.toFixed(1)} × ${d.toFixed(1)}</td>
+      <td class="mono">${joints || '—'}</td>
+      <td class="${fit?'':'bad'}">${fit ? 'fits' : 'TOO BIG'}</td>
+      <td><button class="ghost" data-dl="${pc.id}" ${built?'':'disabled'}>STL</button></td>
+    </tr>`;
+  }).join('');
+  tb.querySelectorAll('button[data-dl]').forEach(b => b.addEventListener('click', () => downloadPiece(b.dataset.dl)));
+  const tot = layout.pieces.length;
+  const okc = Object.keys(builds).length;
+  $('pieceTail').textContent = okc < tot ? `building ${okc}/${tot}…` : `${tot} ready`;
+}
+
+// ---------- async build ----------
+let buildTimer = null;
+function scheduleBuild() {
+  clearTimeout(buildTimer);
+  buildTimer = setTimeout(runBuild, 260);
+}
+async function runBuild() {
+  const token = ++buildToken;
+  builds = {};
+  printPlan = null; renderPrintPlan();
+  drawPieceTable();
+  clearThree();
+  const errs = warningsList().some(w => w.err);
+  if (errs) { $('status').textContent = 'resolve the errors above to generate'; return; }
+  for (const pc of layout.pieces) {
+    $('status').textContent = `building ${pc.id}…`;
+    await new Promise(r => setTimeout(r, 0));
+    if (token !== buildToken) return;
+    try {
+      const res = buildPiece(state, layout, pc);
+      builds[pc.id] = { polys: res.polys, meta: res };
+      addPieceToThree(pc, res);
+    } catch (e) {
+      console.error('build failed for', pc.id, e);
+      $('status').textContent = `piece ${pc.id} failed — try different cuts`;
+      return;
+    }
+    drawPieceTable();
+  }
+  $('status').textContent = '';
+  computePrintPlan();
+  fitThree();
+}
+
+// ---------- three.js ----------
+let scene, camera, renderer, root, sph = { theta: -0.7, phi: 1.05, r: 420, cx: 0, cy: 0 };
+function initThree() {
+  const canvas = $('three');
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(42, 2, 1, 5000);
+  scene.add(new THREE.HemisphereLight(0xcfe8f4, 0x1a2027, 0.95));
+  const d = new THREE.DirectionalLight(0xffffff, 0.75); d.position.set(0.6, -1, 1.4); scene.add(d);
+  root = new THREE.Group(); scene.add(root);
+  const onResize = () => {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  };
+  new ResizeObserver(onResize).observe(canvas); onResize();
+  // controls
+  let drag = null;
+  canvas.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, pan: e.shiftKey }; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (drag.pan) { sph.cx -= dx * sph.r * 0.0011; sph.cy += dy * sph.r * 0.0011; }
+    else { sph.theta -= dx * 0.0065; sph.phi = Math.max(0.03, Math.min(3.11, sph.phi - dy * 0.0065)); }
+    drag.x = e.clientX; drag.y = e.clientY;
+  });
+  canvas.addEventListener('pointerup', () => drag = null);
+  canvas.addEventListener('wheel', e => { e.preventDefault(); sph.r = Math.max(60, Math.min(2200, sph.r * (1 + e.deltaY * 0.0011))); }, { passive: false });
+  (function loop() {
+    requestAnimationFrame(loop);
+    camera.position.set(
+      sph.cx + sph.r * Math.sin(sph.phi) * Math.sin(sph.theta),
+      sph.cy - sph.r * Math.sin(sph.phi) * Math.cos(sph.theta),
+      sph.r * Math.cos(sph.phi));
+    camera.up.set(0, 0, 1);
+    camera.lookAt(sph.cx, sph.cy, 0);
+    renderer.render(scene, camera);
+  })();
+}
+function clearThree() {
+  while (root.children.length) {
+    const m = root.children.pop();
+    m.geometry.dispose(); m.material.dispose();
+  }
+}
+function piecePlacement(pc) {
+  const pitch = state.pitch, gap = $('explode').checked ? 14 : 0.6;
+  const gx = pc.cellX0 === 0 ? 0 : layout.mL + pc.cellX0 * pitch;
+  const gy = pc.cellY0 === 0 ? 0 : layout.mF + pc.cellY0 * pitch;
+  return [gx + pc.seg * gap, gy + pc.band * gap];
+}
+function addPieceToThree(pc, res) {
+  const tris = polysToTriangles(res.polys);
+  const pos = new Float32Array(tris.length * 9);
+  let o = 0;
+  for (const t of tris) for (const v of t) { pos[o++] = v[0]; pos[o++] = v[1]; pos[o++] = v[2]; }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  const i = layout.pieces.indexOf(pc);
+  const mat = new THREE.MeshStandardMaterial({
+    color: PIECE_COLORS[i % PIECE_COLORS.length], flatShading: true,
+    metalness: 0.05, roughness: 0.75 });
+  const mesh = new THREE.Mesh(g, mat);
+  const [px, py] = piecePlacement(pc);
+  mesh.position.set(px, py, 0);
+  mesh.userData.pieceId = pc.id;
+  root.add(mesh);
+}
+function fitThree() {
+  sph.cx = state.drawerW / 2; sph.cy = state.drawerD / 2;
+  sph.r = Math.max(state.drawerW, state.drawerD) * 1.5;
+}
+$('explode').addEventListener('change', () => {
+  for (const mesh of root.children) {
+    const pc = layout.pieces.find(p => p.id === mesh.userData.pieceId);
+    if (pc) { const [px, py] = piecePlacement(pc); mesh.position.set(px, py, 0); }
+  }
+});
+
+
+// ---------- print plan ----------
+let printPlan = null;
+function computePrintPlan() {
+  if (!layout || Object.keys(builds).length < layout.pieces.length) { printPlan = null; renderPrintPlan(); return; }
+  const gap = parseFloat($('plateGap').value) || 4;
+  const stack = $('stackToggle').checked;
+  const zGap = parseFloat($('stackGap').value) || 0.24;
+  $('stackHint').style.display = stack ? '' : 'none';
+  const items = layout.pieces.map(pc => {
+    const m = builds[pc.id].meta;
+    return { id: pc.id, w: m.W + m.protrusion.l + m.protrusion.r,
+             d: m.D + m.protrusion.f + m.protrusion.b, h: m.H, qty: 1, stackable: true };
+  });
+  if (['bowtie','puzzlekey','snap','hclip'].includes(state.connector)) {
+    const kd = activeKeyDims();
+    const nKeys = layout.seams.reduce((a, s) => a + s.junctions.length, 0);
+    if (nKeys) items.push({ id: 'key', w: kd.len, d: kd.wEnd,
+                            h: kd.depth - 0.15, qty: nKeys, stackable: false });
+  }
+  printPlan = { plates: packPlates(items, state.bedW, state.bedD, gap,
+    { stack, zGap, bedH: state.bedH || 1e9 }), merged: items, zGap };
+  renderPrintPlan();
+}
+function renderPrintPlan() {
+  const row = $('platesRow');
+  if (!printPlan) { row.innerHTML = '<div class="hint">Print plan appears when all pieces are built.</div>'; $('planTail').textContent = ''; $('dlPlates').disabled = true; return; }
+  $('dlPlates').disabled = false;
+  const plates = printPlan.plates;
+  const stacked = plates.some(pl => pl.placed.some(p => p.z > 0.01));
+  $('planTail').textContent = `${plates.length} print plate${plates.length > 1 ? 's' : ''}` + (stacked ? ' · stacked' : '');
+  const sc = 116 / Math.max(state.bedW, state.bedD);
+  row.innerHTML = plates.map((pl, i) => {
+    let svg = `<svg width="${state.bedW*sc+2}" height="${state.bedD*sc+2}" style="background:var(--panel2);border:1px solid var(--line);border-radius:5px">`;
+    for (const p of pl.placed) {
+      const ci = p.id === 'key' ? 7 : layout.pieces.findIndex(pc => pc.id === p.id);
+      const lvl = Math.round(p.z / (4.5 + printPlan.zGap));
+      svg += `<rect x="${p.x*sc+1}" y="${(state.bedD-p.y-p.d)*sc+1}" width="${p.w*sc}" height="${p.d*sc}" fill="${PIECE_COLORS[(ci<0?0:ci)%PIECE_COLORS.length]}" opacity="${p.z>0.01?0.35:0.55}" stroke="var(--line)"/>`;
+      if (p.id !== 'key')
+        svg += `<text x="${(p.x+p.w/2)*sc+1}" y="${(state.bedD-p.y-p.d/2)*sc+4+(lvl*10)}" text-anchor="middle" font-size="10" fill="var(--ink)">${p.id}${p.z>0.01?' ↥':''}</text>`;
+    }
+    svg += '</svg>';
+    return `<div style="display:grid;gap:4px;justify-items:center">${svg}<div class="hint">plate ${i+1}</div></div>`;
+  }).join('');
+}
+function platePolysAndItems(idx) {
+  const pl = printPlan.plates[idx];
+  const objs = [];
+  for (const p of pl.placed) {
+    let polys;
+    if (p.id === 'key') { const kd = activeKeyDims(); polys = buildKey(activeKeyShape(), kd, kd.depth - 0.15); }
+    else {
+      const b = builds[p.id];
+      if (!b) continue;
+      polys = transformPolys(b.polys, b.meta.protrusion.l, b.meta.protrusion.f, 0, 0);
+    }
+    objs.push({ name: p.id + (p.z > 0.01 ? `@${p.z.toFixed(2)}` : ''), polys, tx: p.x, ty: p.y, tz: p.z, rot: p.rot });
+  }
+  return objs;
+}
+async function plate3mfBytes(idx) {
+  const x = build3mfXML(platePolysAndItems(idx));
+  const pz = new JSZip();
+  pz.file('[Content_Types].xml', x.contentTypes);
+  pz.file('_rels/.rels', x.rels);
+  pz.file('3D/3dmodel.model', x.model);
+  return pz.generateAsync({ type: 'uint8array' });
+}
+$('dlPlates').addEventListener('click', async () => {
+  if (!printPlan) return;
+  const n = printPlan.plates.length;
+  if (n === 1) {
+    const buf = await plate3mfBytes(0);
+    saveBlob(buf, 'print-plates.3mf');
+    return;
+  }
+  const zip = new JSZip();
+  for (let i = 0; i < n; i++) zip.file(`plate-${i+1}.3mf`, await plate3mfBytes(i));
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `print-plates-x${n}.zip`; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+});
+$('plateGap').addEventListener('input', computePrintPlan);
+$('stackToggle').addEventListener('change', computePrintPlan);
+$('stackGap').addEventListener('input', computePrintPlan);
+
+// ---------- downloads ----------
+function saveBlob(buf, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([buf], { type: 'application/octet-stream' }));
+  a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+function downloadPiece(id) {
+  const b = builds[id];
+  if (b) saveBlob(stlBinary(b.polys, `baseplate-${id}`), `baseplate-${id}.stl`);
+}
+$('dlTile').addEventListener('click', () => {
+  const tile = buildTestTile(Object.assign({}, state, { drawerW: state.pitch, drawerD: state.pitch,
+    marginMode: 'custom', mLeft: 0, mRight: 0, mFront: 0, mBack: 0 }));
+  saveBlob(stlBinary(tile.polys, 'test-tile'), 'baseplate-test-tile-1x1.stl');
+});
+function activeKeyDims() {
+  const d = state.connector === 'hclip' ? Object.assign(hclipPrm(state.hclip), { depth: 2.3 })
+    : state.keyMount === 'wall' ? Object.assign({}, DEFAULTS.keySlim) : Object.assign({}, state.key);
+  if (state.keyInsert === 'top' &&
+      (state.connector === 'hclip' || state.keyMount === 'wall')) d.depth = 2.0;
+  return d;
+}
+function activeKeyShape() {
+  return state.connector === 'hclip' ? 'snap' : state.keyType;
+}
+function keysArray() {
+  const kd = activeKeyDims();
+  const wallish = state.keyMount === 'wall' || state.connector === 'hclip';
+  const nKeys = layout.seams.reduce((a, s) => a + s.junctions.filter(j =>
+    !wallish || Math.abs(j - Math.round(j)) <= 0.25).length, 0) || 1;
+  let polys = [];
+  const cols = Math.ceil(Math.sqrt(nKeys));
+  for (let k = 0; k < nKeys; k++) {
+    const key = buildKey(activeKeyShape(), kd, kd.depth - 0.15);
+    const dx = (k % cols) * (kd.len + 6), dy = Math.floor(k / cols) * (kd.wEnd + 6);
+    for (const p of key) polys.push({ verts: p.verts.map(v => [v[0]+dx, v[1]+dy, v[2]]), plane: p.plane });
+  }
+  return { polys, nKeys, kd };
+}
+$('dlFit').addEventListener('click', () => {
+  const H = layout && builds[layout.pieces[0].id] ? builds[layout.pieces[0].id].meta.H : 4.25;
+  const fsam = buildFitSample(state, H);
+  saveBlob(stlBinary(fsam.polys, 'fit-sample'),
+    `${state.connector}-fit-sample-clr-${fsam.clrs.map(c=>c.toFixed(2)).join('-')}.stl`);
+});
+$('dlKeys').addEventListener('click', () => {
+  if (state.connector === 'snap' && state.keyInsert === 'top') {
+    const prm = Object.assign({ legT: 1.0, legLen: 1.35, legC: 1.4, barb: 0.18,
+                                bridgeW: 1.7, bridgeD: 0.85, wall: 0.6 }, { clr: state.key.clr });
+    const H = layout && builds[layout.pieces[0].id] ? builds[layout.pieces[0].id].meta.H : 4.25;
+    const one = snapTopClip(prm, H);
+    const nKeys = layout.seams.reduce((a, s) => a + s.junctions.filter(j => Math.abs(j - Math.round(j)) <= 0.25).length, 0) || 1;
+    let polys = [];
+    const cols = Math.ceil(Math.sqrt(nKeys));
+    for (let k = 0; k < nKeys; k++) {
+      const dx = (k % cols) * 7, dy = Math.floor(k / cols) * 4;
+      for (const p of one) polys.push({ verts: p.verts.map(v => [v[0]+dx, v[1]+dy, v[2]]), plane: p.plane });
+    }
+    saveBlob(stlBinary(polys, 'snap-clips'), `snap-clips-x${nKeys}.stl`);
+    return;
+  }
+  const { polys, nKeys } = keysArray();
+  saveBlob(stlBinary(polys, 'connector-keys'), `${state.connector}-keys-x${nKeys}.stl`);
+});
+$('dlAll').addEventListener('click', async () => {
+  if (Object.keys(builds).length < layout.pieces.length) return;
+  const zip = new JSZip();
+  for (const pc of layout.pieces)
+    zip.file(`baseplate-${pc.id}.stl`, stlBinary(builds[pc.id].polys, pc.id));
+  if (['bowtie','puzzlekey','snap'].includes(state.connector)) {
+    const { polys, nKeys } = keysArray();
+    zip.file(`${state.connector}-keys-x${nKeys}.stl`, stlBinary(polys, 'keys'));
+  }
+  if (printPlan) {
+    for (let i = 0; i < printPlan.plates.length; i++)
+      zip.file(`print-plates/plate-${i+1}.3mf`, await plate3mfBytes(i));
+  }
+  zip.file('README.txt', readmeText());
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `gridfinity-baseplate-${layout.nx}x${layout.ny}.zip`; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+});
+function readmeText() {
+  const rows = [...new Set(layout.pieces.map(p => p.band))].length;
+  const lines = [];
+  lines.push('GRIDFINITY BASEPLATE — generated by Baseplate Studio');
+  lines.push('====================================================');
+  lines.push(`Drawer: ${state.drawerW} x ${state.drawerD} mm | Grid: ${layout.nx} x ${layout.ny} cells @ ${state.pitch} mm`);
+  lines.push(`Margins: L ${layout.mL.toFixed(1)} R ${layout.mR.toFixed(1)} F ${layout.mF.toFixed(1)} B ${layout.mB.toFixed(1)} mm`);
+  lines.push(`Split: ${state.splitMode} | Pieces: ${layout.pieces.length} in ${rows} row band(s)`);
+  lines.push(`Connectors: ${state.connector}` + (state.connector === 'dovetail' ? ` (clearance ${state.tab.clr} mm/side)` : ''));
+  if (state.magnets) lines.push(`Magnets: ${state.magnetD} x ${state.magnetH} mm, from ${state.magnetSide}`);
+  if (state.screws) lines.push(`Screws: ${state.screwHoleD} mm holes, ${state.screwHeadD} mm counterbore`);
+  lines.push('');
+  lines.push('LAYOUT (front of drawer at the bottom):');
+  const bandIds = {};
+  for (const pc of layout.pieces) (bandIds[pc.band] = bandIds[pc.band] || []).push(pc.id);
+  Object.keys(bandIds).sort((a, b) => b - a).forEach(b => lines.push('  ' + bandIds[b].join(' | ')));
+  lines.push('');
+  lines.push('PRINTING: flat as oriented, no supports needed. Print the test tile first');
+  lines.push('and check a bin fits before committing to the full plates.');
+  lines.push('');
+  if (printPlan) lines.push(`PRINT PLATES: ${printPlan.plates.length} — pre-arranged 3MF files in print-plates/ open directly in your slicer.`);
+  lines.push('');
+  if (state.connector === 'puzzle') {
+    lines.push('ASSEMBLY: lower the pieces together on a flat surface so each jigsaw lobe');
+    lines.push('drops into its cavity, then lift the assembled plate into the drawer.');
+  } else if (state.connector === 'hclip' || ((state.connector === 'puzzlekey' || state.connector === 'snap' || state.connector === 'bowtie') && state.keyMount === 'wall')) {
+    if (state.keyInsert === 'top' && state.connector === 'snap') {
+      lines.push('ASSEMBLY: lay the pieces in the drawer edge to edge, then press a U-clip');
+      lines.push('into each junction from above until it clicks. The bridge sits flush.');
+      lines.push('Print clips flat as oriented with a 0.4 mm nozzle and 2+ walls.');
+    } else if (state.keyInsert === 'top') {
+      lines.push('ASSEMBLY: lay the pieces in the drawer edge to edge, then drop a key into');
+      lines.push('each junction opening from above and press flush.');
+    } else {
+      lines.push('ASSEMBLY: place pieces face-down edge to edge, press a key into each pair');
+      lines.push('of wall pockets, then flip and lower into the drawer.');
+    }
+  } else if (state.connector === 'puzzlekey' || state.connector === 'snap') {
+    lines.push('ASSEMBLY: place pieces face-down edge to edge, press a key into each pair');
+    lines.push('of recesses' + (state.connector === 'snap' ? ' until it clicks' : '') + ', then flip and lower into the drawer.');
+  } else if (state.connector === 'dovetail') {
+    lines.push('ASSEMBLY: on a flat surface, lay the piece with tabs down first, then lower');
+    lines.push('each neighbour so its pockets drop over the tabs. Lift the assembled plate');
+    lines.push('into the drawer. Tight joints: a light scrape on the tab flanks.');
+  } else if (state.connector === 'bowtie') {
+    lines.push('ASSEMBLY: place pieces face-down edge to edge, press a bowtie key into each');
+    lines.push('pair of recesses, then flip the assembly and lower it into the drawer.');
+  }
+  lines.push('');
+  lines.push('Gridfinity was created by Zack Freedman (Voidstar Lab) as an open standard.');
+  lines.push('Settings link: ' + shareLink());
+  return lines.join('\n');
+}
+
+// ---------- share link ----------
+function shareLink() {
+  const o = {
+    w: state.drawerW, d: state.drawerD, mm: $('marginMode').value,
+    ax: state.alignX, ay: state.alignY,
+    ml: state.mLeft, mr: state.mRight, mf: state.mFront, mb: state.mBack,
+    bw: state.bedW, bd: state.bedD, bh: state.bedH, sp: state.splitMode, km: state.keyMount, ki: state.keyInsert,
+    rc: state.rowCuts || '', cc: state.colCuts ? state.colCuts.map(c => c.join('.')).join('_') : '',
+    cn: state.connector, cl: state.tab.clr, to: state.tolerance,
+    mg: state.magnets ? 1 : 0, md: state.magnetD, mh: state.magnetH, ms: state.magnetSide,
+    sc: state.screws ? 1 : 0, sh: state.screwHoleD, sd: state.screwHeadD, se: state.screwHeadDepth,
+    pi: state.pitch, or: state.outerRadius, bp: state.bottomPad, tc: state.topCutoff,
+    bm: state.baseMode, pc: $('perCorner').checked ? 1 : 0,
+    r1: $('rFL').value, r2: $('rFR').value, r3: $('rBL').value, r4: $('rBR').value,
+  };
+  const q = Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+  return location.origin + location.pathname + '#' + q;
+}
+$('shareBtn').addEventListener('click', () => {
+  const link = shareLink();
+  navigator.clipboard.writeText(link).then(
+    () => { $('shareBtn').textContent = 'Copied ✓'; setTimeout(() => $('shareBtn').textContent = 'Copy settings link', 1600); },
+    () => prompt('Copy this link:', link));
+});
+function loadFromHash() {
+  if (!location.hash || location.hash.length < 3) return;
+  const q = Object.fromEntries(location.hash.slice(1).split('&').map(kv => kv.split('=').map(decodeURIComponent)));
+  const set = (id, v) => { if (v !== undefined && $(id)) $(id).value = v; };
+  set('drawerW', q.w); set('drawerD', q.d); set('marginMode', q.mm);
+  set('alignX', q.ax); set('alignY', q.ay);
+  set('mLeft', q.ml); set('mRight', q.mr); set('mFront', q.mf); set('mBack', q.mb);
+  set('bedW', q.bw); set('bedD', q.bd); set('bedH', q.bh); set('keyMount', q.km); set('keyInsert', q.ki);
+  set('connector', q.cn); set('connClr', q.cl); set('tolerance', q.to);
+  if (q.mg !== undefined) $('magnets').checked = q.mg === '1';
+  set('magnetD', q.md); set('magnetH', q.mh); set('magnetSide', q.ms);
+  if (q.sc !== undefined) $('screws').checked = q.sc === '1';
+  set('screwHoleD', q.sh); set('screwHeadD', q.sd); set('screwHeadDepth', q.se);
+  set('pitch', q.pi); set('outerRadius', q.or); set('bottomPad', q.bp); set('topCutoff', q.tc);
+  set('baseMode', q.bm);
+  if (q.pc !== undefined) $('perCorner').checked = q.pc === '1';
+  set('rFL', q.r1); set('rFR', q.r2); set('rBL', q.r3); set('rBR', q.r4);
+  if (q.sp) {
+    state.splitMode = q.sp; setSplitSeg(q.sp);
+    if (q.sp === 'manual') {
+      state.rowCuts = q.rc ? q.rc.split(',').map(Number).filter(n => !isNaN(n)) : [];
+      state.colCuts = q.cc ? q.cc.split('_').map(s => s ? s.split('.').map(Number) : []) : [];
+    }
+  }
+}
+
+// ---------- wiring ----------
+document.querySelectorAll('section.p>h2').forEach(h =>
+  h.addEventListener('click', () => h.parentElement.classList.toggle('closed')));
+document.querySelectorAll('#splitSeg button').forEach(b => b.addEventListener('click', () => {
+  state.splitMode = b.dataset.v;
+  if (b.dataset.v !== 'manual') { state.rowCuts = null; state.colCuts = null; }
+  setSplitSeg(b.dataset.v);
+  recomputeLayout();
+}));
+$('bedPreset').addEventListener('change', () => {
+  const v = $('bedPreset').value;
+  if (v !== 'custom') { const [w, d, h] = v.split(','); $('bedW').value = w; $('bedD').value = d; $('bedH').value = h; }
+  recomputeLayout();
+});
+for (const id of [...numIds, 'alignX', 'alignY', 'marginMode', 'connector', 'connClr',
+  'tolerance', 'magnetSide', 'magnets', 'screws', 'baseMode', 'perCorner', 'rFL', 'rFR', 'rBL', 'rBR', 'keyMount', 'keyInsert']) {
+  $(id).addEventListener('input', recomputeLayout);
+  $(id).addEventListener('change', recomputeLayout);
+}
+window.addEventListener('resize', () => { if (layout) drawMap(); });
+
+initThree();
+loadFromHash();
+recomputeLayout();
+fitThree();
+
+</script>
+</body>
+</html>
