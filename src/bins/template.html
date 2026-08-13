@@ -11,7 +11,7 @@
 <body>
 <header>
   <h1>DRAWER<span class="tm">FORGE</span> <span class="tm" style="opacity:.55">· BINS</span></h1>
-  <p>Gridfinity bins built to the published spec, sized to the drawer you already measured. Pick a footprint and a height; everything else follows.</p>
+  <p>Lay bins out across the whole drawer, then print exactly what you planned. Built to the published Gridfinity spec, so they fit any spec baseplate.</p>
   <div class="privacy">runs entirely in your browser — nothing is uploaded, no account, no tracking</div>
 </header>
 <div class="app">
@@ -28,20 +28,34 @@
       <label class="f"><b>Usable height (mm)</b><input id="drawerH" type="number" step="0.5" value="93.9"></label>
       <label class="f"><b>Baseplate height (mm)</b><input id="plateH" type="number" step="0.05" value="4.25"></label>
     </div>
-    <div class="hint">Usable height is drawer floor to the lowest thing above. Baseplate height is 4.25 mm unless your joint forced a solid floor — the baseplate tool tells you.</div>
+    <div class="hint">Usable height is drawer floor to the lowest thing above. Baseplate height is 4.25 mm unless your joint forced a solid floor — the baseplate tool passes the real figure across.</div>
     <div class="mono" id="gridSummary">—</div>
     <div style="margin-top:8px"><a id="toPlates" class="ghost" href="../">← back to baseplates</a></div>
   </div>
 </section>
 
-<section class="p" id="s-bin">
-  <h2><span class="n">02</span> Bin <span class="caret">▾</span></h2>
+<section class="p" id="s-layout">
+  <h2><span class="n">02</span> Drawer layout <span class="caret">▾</span></h2>
+  <div id="fillwrap"><svg id="fillmap"></svg></div>
+  <div class="covbar"><i id="covfill" style="width:0%"></i></div>
   <div class="body">
-    <div class="row3">
+    <div class="mono" id="coverage">—</div>
+    <div class="hint">Drag across empty cells to place a bin. Click a bin to select it, then change its height or dividers below. Front of the drawer is at the bottom.</div>
+    <div class="row">
+      <button class="ghost" id="fillRest">Fill the rest with <span id="fillSize">1×1</span></button>
+      <button class="ghost" id="clearAll">Clear all</button>
+    </div>
+  </div>
+</section>
+
+<section class="p" id="s-bin">
+  <h2><span class="n">03</span> <span id="binPanelTitle">New bins</span> <span class="caret">▾</span></h2>
+  <div class="body">
+    <div class="row" id="sizeRow">
       <label class="f"><b>Width (cells)</b><input id="u" type="number" step="1" min="1" value="1"></label>
       <label class="f"><b>Depth (cells)</b><input id="v" type="number" step="1" min="1" value="1"></label>
-      <label class="f"><b>Height (7 mm units)</b><input id="hUnits" type="number" step="1" min="1" value="3"></label>
     </div>
+    <label class="f"><b>Height (7 mm units)</b><input id="hUnits" type="number" step="1" min="1" value="3"></label>
     <div class="hint" id="binSizeHint">—</div>
     <label class="tog"><input id="solid" type="checkbox"> Solid block (no cavity)</label>
     <div class="row" id="thickRow">
@@ -52,18 +66,22 @@
       <label class="f"><b>Dividers across</b><input id="divX" type="number" step="1" min="0" value="0"></label>
       <label class="f"><b>Dividers along</b><input id="divY" type="number" step="1" min="0" value="0"></label>
     </div>
-    <div class="hint">Dividers are counts of walls, not compartments — 1 divider makes 2 compartments. They print as part of the bin, no supports.</div>
+    <div class="hint">Dividers are counts of walls, not compartments — 1 divider makes 2 compartments.</div>
     <label class="f"><b>Corner smoothness</b>
       <select id="arcSegs">
         <option value="8">Fast — 8 segments</option>
         <option value="12" selected>Standard — 12 segments</option>
         <option value="24">Smooth — 24 segments</option>
       </select></label>
+    <div class="row" id="selActions" style="display:none">
+      <button class="ghost" id="applyAll">Apply to all bins</button>
+      <button class="ghost" id="delBin">Delete this bin</button>
+    </div>
   </div>
 </section>
 
 <section class="p" id="s-warn">
-  <h2><span class="n">03</span> Checks <span class="caret">▾</span></h2>
+  <h2><span class="n">04</span> Checks <span class="caret">▾</span></h2>
   <div class="body"><div id="warnings"></div></div>
 </section>
 
@@ -71,8 +89,11 @@
 <div class="stage">
 
 <div class="stagecard">
-  <h3>This bin</h3>
-  <table class="pieces"><tbody id="specRows"></tbody></table>
+  <h3>Bins to print</h3>
+  <table class="pieces"><thead><tr>
+    <th>Type</th><th>Size (mm)</th><th>Qty</th><th>Material</th><th></th>
+  </tr></thead><tbody id="typeRows"></tbody></table>
+  <div class="mono" id="totals" style="padding:10px 14px">—</div>
 </div>
 
 <div class="stagecard">
@@ -82,9 +103,9 @@
 
 <div class="stagecard">
   <h3>Export</h3>
-  <button class="act" id="dlStl">Download this bin (.stl)</button>
-  <button class="ghost" id="shareBtn" style="margin-top:8px">Copy settings link</button>
-  <div class="hint">Prints flat as oriented, no supports. Print one before committing to a drawer's worth.</div>
+  <button class="act" id="dlAll">Download all bins (.zip)</button>
+  <button class="ghost" id="shareBtn" style="margin-top:8px">Copy layout link</button>
+  <div class="hint">One STL per bin type, with a README listing the layout. Prints flat as oriented, no supports. Print one bin before committing to a drawer's worth.</div>
 </div>
 
 </div>
@@ -96,6 +117,7 @@
 </footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
 /*__CORE__*/
 </script>

@@ -104,6 +104,22 @@ table.pieces button{padding:5px 10px;font-size:12px}
 footer{padding:18px 26px 30px;border-top:1px solid var(--line);color:var(--dim);font-size:12px;line-height:1.6}
 footer .mono{font-family:var(--mono);font-size:11px}
 .klabel{font-family:var(--mono);color:var(--cyan)}
+
+/* ---- bins: drawer fill map ---- */
+#fillwrap{padding:10px 14px 14px;overflow-x:auto}
+#fillmap{display:block;margin:0 auto;width:100%;height:auto;max-height:min(62vh,560px);touch-action:none;cursor:crosshair}
+#fillmap .cell{fill:var(--panel2);stroke:var(--line);stroke-width:1}
+#fillmap .cell.free:hover{fill:rgba(79,195,232,.14)}
+#fillmap .bin{stroke:var(--cyan);stroke-width:2;fill:rgba(79,195,232,.20);cursor:pointer}
+#fillmap .bin.sel{fill:rgba(79,195,232,.42);stroke-width:3}
+#fillmap .bin.clash{stroke:var(--red);fill:rgba(255,107,107,.28)}
+#fillmap .drag{stroke:var(--cyan);stroke-width:2;stroke-dasharray:5 4;fill:rgba(79,195,232,.16);pointer-events:none}
+#fillmap .drag.bad{stroke:var(--red);fill:rgba(255,107,107,.22)}
+#fillmap text{font-family:var(--mono);pointer-events:none}
+#fillmap .blabel{fill:var(--ink);font-size:12px;font-weight:600}
+#fillmap .bsub{fill:var(--dim);font-size:9.5px}
+.covbar{height:7px;border-radius:4px;background:var(--panel2);overflow:hidden;margin:8px 14px 0}
+.covbar i{display:block;height:100%;background:var(--cyan)}
 </style>
 </head>
 <body>
