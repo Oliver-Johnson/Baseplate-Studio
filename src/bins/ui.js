@@ -139,7 +139,7 @@ function readControls() {
   const int = (id, d) => { const x = parseInt($(id).value, 10); return isFinite(x) ? x : d; };
   state.drawerW = num('drawerW', 306);
   state.drawerD = num('drawerD', 380);
-  state.drawerH = num('drawerH', 93.9);
+  state.drawerH = num('drawerH', 84);
   state.plateH = num('plateH', 4.25);
   state.arcSegs = int('arcSegs', 12);
 
