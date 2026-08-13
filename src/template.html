@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drawerforge — Gridfinity baseplates cut to your drawer</title>
+<style>
+:root{
+  --bg:#171c22; --panel:#1f262e; --panel2:#242c35; --line:#2c353f;
+  --ink:#e9eef4; --dim:#8b98a5; --cyan:#4fc3e8; --amber:#e8b34f; --red:#e87b6a;
+  --mono:ui-monospace,'SF Mono','Cascadia Code',Consolas,Menlo,monospace;
+  --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px}
+a{color:var(--cyan)}
+header{padding:22px 26px 16px;border-bottom:1px solid var(--line);
+  background:
+    repeating-linear-gradient(0deg,transparent,transparent 20px,rgba(79,195,232,.045) 20px,rgba(79,195,232,.045) 21px),
+    repeating-linear-gradient(90deg,transparent,transparent 20px,rgba(79,195,232,.045) 20px,rgba(79,195,232,.045) 21px),
+    var(--bg);}
+header h1{font-size:21px;letter-spacing:.16em;font-weight:700}
+header h1 .tm{color:var(--cyan)}
+header p{color:var(--dim);margin-top:5px;max-width:640px}
+header .privacy{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:7px}
+header .privacy::before{content:"● ";color:var(--cyan)}
+.app{display:grid;grid-template-columns:376px 1fr;gap:0;min-height:calc(100vh - 96px)}
+@media(max-width:980px){.app{grid-template-columns:1fr}}
+.rail{border-right:1px solid var(--line);padding:14px 16px 40px;overflow-y:auto;max-height:calc(100vh - 96px)}
+@media(max-width:980px){.rail{max-height:none;border-right:none;border-bottom:1px solid var(--line)}}
+.stage{padding:16px 20px 60px;overflow-y:auto;max-height:calc(100vh - 96px)}
+@media(max-width:980px){.stage{max-height:none}}
+section.p{background:var(--panel);border:1px solid var(--line);border-radius:8px;margin-bottom:12px;overflow:hidden}
+section.p>h2{font-size:11px;letter-spacing:.14em;color:var(--dim);padding:10px 13px;cursor:pointer;
+  display:flex;align-items:center;gap:9px;user-select:none;text-transform:uppercase}
+section.p>h2 .n{font-family:var(--mono);color:var(--cyan);font-size:11px}
+section.p>h2 .caret{margin-left:auto;transition:transform .15s;color:var(--dim)}
+section.p.closed .caret{transform:rotate(-90deg)}
+section.p .body{padding:2px 13px 13px;display:grid;gap:9px}
+section.p.closed .body{display:none}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+label.f{display:grid;gap:4px;font-size:11.5px;color:var(--dim)}
+label.f b{font-weight:500}
+input,select{background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+  border-radius:5px;padding:7px 8px;font-family:var(--mono);font-size:13px;width:100%}
+input:focus,select:focus{outline:1px solid var(--cyan);border-color:var(--cyan)}
+select{font-family:var(--sans)}
+.seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{flex:1;background:var(--panel2);color:var(--dim);border:none;padding:7px 4px;
+  cursor:pointer;font-size:12px;font-family:var(--sans)}
+.seg button.on{background:var(--cyan);color:#0c1116;font-weight:600}
+.seg button+button{border-left:1px solid var(--line)}
+.tog{display:flex;align-items:center;gap:9px;cursor:pointer;font-size:12.5px;color:var(--ink)}
+.tog input{appearance:none;-webkit-appearance:none;width:36px;height:20px;border-radius:20px;
+  background:var(--panel2);border:1px solid var(--line);position:relative;cursor:pointer;
+  transition:background .18s,border-color .18s;flex:none;margin:0}
+.tog input::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+  background:var(--dim);transition:transform .18s,background .18s}
+.tog input:checked{background:rgba(79,195,232,.25);border-color:var(--cyan)}
+.tog input:checked::after{transform:translateX(16px);background:var(--cyan)}
+.tog input:focus-visible{outline:1px solid var(--cyan)}
+.hint{font-size:11px;color:var(--dim);line-height:1.45}
+.hint.amber{color:var(--amber)}
+button.act{background:var(--cyan);color:#0c1116;border:none;border-radius:6px;padding:9px 12px;
+  font-weight:600;cursor:pointer;font-size:13px}
+button.act:disabled{opacity:.45;cursor:default}
+button.ghost{background:transparent;color:var(--cyan);border:1px solid var(--cyan);border-radius:6px;
+  padding:8px 12px;cursor:pointer;font-size:12.5px}
+button.ghost:disabled{opacity:.4;cursor:default}
+.export .body{gap:8px}
+.stagecard{background:var(--panel);border:1px solid var(--line);border-radius:8px;margin-bottom:14px}
+.stagecard h3{font-size:11px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase;
+  padding:10px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center}
+.stagecard h3 .tail{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--cyan);text-transform:none;letter-spacing:0}
+#mapwrap{padding:10px 14px 14px;overflow-x:auto}
+#cutmap{display:block;margin:0 auto;max-width:100%}
+#cutmap .gridline{stroke:var(--line);stroke-width:1}
+#cutmap .cutline{stroke:var(--cyan);stroke-width:2.5}
+#cutmap .hitline{stroke:transparent;stroke-width:11;cursor:pointer}
+#cutmap .hitline:hover{stroke:rgba(79,195,232,.28)}
+#cutmap text{font-family:var(--mono);fill:var(--dim)}
+#cutmap .dim{stroke:var(--dim);stroke-width:1}
+#cutmap .plabel{fill:var(--ink);font-size:13px;font-weight:600}
+#cutmap .psub{fill:var(--dim);font-size:10px}
+#cutmap .bad{fill:var(--red)}
+#threewrap{position:relative;height:380px}
+#three{width:100%;height:100%;display:block;border-radius:0 0 8px 8px;cursor:grab}
+#three:active{cursor:grabbing}
+#threehint{position:absolute;right:12px;bottom:10px;font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+#status{position:absolute;left:12px;bottom:10px;font-family:var(--mono);font-size:11px;color:var(--cyan)}
+table.pieces{width:100%;border-collapse:collapse}
+table.pieces th,table.pieces td{padding:8px 14px;text-align:left;font-size:12.5px;border-bottom:1px solid var(--line)}
+table.pieces th{color:var(--dim);font-weight:500;font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+table.pieces td.mono{font-family:var(--mono)}
+table.pieces .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:7px;vertical-align:-1px}
+table.pieces .bad{color:var(--red)}
+table.pieces button{padding:5px 10px;font-size:12px}
+#warnings{padding:0 14px}
+#warnings .w{font-size:12px;padding:8px 0;border-bottom:1px solid var(--line);display:flex;gap:8px}
+#warnings .w:last-child{border-bottom:none}
+#warnings .w::before{content:"⚠";color:var(--amber)}
+#warnings .w.err::before{content:"✕";color:var(--red)}
+footer{padding:18px 26px 30px;border-top:1px solid var(--line);color:var(--dim);font-size:12px;line-height:1.6}
+footer .mono{font-family:var(--mono);font-size:11px}
+.klabel{font-family:var(--mono);color:var(--cyan)}
+</style>
+</head>
+<body>
+<header>
+  <h1>DRAWER<span class="tm">FORGE</span></h1>
+  <p>Gridfinity baseplates cut to your drawer — measured, split for your printer, joined, and ready to print. Start with the space you have; everything else follows.</p>
+  <div class="privacy">runs entirely in your browser — nothing is uploaded, no account, no tracking</div>
+</header>
+<div class="app">
+<div class="rail">
+
+<section class="p" id="s-drawer">
+  <h2><span class="n">01</span> Drawer &amp; grid <span class="caret">▾</span></h2>
+  <div class="body">
+    <div class="row">
+      <label class="f"><b>Drawer width (mm)</b><input id="drawerW" type="number" step="0.5" value="306"></label>
+      <label class="f"><b>Drawer depth (mm)</b><input id="drawerD" type="number" step="0.5" value="380"></label>
+    </div>
+    <div class="hint">Internal dimensions. Measure at the tightest point and subtract 1–2&nbsp;mm so the assembly slides in.</div>
+    <label class="f"><b>Leftover space (margins)</b>
+      <select id="marginMode">
+        <option value="auto">Fill with solid margin, aligned…</option>
+        <option value="none">Leave as gap (plate = grid only)</option>
+        <option value="custom">Custom per side…</option>
+      </select>
+    </label>
+    <div class="row" id="alignRow">
+      <label class="f"><b>Align width</b>
+        <select id="alignX"><option value="center">Centre</option><option value="start">Right (margin left)</option><option value="end">Left (margin right)</option></select></label>
+      <label class="f"><b>Align depth</b>
+        <select id="alignY"><option value="center">Centre</option><option value="start">Back (margin front)</option><option value="end">Front (margin back)</option></select></label>
+    </div>
+    <div class="row" id="customMargins" style="display:none">
+      <label class="f"><b>Left / Right (mm)</b><div class="row"><input id="mLeft" type="number" step="0.5" value="0"><input id="mRight" type="number" step="0.5" value="0"></div></label>
+      <label class="f"><b>Front / Back (mm)</b><div class="row"><input id="mFront" type="number" step="0.5" value="0"><input id="mBack" type="number" step="0.5" value="0"></div></label>
+    </div>
+    <div class="hint" id="gridSummary"></div>
+  </div>
+</section>
+
+<section class="p" id="s-printer">
+  <h2><span class="n">02</span> Printer <span class="caret">▾</span></h2>
+  <div class="body">
+    <label class="f"><b>Preset</b>
+      <select id="bedPreset">
+        <option value="256,256,256">256 × 256 × 256 (Elegoo CC/CC2, Bambu X1/P1)</option>
+        <option value="220,220,250">220 × 220 × 250 (Ender 3, A1 mini class)</option>
+        <option value="250,210,220">250 × 210 × 220 (Prusa MK4 class)</option>
+        <option value="300,300,300">300 × 300 × 300 (large format)</option>
+        <option value="180,180,180">180 × 180 × 180 (compact)</option>
+        <option value="custom">Custom…</option>
+      </select></label>
+    <div class="row3">
+      <label class="f"><b>Bed width</b><input id="bedW" type="number" value="256"></label>
+      <label class="f"><b>Bed depth</b><input id="bedD" type="number" value="256"></label>
+      <label class="f"><b>Height (Z)</b><input id="bedH" type="number" value="256"></label>
+    </div>
+  </div>
+</section>
+
+<section class="p" id="s-split">
+  <h2><span class="n">03</span> Split <span class="caret">▾</span></h2>
+  <div class="body">
+    <div class="seg" id="splitSeg">
+      <button data-v="balanced" class="on">Balanced</button>
+      <button data-v="staggered">Staggered</button>
+      <button data-v="plates">Fewest plates</button>
+      <button data-v="manual">Manual</button>
+    </div>
+    <div class="hint">Staggered offsets joints between rows like brickwork so seams never line up. Fewest plates searches split patterns and picks the one needing the fewest print beds — often pairing two narrow pieces on one plate. For full control click grid lines on the cut map; that switches to Manual.</div>
+  </div>
+</section>
+
+<section class="p" id="s-conn">
+  <h2><span class="n">04</span> Connectors <span class="caret">▾</span></h2>
+  <div class="body">
+    <label class="f"><b>Type</b>
+      <select id="connector">
+        <option value="dovetail">Dovetail tabs — drop-in, no extra filament</option>
+        <option value="puzzle">Puzzle tabs — jigsaw lock, strongest in-plane</option>
+        <option value="bowtie">Bowtie keys — separate keys, hidden underneath</option>
+        <option value="puzzlekey">Puzzle keys — separate jigsaw keys underneath</option>
+        <option value="snap">Snap clips — spring-fit keys, press to click in</option>
+        <option value="hclip">H-clips — tiny keys in the walls, no floor needed</option>
+        <option value="none">None — rely on drawer walls</option>
+      </select></label>
+    <div id="connHintDove" class="hint">Tabs on one piece drop into open-bottomed pockets on its neighbour. Assemble on a flat surface, then lower the whole plate into the drawer. Placed at every wall junction along each seam.</div>
+    <div id="connHintPuzzle" class="hint" style="display:none">Jigsaw lobes printed on one piece lock into matching cavities on its neighbour — the strongest in-plane joint. Adds a ~2.6&nbsp;mm solid floor that the lobes live in; assembles by lowering pieces together.</div>
+    <div id="connHintBow" class="hint" style="display:none">Recesses are cut into the underside of both pieces; printed keys bridge each seam. Adds a solid floor to house the keys — the keys STL is in Export and in the ZIP.</div>
+    <div id="connHintSnap" class="hint" style="display:none">Dog-bone recesses under both pieces take a sprung key: the slot through its middle lets it compress, so it clicks in and holds. Adds a solid floor. Keys STL in Export.</div>
+    <div id="connHintHclip" class="hint" style="display:none">Tiny H-shaped keys (≈3.6 × 3.8 mm) sink into pockets in the grid walls at each junction, pressed in from beneath during face-down assembly. No floor, almost no filament, invisible from above. Keys STL in Export.</div>
+    <label class="f" id="keyInsertRow" style="display:none"><b>Key insertion</b>
+      <select id="keyInsert">
+        <option value="bottom">From beneath — assemble face-down, then flip into the drawer</option>
+        <option value="top">From above — join the pieces inside the drawer, drop keys in</option>
+      </select></label>
+    <div class="hint" id="keyInsertHint" style="display:none">From above suits drawers you can't lower an assembled plate into: lay the pieces in place, then drop a key into each junction from the top. Keys sit just below flush; the rim gets a small opening at each junction, hidden under the bins' rounded corners.</div>
+    <label class="f" id="keyMountRow" style="display:none"><b>Key housing</b>
+      <select id="keyMount">
+        <option value="floor">Solid floor — full-size keys, strongest</option>
+        <option value="wall">Inside the walls — slim keys, no extra filament</option>
+      </select></label>
+    <div class="hint" id="keyMountHint" style="display:none">Wall housing sinks slim keys into the grid walls at each junction — the plate stays open-bottomed and uses no extra filament. Keys are smaller, so the hold is lighter; solid floor gives the strongest joint.</div>
+    <label class="f"><b>Fit clearance (mm per side)</b><input id="connClr" type="number" step="0.05" value="0.2"></label>
+    <div class="hint">0.2 suits most printers. Print the test tile pair first; tighten to 0.15 or loosen to 0.25 from there.</div>
+  </div>
+</section>
+
+<section class="p" id="s-mag">
+  <h2><span class="n">05</span> Magnets &amp; screws <span class="caret">▾</span></h2>
+  <div class="body">
+    <label class="tog"><input id="magnets" type="checkbox"> Magnet pockets (4 per cell)</label>
+    <div class="row3" id="magRow" style="display:none">
+      <label class="f"><b>Ø (mm)</b><input id="magnetD" type="number" step="0.5" value="6"></label>
+      <label class="f"><b>Depth</b><input id="magnetH" type="number" step="0.1" value="2"></label>
+      <label class="f"><b>Open from</b><select id="magnetSide"><option value="bottom">Below</option><option value="top">Above</option></select></label>
+    </div>
+    <label class="tog"><input id="screws" type="checkbox"> Screw holes (counterbored, 4 per cell)</label>
+    <div class="row3" id="screwRow" style="display:none">
+      <label class="f"><b>Hole Ø</b><input id="screwHoleD" type="number" step="0.5" value="3"></label>
+      <label class="f"><b>Head Ø</b><input id="screwHeadD" type="number" step="0.5" value="6"></label>
+      <label class="f"><b>Head depth</b><input id="screwHeadDepth" type="number" step="0.1" value="2"></label>
+    </div>
+    <label class="f" id="baseModeRow" style="display:none"><b>Mounting base</b>
+      <select id="baseMode">
+        <option value="solid">Solid floor — full 2.8 mm base under everything</option>
+        <option value="bosses">Corner pockets only — bosses at each position, saves filament</option>
+      </select></label>
+    <div class="hint">Corner pockets match the light-weight style of other generators: small rounded bosses at each cell corner instead of a full floor. Gravity-fit drawers need neither magnets nor screws.</div>
+  </div>
+</section>
+
+<section class="p closed" id="s-prof">
+  <h2><span class="n">06</span> Socket profile <span class="caret">▾</span></h2>
+  <div class="body">
+    <label class="f"><b>Bin fit</b>
+      <select id="tolerance"><option value="standard">Standard (spec 0.25 mm)</option><option value="tight">Tight (−0.1 mm)</option><option value="loose">Loose (+0.1 mm)</option></select></label>
+    <div class="row">
+      <label class="f"><b>Grid pitch (mm)</b><input id="pitch" type="number" step="0.5" value="42"></label>
+      <label class="f"><b>Corner radius</b><input id="outerRadius" type="number" step="0.5" value="4"></label>
+    </div>
+    <label class="tog"><input id="perCorner" type="checkbox"> Set each plate corner separately</label>
+    <div class="row" id="cornerRow" style="display:none">
+      <label class="f"><b>Front-left / Front-right</b><div class="row"><input id="rFL" type="number" step="0.5" value="4"><input id="rFR" type="number" step="0.5" value="4"></div></label>
+      <label class="f"><b>Back-left / Back-right</b><div class="row"><input id="rBL" type="number" step="0.5" value="4"><input id="rBR" type="number" step="0.5" value="4"></div></label>
+    </div>
+    <div class="hint" id="cornerHint" style="display:none">For drawers or containers with rounded corners — match each radius to the drawer, front of drawer at the bottom of the cut map.</div>
+    <div class="row">
+      <label class="f"><b>Extra floor (mm)</b><input id="bottomPad" type="number" step="0.1" value="0"></label>
+      <label class="f"><b>Rim cutoff (mm)</b><input id="topCutoff" type="number" step="0.1" value="0.4"></label>
+    </div>
+    <div class="hint">Defaults follow the Gridfinity spec (42&nbsp;mm pitch, three-part profile, 4.25&nbsp;mm plate). Change pitch only for non-standard bins.</div>
+  </div>
+</section>
+
+<section class="p export" id="s-export">
+  <h2><span class="n">07</span> Export <span class="caret">▾</span></h2>
+  <div class="body">
+    <button class="act" id="dlAll">Download all pieces (.zip)</button>
+    <button class="ghost" id="dlTile">Test tile — bin fit (.stl)</button>
+    <button class="ghost" id="dlFit" style="display:none">Joint fit sample — 4 clearances (.stl)</button>
+    <button class="ghost" id="dlKeys" style="display:none">Connector keys (.stl)</button>
+    <button class="ghost" id="shareBtn">Copy settings link</button>
+    <div class="hint">Each ZIP includes every piece, a README with assembly order, and your settings. STLs are millimetre-scale, print flat as oriented, no supports.</div>
+  </div>
+</section>
+
+</div>
+<div class="stage">
+
+<div class="stagecard">
+  <h3>Cut map — click grid lines to split <span class="tail" id="mapTail"></span></h3>
+  <div id="mapwrap"><svg id="cutmap"></svg></div>
+  <div id="warnings"></div>
+</div>
+
+<div class="stagecard">
+  <h3>Preview <span class="tail"><label class="tog" style="font-size:11px"><input type="checkbox" id="explode"> exploded</label></span></h3>
+  <div id="threewrap"><canvas id="three"></canvas><div id="status"></div><div id="threehint">drag rotate · wheel zoom · shift-drag pan</div></div>
+</div>
+
+<div class="stagecard">
+  <h3>Print plan <span class="tail" id="planTail"></span></h3>
+  <div style="padding:10px 14px;display:grid;gap:10px">
+    <div class="row3">
+      <label class="f"><b>Part spacing (mm)</b><input id="plateGap" type="number" step="0.5" value="4"></label>
+      <label class="f" style="align-self:end"><label class="tog"><input id="stackToggle" type="checkbox"> Stack identical pieces</label></label>
+      <label class="f"><b>Stack gap (mm)</b><input id="stackGap" type="number" step="0.02" value="0.24"></label>
+    </div>
+    <div class="hint" id="stackHint" style="display:none">Experimental: any piece that fits fully inside the footprint of the one below prints stacked on top, separated by the gap layer — snap apart afterwards. Needs well-tuned bridging (the layer above spans open sockets); test with two first. Respects your printer's Z height.</div>
+    <div id="platesRow" style="display:flex;gap:12px;flex-wrap:wrap"></div>
+    <button class="act" id="dlPlates" style="justify-self:start">Download all print plates (.3mf)</button>
+  </div>
+</div>
+
+<div class="stagecard">
+  <h3>Pieces <span class="tail" id="pieceTail"></span></h3>
+  <table class="pieces"><thead><tr>
+    <th>Piece</th><th>Grid</th><th>Size (mm)</th><th>Joints</th><th>Bed fit</th><th></th>
+  </tr></thead><tbody id="pieceRows"></tbody></table>
+</div>
+
+</div>
+</div>
+<footer>
+  <div><b>Drawerforge</b> is free and open. Gridfinity was created by <a href="https://www.youtube.com/c/ZackFreedman" rel="noopener">Zack Freedman</a> (Voidstar Lab) as an open standard — this tool implements the published baseplate profile and adds drawer-first workflow, split control, and printable connectors.</div>
+  <div style="margin-top:10px">Hey — thank you for using the tool! If you'd like to raise any issues or feature suggestions/requests, please raise them <a id="ghLink" href="https://github.com/Oliver-Johnson/Baseplate-Studio/issues" rel="noopener">on GitHub</a>. If it's saved you some time and you fancy it, you can also <a id="kofiLink" href="https://ko-fi.com/oliver_johnson" rel="noopener">buy me a coffee</a>.</div>
+  <div class="mono" style="margin-top:8px">All geometry is computed locally in your browser — nothing is uploaded. STL/3MF output is mm scale. v1.2</div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+/*__CORE__*/
+</script>
+<script>
+/*__UI__*/
+</script>
+</body>
+</html>

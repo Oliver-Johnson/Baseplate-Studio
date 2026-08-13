@@ -1,0 +1,19 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      # Fails if index.html is out of date with src/, if either script block has a
+      # syntax error, if ui.js references an id the template lacks, or if a
+      # display:none element is never un-hidden.
+      - run: node build.js --check

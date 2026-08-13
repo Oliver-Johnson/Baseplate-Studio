@@ -46,13 +46,31 @@ Everything runs entirely in your browser. Nothing is uploaded, there's no accoun
 
 ## Self-hosting
 
-The entire app is one HTML file with no build step.
+The shipped app is a single self-contained HTML file.
 
 1. Fork or clone this repository.
 2. In the repo settings, enable **GitHub Pages** (deploy from branch, root).
 3. Done — the app is live at `https://<username>.github.io/<repo>/`.
 
 The only external dependencies are three.js and JSZip, loaded from cdnjs at runtime. To run fully offline, download those two files and change the two `<script src>` tags.
+
+## Building
+
+`index.html` is generated. Edit the sources in `src/`, never `index.html` directly:
+
+| file | contents |
+|---|---|
+| `src/template.html` | markup and all CSS, with `/*__CORE__*/` and `/*__UI__*/` markers |
+| `src/core.js` | geometry engine — pure JS, also runs headless in Node |
+| `src/ui.js` | DOM wiring, three.js preview, exports, print plan |
+
+```bash
+node build.js
+```
+
+No dependencies, no toolchain. `node build.js --check` verifies `index.html` is in sync without writing, and runs in CI.
+
+The build refuses to produce output unless three checks pass, each of which has caught a shipped bug: `node --check` on both script sources; an **id audit** (every `$('id')` in `ui.js` must exist in the template); and a **display-reachability audit** (any element hidden with `display:none` must be un-hidden somewhere in `ui.js`, or it is dead UI).
 
 ## How it works (for the curious)
 
