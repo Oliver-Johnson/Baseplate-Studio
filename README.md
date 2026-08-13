@@ -1,99 +1,124 @@
 # Drawerforge
 
-**Gridfinity baseplates cut to your drawer — measured, split for your printer, joined, and ready to print.**
+**Gridfinity baseplates and bins, built to the drawer you actually have.**
 
-Drawerforge is a free, open, browser-based generator for [Gridfinity](https://gridfinity.xyz/) baseplates that starts from the space you actually have. Enter your drawer's internal dimensions and it works out the grid, splits the plate to fit your print bed, adds printable connectors so the pieces join solidly, and exports everything as STL and 3MF — including pre-arranged print plates that open straight in your slicer.
+Drawerforge is a pair of free, open, browser-based tools for [Gridfinity](https://gridfinity.xyz/).
+Measure your drawer once, and it works out the grid, splits the baseplate to fit your print
+bed, joins the pieces with printable connectors, then lays out the bins that go inside —
+exporting STL and 3MF, including pre-arranged print plates that open straight in your slicer.
 
-Everything runs entirely in your browser. Nothing is uploaded, there's no account, and there's no tracking.
+Everything runs in your browser. Nothing is uploaded, there's no account, and there's no tracking.
 
-**[▶ Use it here — drawerforge.co.uk](https://drawerforge.co.uk/)**
+**[▶ Baseplates — drawerforge.co.uk](https://drawerforge.co.uk/)** · **[▶ Bins — drawerforge.co.uk/bins](https://drawerforge.co.uk/bins/)**
+
+Your drawer dimensions carry between the two, in both directions, without losing your work.
 
 ---
 
-## Features
+## Baseplates
 
-- **Drawer-first workflow** — start from internal drawer dimensions; choose how leftover space becomes margins (centred, one-sided, custom per side, or left as a gap)
+- **Drawer-first workflow** — start from internal dimensions; choose how leftover space becomes margins (centred, one-sided, custom per side, or left as a gap)
 - **Four split modes** — Balanced, Staggered (brickwork joints so seams never line up), **Fewest plates** (searches split patterns to minimise print-bed loads), and Manual
-- **Interactive cut map** — click any grid line to add or remove a cut; vertical lines cut one band, horizontal lines cut the whole plate
+- **Interactive cut map** — click any grid line to add or remove a cut
 - **Seven joint options** — dovetail tabs, puzzle tabs, bowtie keys, puzzle keys, snap clips, H-clips, or none
-- **Key housing & insertion choices** — keys in a solid floor (strongest) or inside the grid walls (no extra filament); inserted from beneath (face-down assembly) or **from above** (join the pieces inside the drawer), including **click-locking snap clips**
-- **Magnets & screws** — spec-position pockets, openable from above or below, housed in a full solid floor or filament-saving corner bosses
-- **Per-corner plate radii** — match rounded drawers, each corner set independently
-- **Print plan** — automatic packing of pieces and connector keys onto your bed, plate-count display, optional stacked printing (any piece that fits the footprint below, respecting printer Z height)
-- **Exports** — per-piece STL, all-plates 3MF, connector keys STL, bin-fit test tile, **joint fit sample** (four graduated clearances in one small print), and a ZIP with a README and assembly order
-- **Share links** — the full configuration encodes into the URL for bookmarking or sharing
-- **Live 3D preview** — full 360° orbit including the underside, exploded view
+- **Key housing & insertion choices** — keys in a solid floor (strongest) or inside the grid walls (no extra filament); inserted from beneath, or **from above** to join pieces inside the drawer, including click-locking snap clips
+- **Magnets & screws** — pockets openable from above or below, in a full solid floor or filament-saving corner bosses
+- **Print plan** — automatic packing onto your bed, plate count, optional stacked printing
+- **Exports** — per-piece STL, all-plates 3MF, connector keys, bin-fit test tile, **joint fit sample** (four graduated clearances in one small print), and a ZIP with a README and assembly order
+
+## Bins
+
+- **Whole-drawer layout** — drag across the grid to place bins, click to edit, or fill the rest automatically; coverage and leftover cells shown as you go
+- **Multiple layers** — stack bins on bins, as many layers as fit. The layer below is ghosted for alignment, and checks catch the ways a real stack fails: overhanging an empty cell, spanning bins of different heights (it would rock), or a footprint mismatch the lip can't locate
+- **Per-edge walls** — each of the four walls can be full, two thirds, half, a low retaining lip, or fully open. An open front makes a bin you can reach into; all four open makes a **flat tray or lid**
+- **Dividers** in both directions, solid blocks, and adjustable wall and floor thickness
+- **Base styles** — Standard (spec foot and lip, interoperable with anyone's bins), Low lip (spec foot, accepts low-profile bins above), or **Low profile** (2 mm foot, which turns a 1-unit bin's useless 1.05 mm cavity into 3.80 mm)
+- **Stacking lips** built to spec, so bins stack on each other and on any spec baseplate
+- **Honest material estimates** — computed analytically at your slicer's infill, not from raw mesh volume
+- **Print plan and export** — packs bins onto your bed, exports pre-arranged 3MF plates, or a ZIP with one STL per bin type and a README carrying the layout
 
 ## How to use it
 
-1. **Drawer & grid** — measure your drawer internally at its tightest point, subtract 1–2 mm so the finished assembly slides in, and enter width × depth. Pick how the leftover space is handled; the summary line shows the resulting grid and margins.
-2. **Printer** — pick a preset or enter your bed size (width, depth, and Z height — height matters only for stacked printing).
-3. **Split** — choose a mode. *Fewest plates* is usually the best starting point: it searches split patterns and often pairs two narrow pieces on one bed. Click grid lines on the cut map to fine-tune; any click switches to Manual and keeps your cuts.
-4. **Connectors** — pick a joint. Rough guide:
-   | Joint | Extra filament | Assembly | Notes |
-   |---|---|---|---|
-   | Dovetail tabs | none | lower pieces together, works in-drawer | printed on the pieces, no loose parts |
-   | Puzzle tabs | solid floor (~2.6 mm) | lower together | strongest in-plane lock |
-   | Bowtie / puzzle keys | floor **or** in-wall (none) | face-down + flip, or drop-in from above | loose printed keys |
-   | Snap clips (from beneath) | floor or in-wall | face-down + flip | sprung dogbone keys |
-   | **Snap clips (from above)** | none (in-wall) | **in the drawer — press until it clicks** | locks against lifting |
-   | H-clips | none | face-down + flip, or drop-in from above | tiny keys, invisible from above |
-
-   Whatever you pick, **print the joint fit sample first** (Export section): four tile pairs at graduated clearances tell you in one five-minute print which fit your printer produces.
-5. **Magnets & screws** — optional; choose solid floor or corner-boss housing.
-6. **Print plan** — check the plate count and layouts. Toggle stacking if you want to try printing pieces in a pile (experimental — the layer above bridges over open sockets, so test with two first).
-7. **Export** — download the ZIP (everything, with a README), or individual pieces/plates/keys as needed. STLs print flat as oriented, no supports.
+1. **Measure your drawer** internally at its tightest point and subtract 1–2 mm so the finished assembly slides in. Enter width × depth in Baseplates.
+2. **Pick your printer** and a split mode. *Fewest plates* is usually the best start.
+3. **Choose a joint.** Whatever you pick, **print the joint fit sample first** — four tile pairs at graduated clearances tell you in one five-minute print which fit your printer produces.
+4. **Export and print the baseplate.**
+5. **Switch to Bins** using the header nav. Your drawer comes with you; add its usable height.
+6. **Lay out your bins**, add layers if you want them, and check the plate count before committing — a full drawer is a lot of filament and a lot of hours.
+7. **Print one bin first** and check it seats before committing to the rest.
 
 ## Self-hosting
 
-The shipped app is a single self-contained HTML file.
+The shipped app is two self-contained HTML files with no runtime build step.
 
 1. Fork or clone this repository.
-2. In the repo settings, enable **GitHub Pages** (deploy from branch, root).
-3. Done — the app is live at `https://<username>.github.io/<repo>/`.
+2. Enable **GitHub Pages** (deploy from branch, root).
+3. Done — Baseplates at the root, Bins at `/bins/`.
 
-The only external dependencies are three.js and JSZip, loaded from cdnjs at runtime. To run fully offline, download those two files and change the two `<script src>` tags.
+The only external dependencies are three.js and JSZip, loaded from cdnjs at runtime. To run
+fully offline, download those and change the `<script src>` tags.
 
 ## Building
 
-`index.html` is generated. Edit the sources in `src/`, never `index.html` directly:
+`index.html` and `bins/index.html` are **generated**. Edit the sources in `src/`, never the
+built files:
 
 | file | contents |
 |---|---|
-| `src/template.html` | markup and all CSS, with `/*__CORE__*/` and `/*__UI__*/` markers |
-| `src/core.js` | geometry engine — pure JS, also runs headless in Node |
-| `src/ui.js` | DOM wiring, three.js preview, exports, print plan |
+| `src/shared-ui/style.css` | one stylesheet, both tools |
+| `src/core.js` | shared geometry engine — pure JS, also runs headless in Node |
+| `src/template.html`, `src/ui.js` | the Baseplates tool |
+| `src/bins/bin.js` | bin geometry, no CSG at all |
+| `src/bins/template.html`, `src/bins/ui.js` | the Bins tool |
 
 ```bash
 node build.js
 ```
 
-No dependencies, no toolchain. `node build.js --check` verifies `index.html` is in sync without writing, and runs in CI.
+No dependencies, no toolchain. `node build.js --check` verifies the outputs are in sync
+without writing, and runs in CI.
 
-The build refuses to produce output unless three checks pass, each of which has caught a shipped bug: `node --check` on both script sources; an **id audit** (every `$('id')` in `ui.js` must exist in the template); and a **display-reachability audit** (any element hidden with `display:none` must be un-hidden somewhere in `ui.js`, or it is dead UI).
+The build refuses to emit output unless three checks pass, each of which has caught a
+shipped bug: `node --check` on every source; an **id audit** (every `$('id')` must exist in
+its template); and a **display-reachability audit** (anything hidden with `display:none`
+must be un-hidden somewhere, or it is dead UI).
+
+Geometry is verified headlessly:
+
+```bash
+node test/bin-audit.js
+```
+
+```bash
+node test/fit-check.js
+```
+
+**Read [docs/ENGINE.md](docs/ENGINE.md) before touching geometry.** The CSG is fragile in
+specific, documented ways, and the failure mode is silently broken output rather than a
+crash.
 
 ## How it works (for the curious)
 
-The geometry engine is hand-written JavaScript living in the same file:
+- Socket profiles follow the published Gridfinity spec (42 mm pitch, three-part profile, 4.25 mm plate); bins follow the published bin spec, so they fit any spec baseplate.
+- Each piece is built by **region decomposition** — every grid cell becomes a directly-constructed watertight mesh, and small convex features are subtracted as prisms, the one CSG operation that is numerically robust in a hand-rolled BSP.
+- Cuts are designed to **never intersect the curved socket surfaces**. The bins engine uses no CSG at all — every feature is additive.
+- Print-plate packing is shelf-based with rotation; *Fewest plates* enumerates banded split patterns and packs each candidate.
+- 3MF export writes the OPC container via JSZip.
 
-- Socket profiles follow the published Gridfinity baseplate spec (42 mm pitch, three-part profile, 4.25 mm plate height) and were cross-verified against reference bins with ~0.24 mm radial clearance.
-- Each piece is built by **region decomposition**: every grid cell becomes a directly-constructed watertight mesh, and features (connector pockets, magnet holes) are subtracted as small convex prisms — the one CSG operation that is numerically robust in a hand-rolled BSP.
-- Cuts are designed to **never intersect the curved socket surfaces**; where a feature must cross them (top-insert pockets), a deterministic half-space clipper and directly-built pocket liners are used instead of CSG.
-- Print-plate packing is shelf-based with rotation and footprint-stacking; the *Fewest plates* mode enumerates banded split patterns and packs each candidate.
-- 3MF export writes the OPC container (model XML + content types + relationships) via JSZip.
-
-Some joint pockets intentionally leave a few small uncapped faces where a cut interrupts the top rim (≈20 mm² per piece, all simple planar rectangles). Every mainstream slicer's automatic mesh repair closes these; if you use an unusual toolchain, glance at the slice preview once.
+Some joint pockets intentionally leave small uncapped faces where a cut interrupts the top
+rim (≈20 mm² per piece, all simple planar rectangles). Every mainstream slicer's automatic
+mesh repair closes these.
 
 ## Attribution
 
-- **Gridfinity** was created by [Zack Freedman](https://www.youtube.com/c/ZackFreedman) (Voidstar Lab) as an open standard. This tool implements the published baseplate profile.
+- **Gridfinity** was created by [Zack Freedman](https://www.youtube.com/c/ZackFreedman) (Voidstar Lab) as an open standard. These tools implement the published profiles.
 - The H-clip and click-locking snap-clip connector styles were inspired by the connector system in the Gridfinity Layout Tool; the geometry here is an independent implementation adapted to unpadded spec-height plates (parts are **not** interchangeable between the tools).
 
 ## Issues, suggestions & support
 
-Found a bug, or want a feature? **[Open an issue](https://github.com/Oliver-Johnson/Baseplate-Studio/issues)** — bug reports with a settings share-link attached are especially easy to act on.
+Found a bug, or want a feature? **[Open an issue](https://github.com/Oliver-Johnson/Baseplate-Studio/issues)** — reports with a settings share-link attached are especially easy to act on.
 
-If the tool saved you some time and you'd like to support it, there's a tip jar at **[ko-fi.com/oliver_johnson](https://ko-fi.com/oliver_johnson)** — entirely optional, always appreciated.
+If the tool saved you some time, there's a tip jar at **[ko-fi.com/oliver_johnson](https://ko-fi.com/oliver_johnson)** — entirely optional, always appreciated.
 
 ## License
 

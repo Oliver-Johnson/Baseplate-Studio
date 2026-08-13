@@ -134,3 +134,14 @@ console.log(`  shipped            corner ${a.worstC.toFixed(3)}  flat ${a.worstF
 console.log(`  faceting costs     ${(b.worstC - a.worstC).toFixed(3)} mm at the corners`);
 console.log(`  centres matched    corner ${c.worstC.toFixed(3)}  flat ${c.worstF.toFixed(3)}  ratio ${(c.worstF / c.worstC).toFixed(1)}x`);
 console.log(`  matched, no facet  corner ${d.worstC.toFixed(3)}  flat ${d.worstF.toFixed(3)}`);
+
+/* CI guard. Deliberately loose: the corner clearance being tighter than the flats is a
+   known, documented deviation (docs/socket-clearance.md) and applying the fix should not
+   fail the build. What must never happen is clearance going to zero — that is a socket a
+   bin cannot enter. */
+if (!(a.worstC > 0.02) || !(a.worstF > 0.05)) {
+  console.error(`\n  FAIL: a spec bin no longer fits the socket ` +
+                `(corner ${a.worstC.toFixed(3)}, flat ${a.worstF.toFixed(3)} mm)`);
+  process.exit(1);
+}
+console.log('\nspec bin fits the shipped socket');

@@ -1,7 +1,7 @@
 /* Drawerforge — Gridfinity bin geometry.
  *
  * Built entirely by direct mesh construction and overlapping closed shells.
- * There is NO CSG in this file: see docs/ENGINE rules — the hand-rolled BSP is
+ * There is NO CSG in this file: see docs/ENGINE.md — the hand-rolled BSP is
  * fragile around the conical foot surfaces, and every feature here can be made
  * additively instead. Shells overlap by BLOAT and the slicer fuses them.
  *
