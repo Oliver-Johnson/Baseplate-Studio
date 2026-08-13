@@ -286,10 +286,8 @@ function drawMap() {
         width: b.u * S - 6, height: b.v * S - 6, rx: 5 }));
 
   B().forEach((b, i) => {
-    const st = seat(b, cur);
-    const bad = !st.solidBelow || !st.flat ||
-      st.z + b.hUnits * SPEC.unitH + LIP_H > g.avail + 0.001;
-    const r = el('rect', { class: 'bin' + (i === selected ? ' sel' : '') + (bad ? ' clash' : ''),
+    const issues = binIssues(b, cur);
+    const r = el('rect', { class: 'bin' + (i === selected ? ' sel' : '') + (issues.length ? ' clash' : ''),
       x: b.x * S + 2, y: sy(b.y, b.v) + 2, width: b.u * S - 4, height: b.v * S - 4, rx: 5 });
     r.dataset.i = i;
     svg.appendChild(r);
@@ -299,6 +297,22 @@ function drawMap() {
     const t2 = el('text', { class: 'bsub', x: cx, y: cy + 12, 'text-anchor': 'middle' });
     t2.textContent = `${b.hUnits}u · ${b.hUnits * SPEC.unitH}mm`;
     svg.appendChild(t1); svg.appendChild(t2);
+    if (issues.length) {
+      const warn = el('text', { class: 'bwarn', x: b.x * S + 13, y: sy(b.y, b.v) + 20 });
+      warn.textContent = '⚠';
+      const tip = document.createElementNS(SVGNS, 'title');
+      tip.textContent = issues.join('; ');
+      warn.appendChild(tip);
+      svg.appendChild(warn);
+    }
+    if (i === selected)                       // corner grips, drawn last so they hit first
+      for (const [hx, hy, key] of [[b.x, b.y, 'lf'], [b.x + b.u, b.y, 'rf'],
+                                   [b.x, b.y + b.v, 'lb'], [b.x + b.u, b.y + b.v, 'rb']]) {
+        const h = el('rect', { class: 'grip', x: hx * S - 6, y: (g.ny - hy) * S - 6,
+                               width: 12, height: 12, rx: 3 });
+        h.dataset.handle = key;
+        svg.appendChild(h);
+      }
   });
 
   if (drag) {
@@ -318,39 +332,84 @@ function cellFromEvent(e) {
 function initMap() {
   const svg = $('fillmap');
   svg.addEventListener('pointerdown', (e) => {
-    const c = cellFromEvent(e), occ = occupancy();
-    const hit = occ[c.y][c.x];
-    if (hit !== -1) {
-      selected = hit; writeControls(B()[hit]);
+    const c = cellFromEvent(e);
+    const handle = e.target && e.target.dataset ? e.target.dataset.handle : null;
+
+    if (handle && selected >= 0 && B()[selected]) {      // resize from a corner
+      const b = B()[selected];
+      drag = { mode: 'resize', idx: selected,
+               ax: handle[0] === 'l' ? b.x + b.u - 1 : b.x,
+               ay: handle[1] === 'f' ? b.y + b.v - 1 : b.y,
+               x1: c.x, y1: c.y };
+      if (svg.setPointerCapture) svg.setPointerCapture(e.pointerId);
+      return;
+    }
+
+    const hit = occupancy()[c.y][c.x];
+    if (hit !== -1) {                                    // grab to move; a still
+      const b = B()[hit];                                // release is just a select
+      selected = hit;
+      writeControls(b);
+      drag = { mode: 'move', idx: hit, dx: c.x - b.x, dy: c.y - b.y, moved: false };
+      if (svg.setPointerCapture) svg.setPointerCapture(e.pointerId);
       readControls(); drawMap(); refresh();
       return;
     }
-    selected = -1;
-    drag = { x0: c.x, y0: c.y, x1: c.x, y1: c.y };
+
+    selected = -1;                                       // draw a new bin
+    drag = { mode: 'create', x0: c.x, y0: c.y, x1: c.x, y1: c.y };
     if (svg.setPointerCapture) svg.setPointerCapture(e.pointerId);
     readControls(); drawMap();
   });
+
   svg.addEventListener('pointermove', (e) => {
     if (!drag) return;
     const c = cellFromEvent(e);
-    if (c.x === drag.x1 && c.y === drag.y1) return;
-    drag.x1 = c.x; drag.y1 = c.y; drawMap();
+
+    if (drag.mode === 'create') {
+      if (c.x === drag.x1 && c.y === drag.y1) return;
+      drag.x1 = c.x; drag.y1 = c.y; drawMap();
+      return;
+    }
+    const b = B()[drag.idx];
+    if (!b) return;
+
+    if (drag.mode === 'move') {
+      const nx = c.x - drag.dx, ny = c.y - drag.dy;
+      if (nx === b.x && ny === b.y) return;
+      if (!canPlace(nx, ny, b.u, b.v, drag.idx)) return;  // refuse, don't snap away
+      b.x = nx; b.y = ny; drag.moved = true;
+      drawMap();
+      return;
+    }
+    // resize: the opposite corner stays put, this one follows the pointer
+    const nx = Math.min(c.x, drag.ax), ny = Math.min(c.y, drag.ay);
+    const nu = Math.abs(c.x - drag.ax) + 1, nv = Math.abs(c.y - drag.ay) + 1;
+    if (nx === b.x && ny === b.y && nu === b.u && nv === b.v) return;
+    if (!canPlace(nx, ny, nu, nv, drag.idx)) return;
+    b.x = nx; b.y = ny; b.u = nu; b.v = nv;
+    drag.moved = true;
+    writeControls(b); drawMap();
   });
+
   svg.addEventListener('pointerup', () => {
     if (!drag) return;
-    const x = Math.min(drag.x0, drag.x1), y = Math.min(drag.y0, drag.y1);
-    const u = Math.abs(drag.x1 - drag.x0) + 1, v = Math.abs(drag.y1 - drag.y0) + 1;
-    if (canPlace(x, y, u, v, -1)) {
-      B().push({ x, y, u, v, hUnits: state.hUnits, wall: state.wall,
-                 floorT: state.floorT, divX: state.divX, divY: state.divY,
-                 solid: state.solid, base: state.base,
-                 edges: Object.assign({}, state.edges) });
-      selected = B().length - 1;
-      writeControls(B()[selected]);
+    if (drag.mode === 'create') {
+      const x = Math.min(drag.x0, drag.x1), y = Math.min(drag.y0, drag.y1);
+      const u = Math.abs(drag.x1 - drag.x0) + 1, v = Math.abs(drag.y1 - drag.y0) + 1;
+      if (canPlace(x, y, u, v, -1)) {
+        B().push({ x, y, u, v, hUnits: state.hUnits, wall: state.wall,
+                   floorT: state.floorT, divX: state.divX, divY: state.divY,
+                   solid: state.solid, base: state.base,
+                   edges: Object.assign({}, state.edges) });
+        selected = B().length - 1;
+        writeControls(B()[selected]);
+      }
     }
     drag = null;
     readControls(); drawLayerTabs(); drawMap(); refresh();
   });
+  svg.addEventListener('pointercancel', () => { drag = null; drawMap(); refresh(); });
 }
 
 /* ---------- actions ------------------------------------------------------- */
@@ -394,6 +453,53 @@ $('applyAll').addEventListener('click', () => {
   drawMap(); refresh();
 });
 
+/* ---------- per-bin problems ----------------------------------------------
+   One place decides what is wrong with a bin, so the badge on the map and the
+   text in Checks can never disagree. Nothing here blocks placement — you may be
+   about to fill in the thing that fixes it. */
+function binIssues(b, k) {
+  const g = grid(), out = [];
+  if (b.x + b.u > g.nx || b.y + b.v > g.ny) {
+    out.push('sits outside the drawer grid');
+    return out;
+  }
+  const st = seat(b, k);
+  if (k === 0) {
+    if (b.base === 'low')
+      out.push('low-profile foot is too short to engage a baseplate socket — it would sit loose');
+  } else if (!st.solidBelow) {
+    out.push('overhangs a cell with nothing underneath');
+  } else if (!st.flat) {
+    out.push('spans bins of different heights below — it would rock');
+  } else {
+    // A lip runs around the outer perimeter of the bin below; its middle is open
+    // cavity. So an upper bin has to cover every bin it touches COMPLETELY, or part
+    // of it hangs over a hole.
+    const occB = occupancyOf(k - 1);
+    const covered = new Map();
+    for (let dy = 0; dy < b.v; dy++)
+      for (let dx = 0; dx < b.u; dx++) {
+        const i = occB[b.y + dy][b.x + dx];
+        covered.set(i, (covered.get(i) || 0) + 1);
+      }
+    for (const [i, n] of covered) {
+      const bb = layers[k - 1].bins[i];
+      if (!bb) continue;
+      if (n < bb.u * bb.v)
+        out.push(`only covers part of the ${bb.u}×${bb.v} bin below, so it would drop into its cavity — match that footprint or span it fully`);
+      if (!allFullEdges(bb))
+        out.push('the bin below has a lowered wall, so it has no stacking lip to sit on');
+      if (b.base === 'low' && (bb.base || 'standard') === 'standard')
+        out.push('low-profile foot cannot enter the full-height lip below — set that bin to Low lip');
+    }
+  }
+  if (st.z + b.hUnits * SPEC.unitH + LIP_H > g.avail + 0.001)
+    out.push(`reaches ${(st.z + b.hUnits * SPEC.unitH + LIP_H).toFixed(1)} mm, past the ${g.avail.toFixed(1)} mm available`);
+  if (!b.solid && b.wall < 0.8)
+    out.push(`${b.wall} mm walls are thinner than two perimeters at a 0.4 mm nozzle`);
+  return out;
+}
+
 /* ---------- checks -------------------------------------------------------- */
 function stackHeight() {
   const g = grid();
@@ -413,51 +519,14 @@ function warnings() {
   const g = grid(), out = [];
   const tot = stackHeight();
   if (tot > g.avail + 0.001)
-    out.push({ err: true, t: `The tallest stack is ${tot.toFixed(1)} mm but only ${g.avail.toFixed(1)} mm is available above the baseplate. Reduce a layer's height or remove a layer.` });
+    out.push({ err: true, t: `The tallest stack is ${tot.toFixed(1)} mm but only ${g.avail.toFixed(1)} mm is available above the baseplate.` });
   else if (tot > 0)
     out.push({ t: `Tallest stack ${tot.toFixed(1)} mm of ${g.avail.toFixed(1)} mm available — ${(g.avail - tot).toFixed(1)} mm spare (includes the ${LIP_H.toFixed(2)} mm top lip).` });
 
-  for (let k = 1; k < layers.length; k++)
-    for (const b of layers[k].bins) {
-      const st = seat(b, k);
-      if (!st.solidBelow)
-        out.push({ err: true, t: `Layer ${k + 1}: a ${b.u}×${b.v} bin overhangs a cell with nothing under it. Bins can only sit on a continuous stack.` });
-      else if (!st.flat)
-        out.push({ err: true, t: `Layer ${k + 1}: a ${b.u}×${b.v} bin spans bins of different heights below, so it would rock. Level the layer beneath it.` });
-      else {
-        const occB = occupancyOf(k - 1);
-        const below = new Set();
-        for (let dy = 0; dy < b.v; dy++)
-          for (let dx = 0; dx < b.u; dx++) below.add(occB[b.y + dy][b.x + dx]);
-        const noLip = [...below].map((i) => layers[k - 1].bins[i])
-                                .filter((bb) => bb && !allFullEdges(bb));
-        if (noLip.length)
-          out.push({ err: true, t: `Layer ${k + 1}: a ${b.u}×${b.v} bin sits on a bin with a lowered or open wall. That bin has no stacking lip, so there is nothing to hold this one — it would sit on bare wall tops.` });
-        if (below.size === 1) {
-          const bb = layers[k - 1].bins[[...below][0]];
-          if (bb && (bb.u !== b.u || bb.v !== b.v || bb.x !== b.x || bb.y !== b.y))
-            out.push({ t: `Layer ${k + 1}: a ${b.u}×${b.v} bin sits on a ${bb.u}×${bb.v}. It will seat but only the matching edges are located by the lip — it can slide along the rest.` });
-        } else if (below.size > 1) {
-          out.push({ t: `Layer ${k + 1}: a ${b.u}×${b.v} bin spans ${below.size} bins below. It rests level but nothing locates it sideways.` });
-        }
-      }
-    }
-
-  for (const b of layers[0].bins)
-    if (b.base === 'low')
-      out.push({ err: true, t: `A ${b.u}×${b.v} bin on layer 1 is low-profile. Its 2 mm foot is too short to engage a baseplate socket — it would sit loose. Use Standard or Low lip on the bottom layer.` });
-  for (let k = 1; k < layers.length; k++)
-    for (const b of layers[k].bins) {
-      if (b.base !== 'low') continue;
-      const occB = occupancyOf(k - 1);
-      const below = new Set();
-      for (let dy = 0; dy < b.v; dy++)
-        for (let dx = 0; dx < b.u; dx++) below.add(occB[b.y + dy][b.x + dx]);
-      const std = [...below].map((i) => layers[k - 1].bins[i])
-                            .filter((bb) => bb && (bb.base || 'standard') === 'standard');
-      if (std.length)
-        out.push({ err: true, t: `Layer ${k + 1}: a low-profile ${b.u}×${b.v} bin sits on a bin with a full-height lip. A 2 mm foot cannot enter it — it would perch on top. Set the bin below to Low lip.` });
-    }
+  layers.forEach((L, k) => L.bins.forEach((b) => {
+    for (const t of binIssues(b, k))
+      out.push({ err: true, t: `Layer ${k + 1}, the ${b.u}×${b.v} bin at column ${b.x + 1} row ${b.y + 1}: ${t}.` });
+  }));
 
   for (const t of types()) {
     const m = geomFor(t.b).meta;
@@ -465,13 +534,6 @@ function warnings() {
     if (!fits)
       out.push({ err: true, t: `A ${t.b.u}×${t.b.v} bin is ${m.W.toFixed(0)} × ${m.D.toFixed(0)} mm and will not fit your ${state.bedW} × ${state.bedD} mm bed, in either orientation.` });
   }
-
-  const thin = allBins().filter(({ b }) => !b.solid && b.wall < 0.8);
-  if (thin.length)
-    out.push({ t: `${thin.length} bin(s) have walls under 0.8 mm — thinner than two perimeters at a 0.4 mm nozzle.` });
-  const oob = allBins().filter(({ b }) => b.x + b.u > g.nx || b.y + b.v > g.ny);
-  if (oob.length)
-    out.push({ err: true, t: `${oob.length} bin(s) now fall outside the grid — the drawer got smaller. Delete them or clear the layout.` });
   if (!allBins().length)
     out.push({ t: 'No bins yet. Drag across the map to place one, or use "Fill the rest".' });
   return out;
