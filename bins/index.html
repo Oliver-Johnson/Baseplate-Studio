@@ -2856,37 +2856,57 @@ function binIssues(b, k) {
   if (k === 0) {
     if (b.base === 'low')
       out.push('low-profile foot is too short to engage a baseplate socket — it would sit loose');
-  } else if (!st.solidBelow) {
-    out.push('overhangs a cell with nothing underneath');
-  } else if (!st.flat) {
-    out.push('spans bins of different heights below — it would rock');
   } else {
-    // The lip below is four rails around its perimeter, with open cavity between.
-    // A bin resting on it needs two OPPOSITE rails running its full length — a plank
-    // on two beams. Spanning the bin below across either axis gives exactly that:
-    // span its width and you land on its left and right rails; span its depth and you
-    // land on the front and back ones. Only a bin inset on BOTH axes is unsupported,
-    // because then at most two adjacent rails touch it and it tips into the corner.
     const occB = occupancyOf(k - 1);
-    const covered = new Map();
+    // Where the bin below reaches each of this bin's four edges. Support does not
+    // have to be continuous: a bin bridging a gap between two others is a plank on
+    // two beams. What it cannot do is rest on one side only, or on nothing.
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, any = false;
     for (let dy = 0; dy < b.v; dy++)
       for (let dx = 0; dx < b.u; dx++) {
-        const i = occB[b.y + dy][b.x + dx];
-        covered.set(i, (covered.get(i) || 0) + 1);
+        if (occB[b.y + dy][b.x + dx] === -1) continue;
+        any = true;
+        x0 = Math.min(x0, dx); x1 = Math.max(x1, dx + 1);
+        y0 = Math.min(y0, dy); y1 = Math.max(y1, dy + 1);
       }
-    for (const [i, n] of covered) {
-      const bb = layers[k - 1].bins[i];
-      if (!bb) continue;
-      const spansX = b.x <= bb.x && b.x + b.u >= bb.x + bb.u;
-      const spansY = b.y <= bb.y && b.y + b.v >= bb.y + bb.v;
-      if (!spansX && !spansY)
-        out.push(`sits inside the ${bb.u}×${bb.v} bin below on both axes, so it rests over open cavity and would drop in — span its full width or its full depth`);
-      if (!allFullEdges(bb))
-        out.push('the bin below has a lowered wall, so it has no stacking lip to sit on');
-      if (b.base === 'low' && (bb.base || 'standard') === 'standard')
-        out.push('low-profile foot cannot enter the full-height lip below — set that bin to Low lip');
+    // Tips unless its centre of mass falls strictly inside the supported span. Touching
+    // two opposite edges is not enough on its own: a wide bin resting on one narrow bin
+    // reaches that bin's front and back rails, but every rail is on one side of it.
+    const E = 1e-9;
+    const stable = any &&
+      b.u / 2 > x0 + E && b.u / 2 < x1 - E &&
+      b.v / 2 > y0 + E && b.v / 2 < y1 - E;
+
+    if (!any) {
+      out.push('has nothing underneath it at all');
+    } else if (!stable) {
+      out.push('overhangs its support — the bins below are all to one side of its centre, so it would tip. Bridging a gap is fine; leaning off the end is not');
+    } else if (!st.flat) {
+      out.push('spans bins of different heights below — it would rock');
+    } else {
+      // The lip below is four rails around its perimeter, with open cavity between.
+      // Spanning a bin across either axis lands you on two of its opposite rails;
+      // being inset on BOTH axes leaves you over the hole in the middle.
+      const covered = new Set();
+      for (let dy = 0; dy < b.v; dy++)
+        for (let dx = 0; dx < b.u; dx++) covered.add(occB[b.y + dy][b.x + dx]);
+      for (const i of covered) {
+        const bb = layers[k - 1].bins[i];
+        if (!bb) continue;
+        const spansX = b.x <= bb.x && b.x + b.u >= bb.x + bb.u;
+        const spansY = b.y <= bb.y && b.y + b.v >= bb.y + bb.v;
+        if (!spansX && !spansY)
+          out.push(`sits inside the ${bb.u}×${bb.v} bin below on both axes, so it rests over open cavity and would drop in — span its full width or its full depth`);
+        if (!allFullEdges(bb))
+          out.push('the bin below has a lowered wall, so it has no stacking lip to sit on');
+        if (b.base === 'low' && (bb.base || 'standard') === 'standard')
+          out.push('low-profile foot cannot enter the full-height lip below — set that bin to Low lip');
+      }
     }
   }
+  const fw = (b.u - 1) * SPEC.pitch + 2 * SPEC.half, fd = (b.v - 1) * SPEC.pitch + 2 * SPEC.half;
+  if (!((fw <= state.bedW && fd <= state.bedD) || (fd <= state.bedW && fw <= state.bedD)))
+    out.push(`is ${fw.toFixed(0)} × ${fd.toFixed(0)} mm, too big for your ${state.bedW} × ${state.bedD} mm bed in either orientation — split it into smaller bins`);
   if (st.z + b.hUnits * SPEC.unitH + LIP_H > g.avail + 0.001)
     out.push(`reaches ${(st.z + b.hUnits * SPEC.unitH + LIP_H).toFixed(1)} mm, past the ${g.avail.toFixed(1)} mm available`);
   if (!b.solid && b.wall < 0.8)
@@ -2922,12 +2942,6 @@ function warnings() {
       out.push({ err: true, t: `Layer ${k + 1}, the ${b.u}×${b.v} bin at column ${b.x + 1} row ${b.y + 1}: ${t}.` });
   }));
 
-  for (const t of types()) {
-    const m = geomFor(t.b).meta;
-    const fits = (m.W <= state.bedW && m.D <= state.bedD) || (m.D <= state.bedW && m.W <= state.bedD);
-    if (!fits)
-      out.push({ err: true, t: `A ${t.b.u}×${t.b.v} bin is ${m.W.toFixed(0)} × ${m.D.toFixed(0)} mm and will not fit your ${state.bedW} × ${state.bedD} mm bed, in either orientation.` });
-  }
   if (!allBins().length)
     out.push({ t: 'No bins yet. Drag across the map to place one, or use "Fill the rest".' });
   return out;
