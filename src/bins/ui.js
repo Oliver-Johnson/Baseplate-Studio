@@ -186,6 +186,9 @@ function readControls() {
   state.plateH = num('plateH', 4.25);
   state.arcSegs = int('arcSegs', 12);
   state.infill = num('infill', 15);
+  state.bedW = num('bedW', 256);
+  state.bedD = num('bedD', 256);
+  state.gap = num('gap', 3);
 
   const t = {
     u: Math.max(1, int('u', 1)), v: Math.max(1, int('v', 1)),
@@ -456,6 +459,13 @@ function warnings() {
         out.push({ err: true, t: `Layer ${k + 1}: a low-profile ${b.u}×${b.v} bin sits on a bin with a full-height lip. A 2 mm foot cannot enter it — it would perch on top. Set the bin below to Low lip.` });
     }
 
+  for (const t of types()) {
+    const m = geomFor(t.b).meta;
+    const fits = (m.W <= state.bedW && m.D <= state.bedD) || (m.D <= state.bedW && m.W <= state.bedD);
+    if (!fits)
+      out.push({ err: true, t: `A ${t.b.u}×${t.b.v} bin is ${m.W.toFixed(0)} × ${m.D.toFixed(0)} mm and will not fit your ${state.bedW} × ${state.bedD} mm bed, in either orientation.` });
+  }
+
   const thin = allBins().filter(({ b }) => !b.solid && b.wall < 0.8);
   if (thin.length)
     out.push({ t: `${thin.length} bin(s) have walls under 0.8 mm — thinner than two perimeters at a 0.4 mm nozzle.` });
@@ -520,7 +530,52 @@ function refresh() {
     : '—';
 
   drawWarnings();
+  drawPlan();
   showScene();
+}
+
+/* ---------- print plan ----------------------------------------------------
+   Reuses packPlates from the shared core: shelf packing with rotation, no
+   stacking (bins are open-topped, so nothing can bridge over them). */
+let printPlan = null;
+function computePlan() {
+  const ts = types();
+  if (!ts.length) { printPlan = null; return; }
+  const items = ts.map((t) => {
+    const m = geomFor(t.b).meta;
+    return { id: t.key, w: m.W, d: m.D, h: m.totalH, qty: t.qty, ids: [t.key] };
+  });
+  printPlan = { plates: packPlates(items, state.bedW, state.bedD, state.gap,
+                                   { stack: false }), types: ts };
+}
+function drawPlan() {
+  computePlan();
+  if (!printPlan) {
+    $('plateWrap').innerHTML = '';
+    $('plateSummary').textContent = '—';
+    return;
+  }
+  const over = printPlan.plates.filter((p) => p.overflow);
+  const good = printPlan.plates.filter((p) => !p.overflow);
+  const sc = Math.min(170 / state.bedW, 170 / state.bedD);
+  const byKey = new Map(printPlan.types.map((t, i) => [t.key, i]));
+  const COLORS = ['#4fc3e8', '#e8b34f', '#7fd8a5', '#e88a8a', '#b18ae8', '#7fb5e8', '#e8d47f'];
+  $('plateWrap').innerHTML = good.map((pl, i) => {
+    let svg = `<svg width="${state.bedW * sc + 2}" height="${state.bedD * sc + 2}" ` +
+              `style="background:var(--panel2);border:1px solid var(--line);border-radius:4px">`;
+    for (const p of pl.placed) {
+      const c = COLORS[(byKey.get(p.id) || 0) % COLORS.length];
+      svg += `<rect x="${p.x * sc + 1}" y="${(state.bedD - p.y - p.d) * sc + 1}" ` +
+             `width="${p.w * sc}" height="${p.d * sc}" fill="${c}" opacity="0.5" stroke="var(--line)"/>`;
+    }
+    svg += '</svg>';
+    return `<div style="display:grid;gap:4px;justify-items:center">${svg}` +
+           `<div class="hint">plate ${i + 1} — ${pl.placed.length} bin(s)</div></div>`;
+  }).join('');
+  const total = good.reduce((a, p) => a + p.placed.length, 0);
+  $('plateSummary').textContent =
+    `${good.length} plate(s) on a ${state.bedW} × ${state.bedD} mm bed · ${total} bin(s) packed` +
+    (over.length ? ` · ${over.length} bin(s) TOO BIG for the bed` : '');
 }
 
 /* ---------- three.js preview ---------------------------------------------- */
@@ -645,6 +700,11 @@ function layoutReadme() {
       L.push('  ' + occ[y].map((i) => i === -1 ? ' . ' : String.fromCharCode(65 + (i % 26)) + '  ').join('').trimEnd());
     L.push('');
   });
+  if (printPlan) {
+    const good = printPlan.plates.filter((p) => !p.overflow);
+    L.push(`PRINT PLATES: ${good.length} on a ${state.bedW} x ${state.bedD} mm bed.`);
+    L.push('');
+  }
   L.push('ASSEMBLY: lay layer 1 into the baseplate, then drop each higher layer into');
   L.push('the stacking lips of the bins below it.');
   L.push('');
@@ -654,6 +714,47 @@ function layoutReadme() {
   L.push('Layout link: ' + shareLink());
   return L.join('\n');
 }
+function platePolysAndItems(idx) {
+  const pl = printPlan.plates[idx];
+  const objs = [];
+  for (const p of pl.placed) {
+    const t = printPlan.types.find((x) => x.key === p.id);
+    if (!t) continue;
+    // bins are modelled centred on the origin; packPlates gives a corner
+    objs.push({ name: p.id, polys: geomFor(t.b).polys,
+                tx: p.x + p.w / 2, ty: p.y + p.d / 2, tz: 0, rot: p.rot });
+  }
+  return objs;
+}
+async function plate3mfBytes(idx) {
+  const x = build3mfXML(platePolysAndItems(idx).map((o) => ({
+    name: o.name, polys: transformPolys(o.polys, 0, 0, 0, o.rot), tx: o.tx, ty: o.ty, tz: o.tz, rot: 0 })));
+  const pz = new JSZip();
+  pz.file('[Content_Types].xml', x.contentTypes);
+  pz.file('_rels/.rels', x.rels);
+  pz.file('3D/3dmodel.model', x.model);
+  return pz.generateAsync({ type: 'uint8array' });
+}
+$('dlPlates').addEventListener('click', async () => {
+  if (!printPlan) return;
+  const good = printPlan.plates.map((p, i) => [p, i]).filter(([p]) => !p.overflow);
+  if (!good.length) return;
+  if (good.length === 1) { saveBlob(await plate3mfBytes(good[0][1]), 'bin-plates.3mf'); return; }
+  const zip = new JSZip();
+  for (const [, i] of good) zip.file(`plate-${i + 1}.3mf`, await plate3mfBytes(i));
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `drawerforge-bin-plates-x${good.length}.zip`; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+});
+$('bedPreset').addEventListener('change', () => {
+  const v = $('bedPreset').value;
+  if (v === 'custom') return;
+  const [w, d] = v.split(',');
+  $('bedW').value = w; $('bedD').value = d;
+  schedule();
+});
 $('dlAll').addEventListener('click', async () => {
   if (!allBins().length) return;
   const zip = new JSZip();
@@ -730,7 +831,8 @@ for (const id of ['toPlates', 'navPlates'])
 let timer = null;
 const schedule = () => { clearTimeout(timer); timer = setTimeout(() => {
   readControls(); geoCache.clear(); drawLayerTabs(); drawMap(); refresh(); }, 180); };
-for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'u', 'v', 'hUnits',
+for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'bedW', 'bedD', 'gap',
+                  'u', 'v', 'hUnits',
                   'wall', 'floorT', 'divX', 'divY', 'solid', 'arcSegs',
                   'edgeF', 'edgeB', 'edgeL', 'edgeR', 'baseStyle'])
   $(id).addEventListener('input', schedule);

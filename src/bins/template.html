@@ -40,8 +40,28 @@
   </div>
 </section>
 
+<section class="p" id="s-printer">
+  <h2><span class="n">02</span> Printer <span class="caret">▾</span></h2>
+  <div class="body">
+    <label class="f"><b>Preset</b>
+      <select id="bedPreset">
+        <option value="256,256">256 × 256 (Elegoo CC/CC2, Bambu X1/P1)</option>
+        <option value="220,220">220 × 220 (Ender 3, A1 mini class)</option>
+        <option value="250,210">250 × 210 (Prusa MK4 class)</option>
+        <option value="300,300">300 × 300 (large format)</option>
+        <option value="180,180">180 × 180 (compact)</option>
+        <option value="custom">Custom…</option>
+      </select></label>
+    <div class="row">
+      <label class="f"><b>Bed width (mm)</b><input id="bedW" type="number" value="256"></label>
+      <label class="f"><b>Bed depth (mm)</b><input id="bedD" type="number" value="256"></label>
+    </div>
+    <label class="f"><b>Gap between parts (mm)</b><input id="gap" type="number" step="0.5" value="3"></label>
+  </div>
+</section>
+
 <section class="p" id="s-layout">
-  <h2><span class="n">02</span> Drawer layout <span class="caret">▾</span></h2>
+  <h2><span class="n">03</span> Drawer layout <span class="caret">▾</span></h2>
   <div style="padding:10px 14px 0"><div class="seg" id="layerTabs"></div></div>
   <div class="row" style="padding:8px 14px 0">
     <button class="ghost" id="addLayer">Add a layer on top</button>
@@ -60,7 +80,7 @@
 </section>
 
 <section class="p" id="s-bin">
-  <h2><span class="n">03</span> <span id="binPanelTitle">New bins</span> <span class="caret">▾</span></h2>
+  <h2><span class="n">04</span> <span id="binPanelTitle">New bins</span> <span class="caret">▾</span></h2>
   <div class="body">
     <div class="row" id="sizeRow">
       <label class="f"><b>Width (cells)</b><input id="u" type="number" step="1" min="1" value="1"></label>
@@ -121,7 +141,7 @@
 </section>
 
 <section class="p" id="s-warn">
-  <h2><span class="n">04</span> Checks <span class="caret">▾</span></h2>
+  <h2><span class="n">05</span> Checks <span class="caret">▾</span></h2>
   <div class="body"><div id="warnings"></div></div>
 </section>
 
@@ -142,7 +162,15 @@
 </div>
 
 <div class="stagecard">
+  <h3>Print plan</h3>
+  <div id="plateWrap" style="padding:10px 14px 14px;display:grid;gap:14px;
+       grid-template-columns:repeat(auto-fit,minmax(190px,1fr))"></div>
+  <div class="mono" id="plateSummary" style="padding:0 14px 12px">—</div>
+</div>
+
+<div class="stagecard">
   <h3>Export</h3>
+  <button class="act" id="dlPlates">Download print plates (.3mf)</button>
   <button class="act" id="dlAll">Download all bins (.zip)</button>
   <button class="ghost" id="shareBtn" style="margin-top:8px">Copy layout link</button>
   <div class="hint">One STL per bin type, with a README listing the layout. Prints flat as oriented, no supports. Print one bin before committing to a drawer's worth.</div>
