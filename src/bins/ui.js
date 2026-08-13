@@ -472,9 +472,12 @@ function binIssues(b, k) {
   } else if (!st.flat) {
     out.push('spans bins of different heights below — it would rock');
   } else {
-    // A lip runs around the outer perimeter of the bin below; its middle is open
-    // cavity. So an upper bin has to cover every bin it touches COMPLETELY, or part
-    // of it hangs over a hole.
+    // The lip below is four rails around its perimeter, with open cavity between.
+    // A bin resting on it needs two OPPOSITE rails running its full length — a plank
+    // on two beams. Spanning the bin below across either axis gives exactly that:
+    // span its width and you land on its left and right rails; span its depth and you
+    // land on the front and back ones. Only a bin inset on BOTH axes is unsupported,
+    // because then at most two adjacent rails touch it and it tips into the corner.
     const occB = occupancyOf(k - 1);
     const covered = new Map();
     for (let dy = 0; dy < b.v; dy++)
@@ -485,8 +488,10 @@ function binIssues(b, k) {
     for (const [i, n] of covered) {
       const bb = layers[k - 1].bins[i];
       if (!bb) continue;
-      if (n < bb.u * bb.v)
-        out.push(`only covers part of the ${bb.u}×${bb.v} bin below, so it would drop into its cavity — match that footprint or span it fully`);
+      const spansX = b.x <= bb.x && b.x + b.u >= bb.x + bb.u;
+      const spansY = b.y <= bb.y && b.y + b.v >= bb.y + bb.v;
+      if (!spansX && !spansY)
+        out.push(`sits inside the ${bb.u}×${bb.v} bin below on both axes, so it rests over open cavity and would drop in — span its full width or its full depth`);
       if (!allFullEdges(bb))
         out.push('the bin below has a lowered wall, so it has no stacking lip to sit on');
       if (b.base === 'low' && (bb.base || 'standard') === 'standard')
