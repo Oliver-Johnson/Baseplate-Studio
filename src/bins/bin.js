@@ -44,6 +44,7 @@ const BIN_DEFAULTS = {
   shrink: 0,            // extra clearance per side, on top of the spec's 0.25
   lip: true,            // stacking lip on top (only when every edge is full height)
   edges: null,          // {f,b,l,r} wall heights as a fraction; 0 = open, 1 = full
+  base: 'standard',     // 'standard' | 'lowlip' | 'low' — see BASE_STYLES
   lipMin: 0.55,         // flat width of the lip's top rim
 };
 
@@ -64,6 +65,50 @@ const BIN_DEFAULTS = {
  */
 const LIP = [[0, 2.70], [0.8, 1.90], [2.6, 1.90]];
 const lipHeight = (lipMin) => 2.6 + (1.90 - lipMin);   // 3.95 at the default
+
+/* Base styles.
+ *
+ * A spec foot is 4.75 mm, which eats the interior: a 1-unit bin is left with
+ * 1.05 mm of cavity. Truncating the foot at 2.0 mm keeps its bottom chamfer plus
+ * 1.2 mm of vertical — enough taper to self-centre — and hands back 2.75 mm.
+ *
+ * A short foot cannot enter a full lip: 2 mm up, the lip's opening is 18.85 while
+ * the body above the foot is 20.75, so it would perch on top. The two must be a
+ * matched pair, hence the low lip, which stops at 2.0 with a 1.90 mm flat rim that
+ * the upper bin's shoulder rests on.
+ *
+ * A low lip also accepts a *spec* foot — the foot simply drops to the lip floor —
+ * so the three styles below are the only combinations worth having, and each is
+ * valid by construction:
+ *   standard  spec foot + spec lip     interoperable, stacks with anyone's bins
+ *   lowlip    spec foot + low lip      seats in a baseplate, takes low bins above
+ *   low       short foot + low lip     more depth; only onto another low lip
+ */
+const STUB_H = 2.0;
+const LIP_LOW = [[0, 2.70], [0.8, 1.90]];
+const BASE_STYLES = {
+  standard: { footH: SPEC.footH, lip: LIP,     lipH: null, rim: null },
+  lowlip:   { footH: SPEC.footH, lip: LIP_LOW, lipH: STUB_H, rim: 1.90 },
+  low:      { footH: STUB_H,     lip: LIP_LOW, lipH: STUB_H, rim: 1.90 },
+};
+const baseStyle = (c) => BASE_STYLES[c && c.base] || BASE_STYLES.standard;
+
+// foot profile truncated to a given height, keeping the spec shape
+function footProfile(footH) {
+  const out = [];
+  for (const [z, h] of SPEC.prof) {
+    if (z < footH - 1e-9) out.push([z, h]);
+    else break;
+  }
+  const last = out[out.length - 1];
+  let h = SPEC.prof[SPEC.prof.length - 1][1];
+  for (let i = 0; i < SPEC.prof.length - 1; i++) {
+    const [z0, h0] = SPEC.prof[i], [z1, h1] = SPEC.prof[i + 1];
+    if (footH >= z0 && footH <= z1) { h = h0 + (h1 - h0) * (z1 > z0 ? (footH - z0) / (z1 - z0) : 0); break; }
+  }
+  if (!last || Math.abs(last[0] - footH) > 1e-9) out.push([footH, h]);
+  return out;
+}
 
 /* ---------- 2D outlines --------------------------------------------------- */
 
@@ -193,9 +238,11 @@ function wallRing(G, outer, inner, z0, zTop) {
 // A separate overlapping shell, so it works whether the wall is thinner or
 // thicker than the lip's inward reach — no special-casing either way.
 function lipRing(G, c, hwO, hdO, H, n) {
-  const lipH = lipHeight(c.lipMin);
+  const st = baseStyle(c);
+  const lipH = st.lipH !== null ? st.lipH : lipHeight(c.lipMin);
+  const rim = st.rim !== null ? st.rim : c.lipMin;
   const ring = (t) => roundRect(hwO - t, hdO - t, SPEC.r - t, n);
-  const steps = LIP.concat([[lipH, c.lipMin]]);
+  const steps = st.lip.concat([[lipH, rim]]);
   const inner = steps.map(([, t]) => ring(t));
   const zsI = steps.map(([z]) => H + z);
   // extend the inner surface down past the floor so the shell closes below the bin top
@@ -246,30 +293,32 @@ function buildBin(G, cfg) {
   const polys = [];
 
   /* feet — one closed shell per grid cell, overlapping the body above */
-  const zs = SPEC.prof.map((p) => p[0]).concat([SPEC.footH + BLOAT]);
+  const st = baseStyle(c);
+  const prof = footProfile(st.footH);
+  const zs = prof.map((p) => p[0]).concat([st.footH + BLOAT]);
   for (let i = 0; i < c.u; i++)
     for (let j = 0; j < c.v; j++) {
       const cx = (i - (c.u - 1) / 2) * SPEC.pitch;
       const cy = (j - (c.v - 1) / 2) * SPEC.pitch;
-      const rings = SPEC.prof.map(([, half]) => {
+      const rings = prof.map(([, half]) => {
         const h = half - c.shrink;
         return roundRect(h, h, h - SPEC.centre, n).map((p) => [p[0] + cx, p[1] + cy]);
       });
       rings.push(rings[rings.length - 1]);      // BLOAT extension into the body
       polys.push(...sweep(G.makePoly, rings, zs));
       polys.push(...fanCap(G.makePoly, rings[0], zs[0], false, cx, cy));
-      polys.push(...fanCap(G.makePoly, rings[rings.length - 1], SPEC.footH + BLOAT, true, cx, cy));
+      polys.push(...fanCap(G.makePoly, rings[rings.length - 1], st.footH + BLOAT, true, cx, cy));
     }
 
   /* body */
   const outer = outlineAt(c.u, c.v, SPEC.half, c.shrink, n);
-  const floorZ = SPEC.footH + c.floorT;
+  const floorZ = st.footH + c.floorT;
 
   if (c.solid || floorZ >= H - 0.2) {
-    polys.push(...G.extrudePoly(outer, SPEC.footH, H));
+    polys.push(...G.extrudePoly(outer, st.footH, H));
   } else {
     // solid slab from the top of the feet to the cavity floor
-    polys.push(...G.extrudePoly(outer, SPEC.footH, floorZ + BLOAT));
+    polys.push(...G.extrudePoly(outer, st.footH, floorZ + BLOAT));
     // wall ring above it
     const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
     const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
@@ -306,7 +355,7 @@ function buildBin(G, cfg) {
   const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) =>
     c.edges[k] === undefined || c.edges[k] >= 1);
   const hasLip = c.lip && allFull && !c.solid;
-  const lipH = hasLip ? lipHeight(c.lipMin) : 0;
+  const lipH = hasLip ? (st.lipH !== null ? st.lipH : lipHeight(c.lipMin)) : 0;
   if (hasLip) polys.push(...lipRing(G, c, hwO, hdO, H, n));
 
   // H stays the stacking pitch whatever the walls do; topZ is how tall it really is,
@@ -321,11 +370,13 @@ function buildBin(G, cfg) {
     lipH, totalH: topZ + lipH,       // H is the stacking pitch; totalH is what it occupies
     W: (c.u - 1) * SPEC.pitch + 2 * (SPEC.half - c.shrink),
     D: (c.v - 1) * SPEC.pitch + 2 * (SPEC.half - c.shrink),
-    footH: SPEC.footH, floorZ, cells: c.u * c.v,
+    footH: st.footH, base: c.base || 'standard', floorZ, cells: c.u * c.v,
+    cavity: Math.max(0, H - floorZ),
   };
   return { polys: G.clampZ(polys, 0), meta };
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { buildBin, roundRect, outlineAt, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP, lipHeight };
+  module.exports = { buildBin, roundRect, outlineAt, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
+    lipHeight, BASE_STYLES, footProfile, STUB_H };
 }

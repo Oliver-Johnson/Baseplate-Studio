@@ -193,6 +193,13 @@ header nav a.on:hover{color:#0c1116}
     </div>
     <label class="f"><b>Height (7 mm units)</b><input id="hUnits" type="number" step="1" min="1" value="3"></label>
     <div class="hint" id="binSizeHint">—</div>
+    <label class="f"><b>Base style</b>
+      <select id="baseStyle">
+        <option value="standard">Standard — spec foot and lip, fits anyone's bins</option>
+        <option value="lowlip">Low lip — spec foot, accepts low-profile bins above</option>
+        <option value="low">Low profile — short foot, more interior depth</option>
+      </select></label>
+    <div class="hint" id="baseHint">A spec foot is 4.75 mm and eats the interior — a 1-unit bin is left with 1.05 mm. Low profile shortens it to 2 mm for 3.80 mm instead, but it only seats on a low lip, never in a baseplate. Bottom-layer bins want Standard or Low lip.</div>
     <label class="tog"><input id="solid" type="checkbox"> Solid block (no cavity)</label>
     <div class="row" id="thickRow">
       <label class="f"><b>Wall thickness (mm)</b><input id="wall" type="number" step="0.1" value="1.2"></label>
@@ -1988,6 +1995,7 @@ const BIN_DEFAULTS = {
   shrink: 0,            // extra clearance per side, on top of the spec's 0.25
   lip: true,            // stacking lip on top (only when every edge is full height)
   edges: null,          // {f,b,l,r} wall heights as a fraction; 0 = open, 1 = full
+  base: 'standard',     // 'standard' | 'lowlip' | 'low' — see BASE_STYLES
   lipMin: 0.55,         // flat width of the lip's top rim
 };
 
@@ -2008,6 +2016,50 @@ const BIN_DEFAULTS = {
  */
 const LIP = [[0, 2.70], [0.8, 1.90], [2.6, 1.90]];
 const lipHeight = (lipMin) => 2.6 + (1.90 - lipMin);   // 3.95 at the default
+
+/* Base styles.
+ *
+ * A spec foot is 4.75 mm, which eats the interior: a 1-unit bin is left with
+ * 1.05 mm of cavity. Truncating the foot at 2.0 mm keeps its bottom chamfer plus
+ * 1.2 mm of vertical — enough taper to self-centre — and hands back 2.75 mm.
+ *
+ * A short foot cannot enter a full lip: 2 mm up, the lip's opening is 18.85 while
+ * the body above the foot is 20.75, so it would perch on top. The two must be a
+ * matched pair, hence the low lip, which stops at 2.0 with a 1.90 mm flat rim that
+ * the upper bin's shoulder rests on.
+ *
+ * A low lip also accepts a *spec* foot — the foot simply drops to the lip floor —
+ * so the three styles below are the only combinations worth having, and each is
+ * valid by construction:
+ *   standard  spec foot + spec lip     interoperable, stacks with anyone's bins
+ *   lowlip    spec foot + low lip      seats in a baseplate, takes low bins above
+ *   low       short foot + low lip     more depth; only onto another low lip
+ */
+const STUB_H = 2.0;
+const LIP_LOW = [[0, 2.70], [0.8, 1.90]];
+const BASE_STYLES = {
+  standard: { footH: SPEC.footH, lip: LIP,     lipH: null, rim: null },
+  lowlip:   { footH: SPEC.footH, lip: LIP_LOW, lipH: STUB_H, rim: 1.90 },
+  low:      { footH: STUB_H,     lip: LIP_LOW, lipH: STUB_H, rim: 1.90 },
+};
+const baseStyle = (c) => BASE_STYLES[c && c.base] || BASE_STYLES.standard;
+
+// foot profile truncated to a given height, keeping the spec shape
+function footProfile(footH) {
+  const out = [];
+  for (const [z, h] of SPEC.prof) {
+    if (z < footH - 1e-9) out.push([z, h]);
+    else break;
+  }
+  const last = out[out.length - 1];
+  let h = SPEC.prof[SPEC.prof.length - 1][1];
+  for (let i = 0; i < SPEC.prof.length - 1; i++) {
+    const [z0, h0] = SPEC.prof[i], [z1, h1] = SPEC.prof[i + 1];
+    if (footH >= z0 && footH <= z1) { h = h0 + (h1 - h0) * (z1 > z0 ? (footH - z0) / (z1 - z0) : 0); break; }
+  }
+  if (!last || Math.abs(last[0] - footH) > 1e-9) out.push([footH, h]);
+  return out;
+}
 
 /* ---------- 2D outlines --------------------------------------------------- */
 
@@ -2137,9 +2189,11 @@ function wallRing(G, outer, inner, z0, zTop) {
 // A separate overlapping shell, so it works whether the wall is thinner or
 // thicker than the lip's inward reach — no special-casing either way.
 function lipRing(G, c, hwO, hdO, H, n) {
-  const lipH = lipHeight(c.lipMin);
+  const st = baseStyle(c);
+  const lipH = st.lipH !== null ? st.lipH : lipHeight(c.lipMin);
+  const rim = st.rim !== null ? st.rim : c.lipMin;
   const ring = (t) => roundRect(hwO - t, hdO - t, SPEC.r - t, n);
-  const steps = LIP.concat([[lipH, c.lipMin]]);
+  const steps = st.lip.concat([[lipH, rim]]);
   const inner = steps.map(([, t]) => ring(t));
   const zsI = steps.map(([z]) => H + z);
   // extend the inner surface down past the floor so the shell closes below the bin top
@@ -2190,30 +2244,32 @@ function buildBin(G, cfg) {
   const polys = [];
 
   /* feet — one closed shell per grid cell, overlapping the body above */
-  const zs = SPEC.prof.map((p) => p[0]).concat([SPEC.footH + BLOAT]);
+  const st = baseStyle(c);
+  const prof = footProfile(st.footH);
+  const zs = prof.map((p) => p[0]).concat([st.footH + BLOAT]);
   for (let i = 0; i < c.u; i++)
     for (let j = 0; j < c.v; j++) {
       const cx = (i - (c.u - 1) / 2) * SPEC.pitch;
       const cy = (j - (c.v - 1) / 2) * SPEC.pitch;
-      const rings = SPEC.prof.map(([, half]) => {
+      const rings = prof.map(([, half]) => {
         const h = half - c.shrink;
         return roundRect(h, h, h - SPEC.centre, n).map((p) => [p[0] + cx, p[1] + cy]);
       });
       rings.push(rings[rings.length - 1]);      // BLOAT extension into the body
       polys.push(...sweep(G.makePoly, rings, zs));
       polys.push(...fanCap(G.makePoly, rings[0], zs[0], false, cx, cy));
-      polys.push(...fanCap(G.makePoly, rings[rings.length - 1], SPEC.footH + BLOAT, true, cx, cy));
+      polys.push(...fanCap(G.makePoly, rings[rings.length - 1], st.footH + BLOAT, true, cx, cy));
     }
 
   /* body */
   const outer = outlineAt(c.u, c.v, SPEC.half, c.shrink, n);
-  const floorZ = SPEC.footH + c.floorT;
+  const floorZ = st.footH + c.floorT;
 
   if (c.solid || floorZ >= H - 0.2) {
-    polys.push(...G.extrudePoly(outer, SPEC.footH, H));
+    polys.push(...G.extrudePoly(outer, st.footH, H));
   } else {
     // solid slab from the top of the feet to the cavity floor
-    polys.push(...G.extrudePoly(outer, SPEC.footH, floorZ + BLOAT));
+    polys.push(...G.extrudePoly(outer, st.footH, floorZ + BLOAT));
     // wall ring above it
     const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
     const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
@@ -2250,7 +2306,7 @@ function buildBin(G, cfg) {
   const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) =>
     c.edges[k] === undefined || c.edges[k] >= 1);
   const hasLip = c.lip && allFull && !c.solid;
-  const lipH = hasLip ? lipHeight(c.lipMin) : 0;
+  const lipH = hasLip ? (st.lipH !== null ? st.lipH : lipHeight(c.lipMin)) : 0;
   if (hasLip) polys.push(...lipRing(G, c, hwO, hdO, H, n));
 
   // H stays the stacking pitch whatever the walls do; topZ is how tall it really is,
@@ -2265,13 +2321,15 @@ function buildBin(G, cfg) {
     lipH, totalH: topZ + lipH,       // H is the stacking pitch; totalH is what it occupies
     W: (c.u - 1) * SPEC.pitch + 2 * (SPEC.half - c.shrink),
     D: (c.v - 1) * SPEC.pitch + 2 * (SPEC.half - c.shrink),
-    footH: SPEC.footH, floorZ, cells: c.u * c.v,
+    footH: st.footH, base: c.base || 'standard', floorZ, cells: c.u * c.v,
+    cavity: Math.max(0, H - floorZ),
   };
   return { polys: G.clampZ(polys, 0), meta };
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { buildBin, roundRect, outlineAt, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP, lipHeight };
+  module.exports = { buildBin, roundRect, outlineAt, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
+    lipHeight, BASE_STYLES, footProfile, STUB_H };
 }
 </script>
 <script>/* Drawerforge Bins UI. Core geometry and buildBin are in scope from the previous
@@ -2310,13 +2368,15 @@ function grid() {
 const EDGES = ['f', 'b', 'l', 'r'];
 const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
                          floorT: b.floorT, divX: b.divX, divY: b.divY,
-                         solid: b.solid, edges: b.edges, arcSegs: state.arcSegs });
+                         solid: b.solid, edges: b.edges, base: b.base,
+                         arcSegs: state.arcSegs });
 const edgeSig = (b) => EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1)).join(',');
 const allFullEdges = (b) => EDGES.every((k) => !b.edges || b.edges[k] === undefined || b.edges[k] >= 1);
 const typeKey = (b) => `${b.u}x${b.v}x${b.hUnits}` +
   (b.solid ? '-solid' : `-w${b.wall}-f${b.floorT}` +
    (b.divX || b.divY ? `-d${b.divX}.${b.divY}` : '') +
-   (allFullEdges(b) ? '' : `-e${edgeSig(b)}`));
+   (allFullEdges(b) ? '' : `-e${edgeSig(b)}`)) +
+  ((b.base && b.base !== 'standard') ? `-${b.base}` : '');
 
 function occupancyOf(k) {
   const g = grid();
@@ -2467,6 +2527,7 @@ function readControls() {
     wall: num('wall', 1.2), floorT: num('floorT', 1.2),
     divX: Math.max(0, int('divX', 0)), divY: Math.max(0, int('divY', 0)),
     solid: $('solid').checked,
+    base: $('baseStyle').value,
     edges: { f: parseFloat($('edgeF').value), b: parseFloat($('edgeB').value),
              l: parseFloat($('edgeL').value), r: parseFloat($('edgeR').value) },
   };
@@ -2495,6 +2556,7 @@ function writeControls(src) {
   $('wall').value = src.wall; $('floorT').value = src.floorT;
   $('divX').value = src.divX; $('divY').value = src.divY;
   $('solid').checked = !!src.solid;
+  $('baseStyle').value = src.base || 'standard';
   for (const [k, id] of [['f', 'edgeF'], ['b', 'edgeB'], ['l', 'edgeL'], ['r', 'edgeR']])
     $(id).value = String(src.edges && src.edges[k] !== undefined ? src.edges[k] : 1);
 }
@@ -2612,7 +2674,8 @@ function initMap() {
     if (canPlace(x, y, u, v, -1)) {
       B().push({ x, y, u, v, hUnits: state.hUnits, wall: state.wall,
                  floorT: state.floorT, divX: state.divX, divY: state.divY,
-                 solid: state.solid, edges: Object.assign({}, state.edges) });
+                 solid: state.solid, base: state.base,
+                 edges: Object.assign({}, state.edges) });
       selected = B().length - 1;
       writeControls(B()[selected]);
     }
@@ -2636,7 +2699,8 @@ $('fillRest').addEventListener('click', () => {
         if (cur > 0) { const st = seat(probe, cur); if (!st.flat || !st.solidBelow) continue; }
         B().push({ x, y, u, v, hUnits: state.hUnits, wall: state.wall,
                    floorT: state.floorT, divX: state.divX, divY: state.divY,
-                   solid: state.solid, edges: Object.assign({}, state.edges) });
+                   solid: state.solid, base: state.base,
+                 edges: Object.assign({}, state.edges) });
         break;
       }
     }
@@ -2656,7 +2720,7 @@ $('applyAll').addEventListener('click', () => {
   const s = B()[selected];
   for (const b of B()) Object.assign(b, {
     hUnits: s.hUnits, wall: s.wall, floorT: s.floorT,
-    divX: s.divX, divY: s.divY, solid: s.solid,
+    divX: s.divX, divY: s.divY, solid: s.solid, base: s.base,
     edges: Object.assign({}, s.edges) });
   drawMap(); refresh();
 });
@@ -2708,6 +2772,22 @@ function warnings() {
           out.push({ t: `Layer ${k + 1}: a ${b.u}×${b.v} bin spans ${below.size} bins below. It rests level but nothing locates it sideways.` });
         }
       }
+    }
+
+  for (const b of layers[0].bins)
+    if (b.base === 'low')
+      out.push({ err: true, t: `A ${b.u}×${b.v} bin on layer 1 is low-profile. Its 2 mm foot is too short to engage a baseplate socket — it would sit loose. Use Standard or Low lip on the bottom layer.` });
+  for (let k = 1; k < layers.length; k++)
+    for (const b of layers[k].bins) {
+      if (b.base !== 'low') continue;
+      const occB = occupancyOf(k - 1);
+      const below = new Set();
+      for (let dy = 0; dy < b.v; dy++)
+        for (let dx = 0; dx < b.u; dx++) below.add(occB[b.y + dy][b.x + dx]);
+      const std = [...below].map((i) => layers[k - 1].bins[i])
+                            .filter((bb) => bb && (bb.base || 'standard') === 'standard');
+      if (std.length)
+        out.push({ err: true, t: `Layer ${k + 1}: a low-profile ${b.u}×${b.v} bin sits on a bin with a full-height lip. A 2 mm foot cannot enter it — it would perch on top. Set the bin below to Low lip.` });
     }
 
   const thin = allBins().filter(({ b }) => !b.solid && b.wall < 0.8);
@@ -2925,7 +3005,8 @@ $('dlAll').addEventListener('click', async () => {
 const KEYS = { w: 'drawerW', d: 'drawerD', dh: 'drawerH', ph: 'plateH' };
 const packLayer = (L) => L.bins.map((b) =>
   [b.x, b.y, b.u, b.v, b.hUnits, b.wall, b.floorT, b.divX, b.divY, b.solid ? 1 : 0]
-    .concat(EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1))).join('.')).join('_');
+    .concat(EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1)))
+    .concat([['standard', 'lowlip', 'low'].indexOf(b.base || 'standard')]).join('.')).join('_');
 const packAll = () => layers.map(packLayer).join('~');
 function unpackAll(s) {
   return (s || '').split('~').map((ls) => ({
@@ -2933,18 +3014,23 @@ function unpackAll(s) {
       const p = t.split('.').map(Number);
       const ed = {};
       EDGES.forEach((k, i) => { ed[k] = p.length > 10 + i && isFinite(p[10 + i]) ? p[10 + i] : 1; });
+      const bs = ['standard', 'lowlip', 'low'][p[14]] || 'standard';
       return { x: p[0], y: p[1], u: p[2], v: p[3], hUnits: p[4],
-               wall: p[5], floorT: p[6], divX: p[7], divY: p[8], solid: !!p[9], edges: ed };
+               wall: p[5], floorT: p[6], divX: p[7], divY: p[8], solid: !!p[9],
+               edges: ed, base: bs };
     }),
   }));
 }
-function shareLink() {
+function descriptor() {
   const o = Object.assign({}, hashExtras, { v: 2 });
   for (const [k, id] of Object.entries(KEYS)) o[k] = state[id];
   o.bl = packAll();
   o.bseg = state.arcSegs;
-  return location.origin + location.pathname + '#' +
-    Object.entries(o).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
+  return o;
+}
+const encodeDesc = (o) => Object.entries(o).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
+function shareLink() {
+  return location.origin + location.pathname + '#' + encodeDesc(descriptor());
 }
 function loadFromHash() {
   const h = location.hash.replace(/^#/, '');
@@ -2969,11 +3055,8 @@ $('shareBtn').addEventListener('click', () => {
     () => { $('shareBtn').textContent = 'Copied ✓'; setTimeout(() => $('shareBtn').textContent = 'Copy layout link', 1600); },
     () => prompt('Copy this link:', link));
 });
-function platesHref() {
-  const o = Object.assign({}, hashExtras, { v: 2, w: state.drawerW, d: state.drawerD,
-                                            dh: state.drawerH, ph: state.plateH });
-  return '../#' + Object.entries(o).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
-}
+// the whole bins descriptor travels; baseplates re-emits what it doesn't own
+function platesHref() { return '../#' + encodeDesc(descriptor()); }
 for (const id of ['toPlates', 'navPlates'])
   $(id).addEventListener('click', (e) => { e.preventDefault(); location.href = platesHref(); });
 
@@ -2983,9 +3066,9 @@ const schedule = () => { clearTimeout(timer); timer = setTimeout(() => {
   readControls(); geoCache.clear(); drawLayerTabs(); drawMap(); refresh(); }, 180); };
 for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'u', 'v', 'hUnits',
                   'wall', 'floorT', 'divX', 'divY', 'solid', 'arcSegs',
-                  'edgeF', 'edgeB', 'edgeL', 'edgeR'])
+                  'edgeF', 'edgeB', 'edgeL', 'edgeR', 'baseStyle'])
   $(id).addEventListener('input', schedule);
-for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR'])
+for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR', 'baseStyle'])
   $(id).addEventListener('change', schedule);
 $('presetTray').addEventListener('click', () => {
   for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR']) $(id).value = '0';

@@ -34,13 +34,15 @@ function grid() {
 const EDGES = ['f', 'b', 'l', 'r'];
 const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
                          floorT: b.floorT, divX: b.divX, divY: b.divY,
-                         solid: b.solid, edges: b.edges, arcSegs: state.arcSegs });
+                         solid: b.solid, edges: b.edges, base: b.base,
+                         arcSegs: state.arcSegs });
 const edgeSig = (b) => EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1)).join(',');
 const allFullEdges = (b) => EDGES.every((k) => !b.edges || b.edges[k] === undefined || b.edges[k] >= 1);
 const typeKey = (b) => `${b.u}x${b.v}x${b.hUnits}` +
   (b.solid ? '-solid' : `-w${b.wall}-f${b.floorT}` +
    (b.divX || b.divY ? `-d${b.divX}.${b.divY}` : '') +
-   (allFullEdges(b) ? '' : `-e${edgeSig(b)}`));
+   (allFullEdges(b) ? '' : `-e${edgeSig(b)}`)) +
+  ((b.base && b.base !== 'standard') ? `-${b.base}` : '');
 
 function occupancyOf(k) {
   const g = grid();
@@ -191,6 +193,7 @@ function readControls() {
     wall: num('wall', 1.2), floorT: num('floorT', 1.2),
     divX: Math.max(0, int('divX', 0)), divY: Math.max(0, int('divY', 0)),
     solid: $('solid').checked,
+    base: $('baseStyle').value,
     edges: { f: parseFloat($('edgeF').value), b: parseFloat($('edgeB').value),
              l: parseFloat($('edgeL').value), r: parseFloat($('edgeR').value) },
   };
@@ -219,6 +222,7 @@ function writeControls(src) {
   $('wall').value = src.wall; $('floorT').value = src.floorT;
   $('divX').value = src.divX; $('divY').value = src.divY;
   $('solid').checked = !!src.solid;
+  $('baseStyle').value = src.base || 'standard';
   for (const [k, id] of [['f', 'edgeF'], ['b', 'edgeB'], ['l', 'edgeL'], ['r', 'edgeR']])
     $(id).value = String(src.edges && src.edges[k] !== undefined ? src.edges[k] : 1);
 }
@@ -336,7 +340,8 @@ function initMap() {
     if (canPlace(x, y, u, v, -1)) {
       B().push({ x, y, u, v, hUnits: state.hUnits, wall: state.wall,
                  floorT: state.floorT, divX: state.divX, divY: state.divY,
-                 solid: state.solid, edges: Object.assign({}, state.edges) });
+                 solid: state.solid, base: state.base,
+                 edges: Object.assign({}, state.edges) });
       selected = B().length - 1;
       writeControls(B()[selected]);
     }
@@ -360,7 +365,8 @@ $('fillRest').addEventListener('click', () => {
         if (cur > 0) { const st = seat(probe, cur); if (!st.flat || !st.solidBelow) continue; }
         B().push({ x, y, u, v, hUnits: state.hUnits, wall: state.wall,
                    floorT: state.floorT, divX: state.divX, divY: state.divY,
-                   solid: state.solid, edges: Object.assign({}, state.edges) });
+                   solid: state.solid, base: state.base,
+                 edges: Object.assign({}, state.edges) });
         break;
       }
     }
@@ -380,7 +386,7 @@ $('applyAll').addEventListener('click', () => {
   const s = B()[selected];
   for (const b of B()) Object.assign(b, {
     hUnits: s.hUnits, wall: s.wall, floorT: s.floorT,
-    divX: s.divX, divY: s.divY, solid: s.solid,
+    divX: s.divX, divY: s.divY, solid: s.solid, base: s.base,
     edges: Object.assign({}, s.edges) });
   drawMap(); refresh();
 });
@@ -432,6 +438,22 @@ function warnings() {
           out.push({ t: `Layer ${k + 1}: a ${b.u}×${b.v} bin spans ${below.size} bins below. It rests level but nothing locates it sideways.` });
         }
       }
+    }
+
+  for (const b of layers[0].bins)
+    if (b.base === 'low')
+      out.push({ err: true, t: `A ${b.u}×${b.v} bin on layer 1 is low-profile. Its 2 mm foot is too short to engage a baseplate socket — it would sit loose. Use Standard or Low lip on the bottom layer.` });
+  for (let k = 1; k < layers.length; k++)
+    for (const b of layers[k].bins) {
+      if (b.base !== 'low') continue;
+      const occB = occupancyOf(k - 1);
+      const below = new Set();
+      for (let dy = 0; dy < b.v; dy++)
+        for (let dx = 0; dx < b.u; dx++) below.add(occB[b.y + dy][b.x + dx]);
+      const std = [...below].map((i) => layers[k - 1].bins[i])
+                            .filter((bb) => bb && (bb.base || 'standard') === 'standard');
+      if (std.length)
+        out.push({ err: true, t: `Layer ${k + 1}: a low-profile ${b.u}×${b.v} bin sits on a bin with a full-height lip. A 2 mm foot cannot enter it — it would perch on top. Set the bin below to Low lip.` });
     }
 
   const thin = allBins().filter(({ b }) => !b.solid && b.wall < 0.8);
@@ -649,7 +671,8 @@ $('dlAll').addEventListener('click', async () => {
 const KEYS = { w: 'drawerW', d: 'drawerD', dh: 'drawerH', ph: 'plateH' };
 const packLayer = (L) => L.bins.map((b) =>
   [b.x, b.y, b.u, b.v, b.hUnits, b.wall, b.floorT, b.divX, b.divY, b.solid ? 1 : 0]
-    .concat(EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1))).join('.')).join('_');
+    .concat(EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1)))
+    .concat([['standard', 'lowlip', 'low'].indexOf(b.base || 'standard')]).join('.')).join('_');
 const packAll = () => layers.map(packLayer).join('~');
 function unpackAll(s) {
   return (s || '').split('~').map((ls) => ({
@@ -657,18 +680,23 @@ function unpackAll(s) {
       const p = t.split('.').map(Number);
       const ed = {};
       EDGES.forEach((k, i) => { ed[k] = p.length > 10 + i && isFinite(p[10 + i]) ? p[10 + i] : 1; });
+      const bs = ['standard', 'lowlip', 'low'][p[14]] || 'standard';
       return { x: p[0], y: p[1], u: p[2], v: p[3], hUnits: p[4],
-               wall: p[5], floorT: p[6], divX: p[7], divY: p[8], solid: !!p[9], edges: ed };
+               wall: p[5], floorT: p[6], divX: p[7], divY: p[8], solid: !!p[9],
+               edges: ed, base: bs };
     }),
   }));
 }
-function shareLink() {
+function descriptor() {
   const o = Object.assign({}, hashExtras, { v: 2 });
   for (const [k, id] of Object.entries(KEYS)) o[k] = state[id];
   o.bl = packAll();
   o.bseg = state.arcSegs;
-  return location.origin + location.pathname + '#' +
-    Object.entries(o).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
+  return o;
+}
+const encodeDesc = (o) => Object.entries(o).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
+function shareLink() {
+  return location.origin + location.pathname + '#' + encodeDesc(descriptor());
 }
 function loadFromHash() {
   const h = location.hash.replace(/^#/, '');
@@ -693,11 +721,8 @@ $('shareBtn').addEventListener('click', () => {
     () => { $('shareBtn').textContent = 'Copied ✓'; setTimeout(() => $('shareBtn').textContent = 'Copy layout link', 1600); },
     () => prompt('Copy this link:', link));
 });
-function platesHref() {
-  const o = Object.assign({}, hashExtras, { v: 2, w: state.drawerW, d: state.drawerD,
-                                            dh: state.drawerH, ph: state.plateH });
-  return '../#' + Object.entries(o).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
-}
+// the whole bins descriptor travels; baseplates re-emits what it doesn't own
+function platesHref() { return '../#' + encodeDesc(descriptor()); }
 for (const id of ['toPlates', 'navPlates'])
   $(id).addEventListener('click', (e) => { e.preventDefault(); location.href = platesHref(); });
 
@@ -707,9 +732,9 @@ const schedule = () => { clearTimeout(timer); timer = setTimeout(() => {
   readControls(); geoCache.clear(); drawLayerTabs(); drawMap(); refresh(); }, 180); };
 for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'u', 'v', 'hUnits',
                   'wall', 'floorT', 'divX', 'divY', 'solid', 'arcSegs',
-                  'edgeF', 'edgeB', 'edgeL', 'edgeR'])
+                  'edgeF', 'edgeB', 'edgeL', 'edgeR', 'baseStyle'])
   $(id).addEventListener('input', schedule);
-for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR'])
+for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR', 'baseStyle'])
   $(id).addEventListener('change', schedule);
 $('presetTray').addEventListener('click', () => {
   for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR']) $(id).value = '0';

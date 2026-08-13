@@ -2648,7 +2648,14 @@ function readmeText() {
 }
 
 // ---------- share link ----------
-function shareLink() {
+// Descriptor keys owned by the bins tool (or any future tool). We never interpret
+// them, but we carry them so a round trip through here is lossless.
+let hashExtras = {};
+const OWNED = new Set(['w','d','mm','ax','ay','ml','mr','mf','mb','bw','bd','bh','sp','km','ki',
+  'rc','cc','cn','cl','to','mg','md','mh','ms','sc','sh','sd','se','pi','or','bp','tc','bm','pc',
+  'r1','r2','r3','r4','v','ph']);
+
+function descriptor() {
   const o = {
     w: state.drawerW, d: state.drawerD, mm: $('marginMode').value,
     ax: state.alignX, ay: state.alignY,
@@ -2662,16 +2669,19 @@ function shareLink() {
     bm: state.baseMode, pc: $('perCorner').checked ? 1 : 0,
     r1: $('rFL').value, r2: $('rFR').value, r3: $('rBL').value, r4: $('rBR').value,
   };
-  const q = Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
-  return location.origin + location.pathname + '#' + q;
+  return Object.assign({}, hashExtras, o, { v: 2 });
+}
+const encodeDesc = (o) => Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+function shareLink() {
+  return location.origin + location.pathname + '#' + encodeDesc(descriptor());
 }
 // Hand the drawer across to the bins tool. Only the shared keys travel; the bins
 // tool re-emits anything it doesn't recognise, so a round trip is lossless.
 function binsHref() {
   const built = layout && layout.pieces.length && builds[layout.pieces[0].id];
   const H = built ? built.meta.H : state.plateHeight;
-  const o = { v: 2, w: state.drawerW, d: state.drawerD, ph: (+H).toFixed(2) };
-  return 'bins/#' + Object.entries(o).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
+  // full baseplate state plus the plate height bins needs; extras ride along
+  return 'bins/#' + encodeDesc(Object.assign(descriptor(), { ph: (+H).toFixed(2) }));
 }
 for (const id of ['toBins', 'navBins'])
   $(id).addEventListener('click', (e) => { e.preventDefault(); location.href = binsHref(); });
@@ -2684,6 +2694,7 @@ $('shareBtn').addEventListener('click', () => {
 function loadFromHash() {
   if (!location.hash || location.hash.length < 3) return;
   const q = Object.fromEntries(location.hash.slice(1).split('&').map(kv => kv.split('=').map(decodeURIComponent)));
+  for (const [k, v] of Object.entries(q)) if (!OWNED.has(k)) hashExtras[k] = v;
   const set = (id, v) => { if (v !== undefined && $(id)) $(id).value = v; };
   set('drawerW', q.w); set('drawerD', q.d); set('marginMode', q.mm);
   set('alignX', q.ax); set('alignY', q.ay);

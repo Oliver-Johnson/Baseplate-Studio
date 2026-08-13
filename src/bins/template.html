@@ -68,6 +68,13 @@
     </div>
     <label class="f"><b>Height (7 mm units)</b><input id="hUnits" type="number" step="1" min="1" value="3"></label>
     <div class="hint" id="binSizeHint">—</div>
+    <label class="f"><b>Base style</b>
+      <select id="baseStyle">
+        <option value="standard">Standard — spec foot and lip, fits anyone's bins</option>
+        <option value="lowlip">Low lip — spec foot, accepts low-profile bins above</option>
+        <option value="low">Low profile — short foot, more interior depth</option>
+      </select></label>
+    <div class="hint" id="baseHint">A spec foot is 4.75 mm and eats the interior — a 1-unit bin is left with 1.05 mm. Low profile shortens it to 2 mm for 3.80 mm instead, but it only seats on a low lip, never in a baseplate. Bottom-layer bins want Standard or Low lip.</div>
     <label class="tog"><input id="solid" type="checkbox"> Solid block (no cavity)</label>
     <div class="row" id="thickRow">
       <label class="f"><b>Wall thickness (mm)</b><input id="wall" type="number" step="0.1" value="1.2"></label>
