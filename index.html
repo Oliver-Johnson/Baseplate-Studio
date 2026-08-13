@@ -122,6 +122,15 @@ footer .mono{font-family:var(--mono);font-size:11px}
 .covbar i{display:block;height:100%;background:var(--cyan)}
 #fillmap .cell.dead{fill:#171d24;stroke:#222a33}
 #fillmap .ghostbin{fill:none;stroke:var(--dim);stroke-width:1.5;stroke-dasharray:4 4;opacity:.7}
+
+/* ---- cross-tool navigation ---- */
+header nav{display:flex;gap:6px;margin-top:14px}
+header nav a{font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;
+  padding:7px 15px;border:1px solid var(--line);border-radius:6px;color:var(--dim);
+  text-decoration:none;background:var(--panel2);transition:color .12s,border-color .12s}
+header nav a:hover{color:var(--ink);border-color:var(--dim)}
+header nav a.on{background:var(--cyan);color:#0c1116;border-color:var(--cyan);font-weight:700}
+header nav a.on:hover{color:#0c1116}
 </style>
 </head>
 <body>
@@ -129,6 +138,10 @@ footer .mono{font-family:var(--mono);font-size:11px}
   <h1>DRAWER<span class="tm">FORGE</span></h1>
   <p>Gridfinity baseplates cut to your drawer — measured, split for your printer, joined, and ready to print. Start with the space you have; everything else follows.</p>
   <div class="privacy">runs entirely in your browser — nothing is uploaded, no account, no tracking</div>
+  <nav>
+    <a id="navPlates" href="./" class="on">Baseplates</a>
+    <a id="navBins" href="bins/">Bins</a>
+  </nav>
 </header>
 <div class="app">
 <div class="rail">
@@ -2654,12 +2667,14 @@ function shareLink() {
 }
 // Hand the drawer across to the bins tool. Only the shared keys travel; the bins
 // tool re-emits anything it doesn't recognise, so a round trip is lossless.
-$('toBins').addEventListener('click', (e) => {
-  e.preventDefault();
-  const H = builds[layout.pieces[0].id] ? builds[layout.pieces[0].id].meta.H : state.plateHeight;
-  const o = { v: 2, w: state.drawerW, d: state.drawerD, ph: H.toFixed(2) };
-  location.href = 'bins/#' + Object.entries(o).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
-});
+function binsHref() {
+  const built = layout && layout.pieces.length && builds[layout.pieces[0].id];
+  const H = built ? built.meta.H : state.plateHeight;
+  const o = { v: 2, w: state.drawerW, d: state.drawerD, ph: (+H).toFixed(2) };
+  return 'bins/#' + Object.entries(o).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
+}
+for (const id of ['toBins', 'navBins'])
+  $(id).addEventListener('click', (e) => { e.preventDefault(); location.href = binsHref(); });
 $('shareBtn').addEventListener('click', () => {
   const link = shareLink();
   navigator.clipboard.writeText(link).then(

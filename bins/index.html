@@ -122,6 +122,15 @@ footer .mono{font-family:var(--mono);font-size:11px}
 .covbar i{display:block;height:100%;background:var(--cyan)}
 #fillmap .cell.dead{fill:#171d24;stroke:#222a33}
 #fillmap .ghostbin{fill:none;stroke:var(--dim);stroke-width:1.5;stroke-dasharray:4 4;opacity:.7}
+
+/* ---- cross-tool navigation ---- */
+header nav{display:flex;gap:6px;margin-top:14px}
+header nav a{font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;
+  padding:7px 15px;border:1px solid var(--line);border-radius:6px;color:var(--dim);
+  text-decoration:none;background:var(--panel2);transition:color .12s,border-color .12s}
+header nav a:hover{color:var(--ink);border-color:var(--dim)}
+header nav a.on{background:var(--cyan);color:#0c1116;border-color:var(--cyan);font-weight:700}
+header nav a.on:hover{color:#0c1116}
 </style>
 </head>
 <body>
@@ -129,6 +138,10 @@ footer .mono{font-family:var(--mono);font-size:11px}
   <h1>DRAWER<span class="tm">FORGE</span> <span class="tm" style="opacity:.55">· BINS</span></h1>
   <p>Lay bins out across the whole drawer, then print exactly what you planned. Built to the published Gridfinity spec, so they fit any spec baseplate.</p>
   <div class="privacy">runs entirely in your browser — nothing is uploaded, no account, no tracking</div>
+  <nav>
+    <a id="navPlates" href="../">Baseplates</a>
+    <a id="navBins" href="./" class="on">Bins</a>
+  </nav>
 </header>
 <div class="app">
 <div class="rail">
@@ -2956,12 +2969,13 @@ $('shareBtn').addEventListener('click', () => {
     () => { $('shareBtn').textContent = 'Copied ✓'; setTimeout(() => $('shareBtn').textContent = 'Copy layout link', 1600); },
     () => prompt('Copy this link:', link));
 });
-$('toPlates').addEventListener('click', (e) => {
-  e.preventDefault();
+function platesHref() {
   const o = Object.assign({}, hashExtras, { v: 2, w: state.drawerW, d: state.drawerD,
                                             dh: state.drawerH, ph: state.plateH });
-  location.href = '../#' + Object.entries(o).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
-});
+  return '../#' + Object.entries(o).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
+}
+for (const id of ['toPlates', 'navPlates'])
+  $(id).addEventListener('click', (e) => { e.preventDefault(); location.href = platesHref(); });
 
 /* ---------- boot ---------------------------------------------------------- */
 let timer = null;

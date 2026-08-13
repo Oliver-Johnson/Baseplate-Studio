@@ -693,12 +693,13 @@ $('shareBtn').addEventListener('click', () => {
     () => { $('shareBtn').textContent = 'Copied ✓'; setTimeout(() => $('shareBtn').textContent = 'Copy layout link', 1600); },
     () => prompt('Copy this link:', link));
 });
-$('toPlates').addEventListener('click', (e) => {
-  e.preventDefault();
+function platesHref() {
   const o = Object.assign({}, hashExtras, { v: 2, w: state.drawerW, d: state.drawerD,
                                             dh: state.drawerH, ph: state.plateH });
-  location.href = '../#' + Object.entries(o).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
-});
+  return '../#' + Object.entries(o).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
+}
+for (const id of ['toPlates', 'navPlates'])
+  $(id).addEventListener('click', (e) => { e.preventDefault(); location.href = platesHref(); });
 
 /* ---------- boot ---------------------------------------------------------- */
 let timer = null;
