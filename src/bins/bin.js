@@ -33,6 +33,10 @@ const SPEC = {
 
 const BLOAT = 0.05;     // shell overlap; never rely on coincident faces
 
+// Everything buildBin reaches for through G. The bins UI checks itself against this
+// at load; keep it in step when a new primitive is used.
+const REQUIRED_CORE = ['makePoly', 'triangulateRing', 'extrudePoly', 'clampZ', 'profilePrism'];
+
 const BIN_DEFAULTS = {
   u: 1, v: 1,           // footprint in grid cells
   hUnits: 3,            // height in 7 mm units (total, base included)
@@ -425,5 +429,5 @@ function buildBin(G, cfg) {
 
 if (typeof module !== 'undefined') {
   module.exports = { buildBin, roundRect, outlineAt, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
-    lipHeight, BASE_STYLES, footProfile, STUB_H };
+    lipHeight, BASE_STYLES, footProfile, STUB_H, REQUIRED_CORE };
 }

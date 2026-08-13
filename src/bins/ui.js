@@ -7,9 +7,15 @@ const $ = (id) => document.getElementById(id);
 const SVGNS = 'http://www.w3.org/2000/svg';
 
 const G = {
-  makePoly, triangulateRing, extrudePoly, clampZ,
+  makePoly, triangulateRing, extrudePoly, clampZ, profilePrism,
   polysToTriangles, stlBinary, checkManifold,
 };
+// In Node the audits pass the whole core module; in the browser this object is
+// assembled by hand, so the two surfaces can drift. Fail loudly at load rather
+// than at the first bin that happens to need the missing one.
+for (const fn of REQUIRED_CORE)
+  if (typeof G[fn] !== 'function')
+    throw new Error(`bins UI is missing core function ${fn}() — add it to G in src/bins/ui.js`);
 
 const PLA_DENSITY = 1.24;   // g/cm3
 const S = 40;               // map cell size, svg units
@@ -19,6 +25,7 @@ let layers = [{ bins: [] }];
 let cur = 0;                // layer being edited, 0 = sitting on the baseplate
 let selected = -1;
 let hashExtras = {};
+let pendingNotes = null;
 const geoCache = new Map();
 
 const B = () => layers[cur].bins;
@@ -199,6 +206,7 @@ function readControls() {
     solid: $('solid').checked,
     base: $('baseStyle').value,
     scoop: Math.max(0, num('scoop', 0)), label: Math.max(0, num('label', 0)),
+    note: $('note').value.slice(0, 28),
     edges: { f: parseFloat($('edgeF').value), b: parseFloat($('edgeB').value),
              l: parseFloat($('edgeL').value), r: parseFloat($('edgeR').value) },
   };
@@ -239,6 +247,7 @@ function writeControls(src) {
   $('solid').checked = !!src.solid;
   $('baseStyle').value = src.base || 'standard';
   $('scoop').value = src.scoop || 0; $('label').value = src.label || 0;
+  $('note').value = src.note || '';
   for (const [k, id] of [['f', 'edgeF'], ['b', 'edgeB'], ['l', 'edgeL'], ['r', 'edgeR']])
     $(id).value = String(src.edges && src.edges[k] !== undefined ? src.edges[k] : 1);
 }
@@ -320,6 +329,11 @@ function drawMap() {
     const t2 = el('text', { class: 'bsub', x: cx, y: cy + 12, 'text-anchor': 'middle' });
     t2.textContent = `${b.hUnits}u · ${b.hUnits * SPEC.unitH}mm`;
     svg.appendChild(t1); svg.appendChild(t2);
+    if (b.note) {
+      const t3 = el('text', { class: 'bnote', x: cx, y: cy + 25, 'text-anchor': 'middle' });
+      t3.textContent = b.note.length > b.u * 7 ? b.note.slice(0, b.u * 7 - 1) + '…' : b.note;
+      svg.appendChild(t3);
+    }
     if (issues.length) {
       const warn = el('text', { class: 'bwarn', x: b.x * S + 13, y: sy(b.y, b.v) + 20 });
       warn.textContent = '⚠';
@@ -442,6 +456,7 @@ function initMap() {
         B().push({ x, y, u, v, hUnits: state.hUnits, wall: state.wall,
                    floorT: state.floorT, divX: state.divX, divY: state.divY,
                    solid: state.solid, base: state.base, scoop: state.scoop, label: state.label,
+                   note: '',
                    edges: Object.assign({}, state.edges) });
         selected = B().length - 1;
         writeControls(B()[selected]);
@@ -470,6 +485,7 @@ $('fillRest').addEventListener('click', () => {
         B().push({ x, y, u, v, hUnits: state.hUnits, wall: state.wall,
                    floorT: state.floorT, divX: state.divX, divY: state.divY,
                    solid: state.solid, base: state.base, scoop: state.scoop, label: state.label,
+                 note: '',
                  edges: Object.assign({}, state.edges) });
         break;
       }
@@ -921,6 +937,10 @@ function layoutReadme() {
     const occ = occupancyOf(k);
     for (let y = g.ny - 1; y >= 0; y--)
       L.push('  ' + occ[y].map((i) => i === -1 ? ' . ' : String.fromCharCode(65 + (i % 26)) + '  ').join('').trimEnd());
+    Ly.bins.forEach((b, i) => {
+      const tag = String.fromCharCode(65 + (i % 26));
+      L.push(`    ${tag} = ${b.u}x${b.v}x${b.hUnits}` + (b.note ? `  — ${b.note}` : ''));
+    });
     L.push('');
   });
   if (printPlan) {
@@ -1017,6 +1037,8 @@ function descriptor() {
   const o = Object.assign({}, hashExtras, { v: 2 });
   for (const [k, id] of Object.entries(KEYS)) o[k] = state[id];
   o.bl = packAll();
+  const notes = layers.map((L) => L.bins.map((b) => b.note || ''));
+  if (notes.some((L) => L.some((n) => n))) o.bnotes = JSON.stringify(notes);
   o.bseg = state.arcSegs;
   return o;
 }
@@ -1036,6 +1058,7 @@ function loadFromHash() {
     if (k === 'v') continue;
     if (k === 'bl') { const ls = unpackAll(val); if (ls.length) layers = ls; continue; }
     if (k === 'bseg') { $('arcSegs').value = val; continue; }
+    if (k === 'bnotes') { pendingNotes = val; continue; }
     const id = KEYS[k];
     if (!id) { hashExtras[k] = val; continue; }
     if ($(id)) $(id).value = val;
@@ -1059,7 +1082,7 @@ const schedule = () => { clearTimeout(timer); timer = setTimeout(() => {
 for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'bedW', 'bedD', 'gap',
                   'u', 'v', 'hUnits',
                   'wall', 'floorT', 'divX', 'divY', 'solid', 'arcSegs',
-                  'edgeF', 'edgeB', 'edgeL', 'edgeR', 'baseStyle', 'scoop', 'label'])
+                  'edgeF', 'edgeB', 'edgeL', 'edgeR', 'baseStyle', 'scoop', 'label', 'note'])
   $(id).addEventListener('input', schedule);
 for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR', 'baseStyle'])
   $(id).addEventListener('change', schedule);
@@ -1124,6 +1147,12 @@ document.addEventListener('keydown', (e) => {
 });
 
 loadFromHash();
+if (pendingNotes) {                       // applied after the layout so indices line up
+  try {
+    JSON.parse(pendingNotes).forEach((ns, k) =>
+      ns.forEach((n, i) => { if (layers[k] && layers[k].bins[i]) layers[k].bins[i].note = n; }));
+  } catch (err) { /* a mangled link should not stop the tool loading */ }
+}
 readControls();
 initThree();
 initMap();

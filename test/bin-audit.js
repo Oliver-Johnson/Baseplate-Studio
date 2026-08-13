@@ -6,7 +6,16 @@
 const fs = require('fs');
 const path = require('path');
 const G = require('../src/core.js');
-const { buildBin, SPEC } = require('../src/bins/bin.js');
+const { buildBin, SPEC, REQUIRED_CORE } = require('../src/bins/bin.js');
+
+// the browser hand-assembles its own G; make sure core still exports everything
+{
+  const missing = REQUIRED_CORE.filter((f) => typeof G[f] !== 'function');
+  if (missing.length) {
+    console.error('core.js is missing: ' + missing.join(', '));
+    process.exit(1);
+  }
+}
 
 const outDir = process.argv[2] || path.join(__dirname, '..', 'out');
 fs.mkdirSync(outDir, { recursive: true });
