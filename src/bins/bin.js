@@ -42,7 +42,27 @@ const BIN_DEFAULTS = {
   solid: false,         // no cavity at all
   arcSegs: 12,          // corner-arc segments; only affects the bin's own smoothness
   shrink: 0,            // extra clearance per side, on top of the spec's 0.25
+  lip: true,            // stacking lip on top
+  lipMin: 0.55,         // flat width of the lip's top rim
 };
+
+/* Stacking lip.
+ *
+ * The lip's inner surface is a baseplate socket: a bin stacks on a bin exactly as
+ * a bin sits on a baseplate, which is what makes it interoperable. Insets from the
+ * bin's outer outline, at the same corner-arc centre so clearance stays uniform:
+ *   floor  2.70  (= 20.75 - 18.05, i.e. the spec foot's 17.80 plus 0.25 clearance)
+ *   +0.8   1.90  after the foot's bottom chamfer
+ *   +2.6   1.90  after the foot's vertical section
+ *   top    lipMin
+ *
+ * Spec says the lip adds 4.4 mm. A true 4.4 mm lip tapers to a ~0.1 mm knife edge,
+ * so like every other generator we stop it early to leave a printable rim; that
+ * costs (lipMin - 0.1) mm of height and sits inside the spec's 0.5 mm tolerance.
+ * It does not affect stacking, which is governed by the inner transition only.
+ */
+const LIP = [[0, 2.70], [0.8, 1.90], [2.6, 1.90]];
+const lipHeight = (lipMin) => 2.6 + (1.90 - lipMin);   // 3.95 at the default
 
 /* ---------- 2D outlines --------------------------------------------------- */
 
@@ -131,6 +151,51 @@ function wallRing(G, outer, inner, z0, z1) {
   return polys;
 }
 
+// Closed lip ring: a socket-profiled rim standing on top of the bin walls.
+// A separate overlapping shell, so it works whether the wall is thinner or
+// thicker than the lip's inward reach — no special-casing either way.
+function lipRing(G, c, hwO, hdO, H, n) {
+  const lipH = lipHeight(c.lipMin);
+  const ring = (t) => roundRect(hwO - t, hdO - t, SPEC.r - t, n);
+  const steps = LIP.concat([[lipH, c.lipMin]]);
+  const inner = steps.map(([, t]) => ring(t));
+  const zsI = steps.map(([z]) => H + z);
+  // extend the inner surface down past the floor so the shell closes below the bin top
+  inner.unshift(inner[0]); zsI.unshift(H - BLOAT);
+
+  const outer = ring(0);
+  const polys = [];
+  // inner skin (socket), normals pointing into the recess
+  for (let i = 0; i < inner.length - 1; i++)
+    for (let j = 0; j < outer.length; j++) {
+      const k = (j + 1) % outer.length;
+      const a0 = [inner[i][j][0], inner[i][j][1], zsI[i]];
+      const b0 = [inner[i][k][0], inner[i][k][1], zsI[i]];
+      const a1 = [inner[i + 1][j][0], inner[i + 1][j][1], zsI[i + 1]];
+      const b1 = [inner[i + 1][k][0], inner[i + 1][k][1], zsI[i + 1]];
+      let p = G.makePoly([a0, b1, b0]); if (p) polys.push(p);
+      p = G.makePoly([a0, a1, b1]); if (p) polys.push(p);
+    }
+  // outer skin, normals outward
+  for (let j = 0; j < outer.length; j++) {
+    const k = (j + 1) % outer.length;
+    const p = G.makePoly([[outer[j][0], outer[j][1], H - BLOAT], [outer[k][0], outer[k][1], H - BLOAT],
+                          [outer[k][0], outer[k][1], H + lipH], [outer[j][0], outer[j][1], H + lipH]]);
+    if (p) polys.push(p);
+  }
+  // caps: bottom (down) and the flat top rim (up)
+  for (const [z, ring2, up] of [[H - BLOAT, inner[0], false],
+                                [H + lipH, inner[inner.length - 1], true]]) {
+    const { pts, tris } = G.triangulateRing(outer, ring2);
+    for (const t of tris) {
+      const vs = t.map((ix) => [pts[ix][0], pts[ix][1], z]);
+      const p = G.makePoly(up ? vs : [vs[2], vs[1], vs[0]]);
+      if (p) polys.push(p);
+    }
+  }
+  return polys;
+}
+
 /* ---------- the bin ------------------------------------------------------- */
 
 function buildBin(G, cfg) {
@@ -191,8 +256,15 @@ function buildBin(G, cfg) {
     }
   }
 
+  /* stacking lip */
+  const hwO = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
+  const hdO = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
+  const lipH = c.lip ? lipHeight(c.lipMin) : 0;
+  if (c.lip) polys.push(...lipRing(G, c, hwO, hdO, H, n));
+
   const meta = {
     u: c.u, v: c.v, hUnits: c.hUnits, H,
+    lipH, totalH: H + lipH,          // H is the stacking pitch; totalH is what it occupies
     W: (c.u - 1) * SPEC.pitch + 2 * (SPEC.half - c.shrink),
     D: (c.v - 1) * SPEC.pitch + 2 * (SPEC.half - c.shrink),
     footH: SPEC.footH, floorZ, cells: c.u * c.v,
@@ -201,5 +273,5 @@ function buildBin(G, cfg) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { buildBin, roundRect, outlineAt, SPEC, BIN_DEFAULTS };
+  module.exports = { buildBin, roundRect, outlineAt, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP, lipHeight };
 }

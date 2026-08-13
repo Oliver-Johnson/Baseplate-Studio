@@ -51,13 +51,15 @@ for (const cs of CASES) {
   // expected footprint straight from the spec, independent of the builder
   const expW = (cs.u - 1) * 42 + 41.5, expD = (cs.v - 1) * 42 + 41.5;
   const wOk = Math.abs((xmax - xmin) - expW) < 0.02 && Math.abs((ymax - ymin) - expD) < 0.02;
-  const hOk = Math.abs(zmax - cs.hUnits * 7) < 0.02 && zmin > -0.001;
+  const hOk = Math.abs(zmax - r.meta.totalH) < 0.02 &&
+              Math.abs(r.meta.totalH - (cs.hUnits * 7 + r.meta.lipH)) < 0.001 &&
+              zmin > -0.001;
 
   console.log(`${cs.name.padEnd(14)} ${String(tris.length).padStart(6)}  ${dims.padEnd(20)} ` +
               `${zmin.toFixed(3).padStart(6)} ${zmax.toFixed(3).padStart(6)}  ` +
               `${pct.toFixed(0).padStart(3)}%${ok ? '' : ' OVER BASELINE'}` +
               `${wOk ? '' : '  FOOTPRINT MISMATCH exp ' + expW + 'x' + expD}` +
-              `${hOk ? '' : '  HEIGHT MISMATCH exp ' + cs.hUnits * 7}`);
+              `${hOk ? '' : '  HEIGHT MISMATCH exp ' + (cs.hUnits * 7 + r.meta.lipH)}`);
   if (!ok || !wOk || !hOk) bad++;
 
   fs.writeFileSync(path.join(outDir, `bin-${cs.name}.stl`),
@@ -99,6 +101,32 @@ console.log('   z    half-width  (exp)    corner reach  (exp)');
                 `${flatOk && radOk ? 'ok' : 'MISMATCH'}`);
     if (!(flatOk && radOk)) bad++;
   }
+}
+
+/* stacking: does a spec foot fit the lip? The lip's inner surface is defined by an
+   inset from the bin's outer outline; the foot comes from the published spec. Both
+   share corner-arc centre 17.00, so one number covers flats and corners alike. */
+console.log('\nstacking clearance — spec foot inside the lip above it:');
+console.log("   z'    lip inner   foot half   clearance");
+{
+  const { LIP_TABLE } = require('../src/bins/bin.js');
+  const steps = LIP_TABLE || [[0, 2.70], [0.8, 1.90], [2.6, 1.90]];
+  let worst = Infinity;
+  for (const [z, t] of steps) {
+    const lipInner = SPEC.half - t;
+    let fh = SPEC.prof[SPEC.prof.length - 1][1];
+    for (let k = 0; k < SPEC.prof.length - 1; k++) {
+      const [z0, h0] = SPEC.prof[k], [z1, h1] = SPEC.prof[k + 1];
+      if (z >= z0 && z <= z1) { fh = h0 + (h1 - h0) * (z1 > z0 ? (z - z0) / (z1 - z0) : 0); break; }
+    }
+    const clr = lipInner - fh;
+    worst = Math.min(worst, clr);
+    console.log(`  ${z.toFixed(2).padStart(4)}   ${lipInner.toFixed(2).padStart(9)}   ` +
+                `${fh.toFixed(2).padStart(9)}   ${clr.toFixed(3).padStart(9)}` +
+                `${Math.abs(clr - 0.25) < 0.001 ? '  ok' : '  OFF SPEC'}`);
+    if (Math.abs(clr - 0.25) > 0.001) bad++;
+  }
+  console.log(`  uniform on flats and corners (both outlines share centre ${SPEC.centre.toFixed(2)})`);
 }
 
 /* independent check: the foot outline must share the spec corner-arc centre */
