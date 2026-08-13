@@ -1,0 +1,136 @@
+#!/usr/bin/env node
+/* Measures the real clearance between a spec Gridfinity bin foot and our baseplate socket.
+ *
+ * The bin outline here is derived ONLY from the published Gridfinity spec — it never
+ * consults src/core.js. That independence is the point: deriving the bin from our own
+ * socket would make any shared error invisible.
+ *
+ * Published spec (42 mm pitch):
+ *   footprint 41.5 mm square at the widest, corner fillet r = 3.75 mm
+ *   base profile from the bottom: 35.6 -> 0.8 mm @45deg -> 37.2, 1.8 mm vertical,
+ *   then 2.15 mm @45deg -> 41.5.  Total base height 0.8 + 1.8 + 2.15 = 4.75 mm.
+ *
+ * Both outlines are rounded squares, so each is fully described at a given z by
+ * (half-width, corner radius). The corner-arc CENTRE sits at (half - r); when the two
+ * shapes disagree on that centre, clearance stops being uniform around the perimeter.
+ *
+ * Usage: node test/fit-check.js
+ */
+'use strict';
+
+const PITCH = 42, HALF = PITCH / 2;
+
+/* ---- spec bin (independent of our code) --------------------------------- */
+const BIN_R_MAX = 3.75, BIN_HALF_MAX = 41.5 / 2;      // 20.75
+const BIN_CENTRE = BIN_HALF_MAX - BIN_R_MAX;          // 17.00
+function binAt(z) {
+  let half;
+  if (z <= 0) half = 35.6 / 2;                        // 17.80
+  else if (z < 0.8) half = 35.6 / 2 + z;              // 45deg chamfer
+  else if (z < 2.6) half = 37.2 / 2;                  // 18.60 vertical
+  else if (z < 4.75) half = 37.2 / 2 + (z - 2.6);     // 45deg chamfer
+  else half = BIN_HALF_MAX;
+  return { half, r: half - BIN_CENTRE };
+}
+
+/* ---- our socket, replicating src/core.js buildPiece + socketCutter ------- */
+const TOP_CUTOFF = 0.4, D_MID = 2.15, D_BOT = 2.85, PLATE_H = 4.25;
+const ZS = [-1, 0, 0.7, 2.5, PLATE_H, PLATE_H + 1.5];
+const DS = [D_BOT, D_BOT, D_MID, D_MID, TOP_CUTOFF, TOP_CUTOFF];
+function dAt(z) {
+  if (z <= ZS[1]) return DS[1];
+  for (let i = 1; i < ZS.length - 1; i++) {
+    if (z <= ZS[i + 1]) {
+      const t = (z - ZS[i]) / (ZS[i + 1] - ZS[i]);
+      return DS[i] + t * (DS[i + 1] - DS[i]);
+    }
+  }
+  return DS[DS.length - 1];
+}
+// current law: r = rTop - (d - ds_last)   -> centre = HALF - rTop - ds_last
+// matched law: r = rTop - d               -> centre = HALF - rTop
+function socketAt(z, rTop, matched) {
+  const d = dAt(z);
+  const half = HALF - d;
+  const r = matched ? rTop - d : rTop - (d - TOP_CUTOFF);
+  return { half, r: Math.max(0.3, Math.min(r, half - 0.01)) };
+}
+
+/* ---- outlines ----------------------------------------------------------- */
+// faithful to roundedSquareRing: n points per corner, angles a0 + 90*k/n, k in [0,n)
+function ring(half, r, n) {
+  r = Math.max(0.3, Math.min(r, half - 0.01));
+  const pts = [];
+  for (const [ox, oy, a0] of [[half - r, half - r, 0], [-half + r, half - r, 90],
+                              [-half + r, -half + r, 180], [half - r, -half + r, 270]])
+    for (let k = 0; k < n; k++) {
+      const a = (a0 + 90 * k / n) * Math.PI / 180;
+      pts.push([ox + r * Math.cos(a), oy + r * Math.sin(a)]);
+    }
+  return pts;
+}
+
+function distToSeg(p, a, b) {
+  const vx = b[0] - a[0], vy = b[1] - a[1];
+  const wx = p[0] - a[0], wy = p[1] - a[1];
+  const L = vx * vx + vy * vy;
+  let t = L > 0 ? (wx * vx + wy * vy) / L : 0;
+  t = Math.max(0, Math.min(1, t));
+  const dx = a[0] + t * vx - p[0], dy = a[1] + t * vy - p[1];
+  return Math.hypot(dx, dy);
+}
+function minDist(p, poly) {
+  let m = Infinity;
+  for (let i = 0; i < poly.length; i++)
+    m = Math.min(m, distToSeg(p, poly[i], poly[(i + 1) % poly.length]));
+  return m;
+}
+
+/* ---- measure ------------------------------------------------------------ */
+// isCorner: a bin sample lies in a corner quadrant if both |x|,|y| exceed the centre
+function measure(z, rTop, matched, segs) {
+  const b = binAt(z), s = socketAt(z, rTop, matched);
+  const bin = ring(b.half, b.r, 256);
+  const sock = ring(s.half, s.r, segs);
+  let flat = Infinity, corner = Infinity;
+  for (const p of bin) {
+    const d = minDist(p, sock);
+    if (Math.abs(p[0]) > BIN_CENTRE && Math.abs(p[1]) > BIN_CENTRE) corner = Math.min(corner, d);
+    else flat = Math.min(flat, d);
+  }
+  return { flat, corner, binHalf: b.half, binR: b.r, sockHalf: s.half, sockR: s.r,
+           binCentre: b.half - b.r, sockCentre: s.half - s.r };
+}
+
+const ZS_TEST = [0.05, 0.4, 0.8, 1.5, 2.5, 2.6, 3.4, 4.2];
+function report(title, rTop, matched, segs) {
+  console.log('\n' + title);
+  console.log('   z     bin(half/r)     socket(half/r)   centres      flat gap  corner gap');
+  let worstC = Infinity, worstF = Infinity;
+  for (const z of ZS_TEST) {
+    const m = measure(z, rTop, matched, segs);
+    worstC = Math.min(worstC, m.corner); worstF = Math.min(worstF, m.flat);
+    console.log(
+      `  ${z.toFixed(2).padStart(4)}  ` +
+      `${m.binHalf.toFixed(2)}/${m.binR.toFixed(2)}`.padStart(13) + '  ' +
+      `${m.sockHalf.toFixed(2)}/${m.sockR.toFixed(2)}`.padStart(14) + '  ' +
+      `${m.binCentre.toFixed(2)}/${m.sockCentre.toFixed(2)}`.padStart(11) + '  ' +
+      `${m.flat.toFixed(3)}`.padStart(9) + '  ' + `${m.corner.toFixed(3)}`.padStart(10));
+  }
+  console.log(`  worst:  flat ${worstF.toFixed(3)} mm   corner ${worstC.toFixed(3)} mm`);
+  return { worstF, worstC };
+}
+
+console.log('Gridfinity spec bin foot vs Drawerforge baseplate socket');
+console.log('bin corner-arc centre (spec): ' + BIN_CENTRE.toFixed(2) + ' mm');
+
+const a = report('A. shipped: socketRadius 4.0, r = rTop - (d - 0.4), arcSegs 6', 4.0, false, 6);
+const b = report('B. shipped law, ideal arcs (arcSegs 256) — isolates faceting', 4.0, false, 256);
+const c = report('C. socketRadius 3.6, shipped law, arcSegs 6 — centres matched', 3.6, false, 6);
+const d = report('D. socketRadius 3.6, ideal arcs — centres matched, no faceting', 3.6, false, 256);
+
+console.log('\nsummary');
+console.log(`  shipped            corner ${a.worstC.toFixed(3)}  flat ${a.worstF.toFixed(3)}  ratio ${(a.worstF / a.worstC).toFixed(1)}x`);
+console.log(`  faceting costs     ${(b.worstC - a.worstC).toFixed(3)} mm at the corners`);
+console.log(`  centres matched    corner ${c.worstC.toFixed(3)}  flat ${c.worstF.toFixed(3)}  ratio ${(c.worstF / c.worstC).toFixed(1)}x`);
+console.log(`  matched, no facet  corner ${d.worstC.toFixed(3)}  flat ${d.worstF.toFixed(3)}`);
