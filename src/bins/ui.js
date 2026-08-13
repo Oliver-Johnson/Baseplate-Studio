@@ -35,14 +35,15 @@ const EDGES = ['f', 'b', 'l', 'r'];
 const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
                          floorT: b.floorT, divX: b.divX, divY: b.divY,
                          solid: b.solid, edges: b.edges, base: b.base,
-                         arcSegs: state.arcSegs });
+                         scoop: b.scoop, label: b.label, arcSegs: state.arcSegs });
 const edgeSig = (b) => EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1)).join(',');
 const allFullEdges = (b) => EDGES.every((k) => !b.edges || b.edges[k] === undefined || b.edges[k] >= 1);
 const typeKey = (b) => `${b.u}x${b.v}x${b.hUnits}` +
   (b.solid ? '-solid' : `-w${b.wall}-f${b.floorT}` +
    (b.divX || b.divY ? `-d${b.divX}.${b.divY}` : '') +
    (allFullEdges(b) ? '' : `-e${edgeSig(b)}`)) +
-  ((b.base && b.base !== 'standard') ? `-${b.base}` : '');
+  ((b.base && b.base !== 'standard') ? `-${b.base}` : '') +
+  (b.scoop ? `-s${b.scoop}` : '') + (b.label ? `-L${b.label}` : '');
 
 function occupancyOf(k) {
   const g = grid();
@@ -197,6 +198,7 @@ function readControls() {
     divX: Math.max(0, int('divX', 0)), divY: Math.max(0, int('divY', 0)),
     solid: $('solid').checked,
     base: $('baseStyle').value,
+    scoop: Math.max(0, num('scoop', 0)), label: Math.max(0, num('label', 0)),
     edges: { f: parseFloat($('edgeF').value), b: parseFloat($('edgeB').value),
              l: parseFloat($('edgeL').value), r: parseFloat($('edgeR').value) },
   };
@@ -214,6 +216,8 @@ function readControls() {
   $('edgeRowA').style.display = t.solid ? 'none' : '';
   $('edgeRowB').style.display = t.solid ? 'none' : '';
   $('edgeHint').style.display = t.solid ? 'none' : '';
+  $('featureRow').style.display = t.solid ? 'none' : '';
+  $('featureHint').style.display = t.solid ? 'none' : '';
   $('presetTray').style.display = t.solid ? 'none' : '';
   $('selActions').style.display = selected >= 0 ? '' : 'none';
   const sel = selected >= 0 ? B()[selected] : null;
@@ -234,6 +238,7 @@ function writeControls(src) {
   $('divX').value = src.divX; $('divY').value = src.divY;
   $('solid').checked = !!src.solid;
   $('baseStyle').value = src.base || 'standard';
+  $('scoop').value = src.scoop || 0; $('label').value = src.label || 0;
   for (const [k, id] of [['f', 'edgeF'], ['b', 'edgeB'], ['l', 'edgeL'], ['r', 'edgeR']])
     $(id).value = String(src.edges && src.edges[k] !== undefined ? src.edges[k] : 1);
 }
@@ -253,12 +258,14 @@ function drawLayerTabs() {
   });
 }
 $('addLayer').addEventListener('click', () => {
+  pushUndo();
   layers.push({ bins: [] });
   cur = layers.length - 1; selected = -1;
   readControls(); drawLayerTabs(); drawMap(); refresh();
 });
 $('delLayer').addEventListener('click', () => {
   if (layers.length < 2) return;
+  pushUndo();
   layers.splice(cur, 1);
   cur = Math.min(cur, layers.length - 1); selected = -1;
   readControls(); drawLayerTabs(); drawMap(); refresh();
@@ -369,6 +376,7 @@ function initMap() {
 
     if (handle && selected >= 0 && B()[selected]) {      // resize from a corner
       const b = B()[selected];
+      pushUndo();
       drag = { mode: 'resize', idx: selected,
                ax: handle[0] === 'l' ? b.x + b.u - 1 : b.x,
                ay: handle[1] === 'f' ? b.y + b.v - 1 : b.y,
@@ -382,6 +390,7 @@ function initMap() {
       const b = B()[hit];                                // release is just a select
       selected = hit;
       writeControls(b);
+      pushUndo();
       drag = { mode: 'move', idx: hit, dx: c.x - b.x, dy: c.y - b.y, moved: false };
       if (svg.setPointerCapture) svg.setPointerCapture(e.pointerId);
       readControls(); drawMap(); refresh();
@@ -432,7 +441,7 @@ function initMap() {
       if (canPlace(x, y, u, v, -1)) {
         B().push({ x, y, u, v, hUnits: state.hUnits, wall: state.wall,
                    floorT: state.floorT, divX: state.divX, divY: state.divY,
-                   solid: state.solid, base: state.base,
+                   solid: state.solid, base: state.base, scoop: state.scoop, label: state.label,
                    edges: Object.assign({}, state.edges) });
         selected = B().length - 1;
         writeControls(B()[selected]);
@@ -446,6 +455,7 @@ function initMap() {
 
 /* ---------- actions ------------------------------------------------------- */
 $('fillRest').addEventListener('click', () => {
+  pushUndo();
   const g = grid();
   selected = -1; readControls();
   const sup = support(cur);
@@ -459,7 +469,7 @@ $('fillRest').addEventListener('click', () => {
         if (cur > 0) { const st = seat(probe, cur); if (!st.flat || !st.solidBelow) continue; }
         B().push({ x, y, u, v, hUnits: state.hUnits, wall: state.wall,
                    floorT: state.floorT, divX: state.divX, divY: state.divY,
-                   solid: state.solid, base: state.base,
+                   solid: state.solid, base: state.base, scoop: state.scoop, label: state.label,
                  edges: Object.assign({}, state.edges) });
         break;
       }
@@ -467,11 +477,13 @@ $('fillRest').addEventListener('click', () => {
   drawLayerTabs(); drawMap(); refresh();
 });
 $('clearAll').addEventListener('click', () => {
+  pushUndo();
   layers[cur].bins = []; selected = -1;
   readControls(); drawLayerTabs(); drawMap(); refresh();
 });
 $('delBin').addEventListener('click', () => {
   if (selected < 0) return;
+  pushUndo();
   B().splice(selected, 1); selected = -1;
   readControls(); drawLayerTabs(); drawMap(); refresh();
 });
@@ -479,6 +491,7 @@ $('splitFit').addEventListener('click', () => {
   if (selected < 0) return;
   const b = B()[selected], sp = describeSplit(b.u, b.v);
   if (!sp) return;
+  pushUndo();
   const src = Object.assign({}, b);
   B().splice(selected, 1);
   let oy = src.y;
@@ -496,13 +509,53 @@ $('splitFit').addEventListener('click', () => {
 });
 $('applyAll').addEventListener('click', () => {
   if (selected < 0) return;
+  pushUndo();
   const s = B()[selected];
   for (const b of B()) Object.assign(b, {
     hUnits: s.hUnits, wall: s.wall, floorT: s.floorT,
-    divX: s.divX, divY: s.divY, solid: s.solid, base: s.base,
+    divX: s.divX, divY: s.divY, solid: s.solid, base: s.base, scoop: s.scoop, label: s.label,
     edges: Object.assign({}, s.edges) });
   drawMap(); refresh();
 });
+
+/* ---------- undo ----------------------------------------------------------
+   Snapshots of the layout only — drawer and printer settings are not part of it,
+   so undo never surprises you by moving the walls of the room. Pushed before a
+   change, not after, and deduplicated so a drag that ends where it started is not
+   an undo step. */
+const undoStack = [], redoStack = [];
+const UNDO_MAX = 60;
+const snapshot = () => JSON.stringify({ layers, cur });
+function pushUndo() {
+  const snap = snapshot();
+  if (undoStack.length && undoStack[undoStack.length - 1] === snap) return;
+  undoStack.push(snap);
+  if (undoStack.length > UNDO_MAX) undoStack.shift();
+  redoStack.length = 0;
+  updateUndoButtons();
+}
+function applySnap(snap) {
+  const o = JSON.parse(snap);
+  layers = o.layers; cur = Math.min(o.cur, layers.length - 1);
+  selected = -1;
+  readControls(); drawLayerTabs(); drawMap(); refresh();
+}
+function undo() {
+  if (!undoStack.length) return;
+  redoStack.push(snapshot());
+  applySnap(undoStack.pop());
+  updateUndoButtons();
+}
+function redo() {
+  if (!redoStack.length) return;
+  undoStack.push(snapshot());
+  applySnap(redoStack.pop());
+  updateUndoButtons();
+}
+function updateUndoButtons() {
+  $('undoBtn').disabled = !undoStack.length;
+  $('redoBtn').disabled = !redoStack.length;
+}
 
 /* ---------- splitting an oversized bin ------------------------------------
    Rotating on the bed never helps: a rectangle's bounding box is smallest at 0 or
@@ -943,7 +996,8 @@ const KEYS = { w: 'drawerW', d: 'drawerD', dh: 'drawerH', ph: 'plateH' };
 const packLayer = (L) => L.bins.map((b) =>
   [b.x, b.y, b.u, b.v, b.hUnits, b.wall, b.floorT, b.divX, b.divY, b.solid ? 1 : 0]
     .concat(EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1)))
-    .concat([['standard', 'lowlip', 'low'].indexOf(b.base || 'standard')]).join('.')).join('_');
+    .concat([['standard', 'lowlip', 'low'].indexOf(b.base || 'standard'), b.scoop || 0, b.label || 0])
+    .join('.')).join('_');
 const packAll = () => layers.map(packLayer).join('~');
 function unpackAll(s) {
   return (s || '').split('~').map((ls) => ({
@@ -954,7 +1008,8 @@ function unpackAll(s) {
       const bs = ['standard', 'lowlip', 'low'][p[14]] || 'standard';
       return { x: p[0], y: p[1], u: p[2], v: p[3], hUnits: p[4],
                wall: p[5], floorT: p[6], divX: p[7], divY: p[8], solid: !!p[9],
-               edges: ed, base: bs };
+               edges: ed, base: bs,
+               scoop: isFinite(p[15]) ? p[15] : 0, label: isFinite(p[16]) ? p[16] : 0 };
     }),
   }));
 }
@@ -1004,7 +1059,7 @@ const schedule = () => { clearTimeout(timer); timer = setTimeout(() => {
 for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'bedW', 'bedD', 'gap',
                   'u', 'v', 'hUnits',
                   'wall', 'floorT', 'divX', 'divY', 'solid', 'arcSegs',
-                  'edgeF', 'edgeB', 'edgeL', 'edgeR', 'baseStyle'])
+                  'edgeF', 'edgeB', 'edgeL', 'edgeR', 'baseStyle', 'scoop', 'label'])
   $(id).addEventListener('input', schedule);
 for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR', 'baseStyle'])
   $(id).addEventListener('change', schedule);
@@ -1018,6 +1073,56 @@ $('arcSegs').addEventListener('change', schedule);
 for (const s of document.querySelectorAll('section.p h2'))
   s.addEventListener('click', () => s.parentElement.classList.toggle('closed'));
 
+$('undoBtn').addEventListener('click', undo);
+$('redoBtn').addEventListener('click', redo);
+$('dupBtn').addEventListener('click', duplicateSelected);
+
+function duplicateSelected() {
+  if (selected < 0) return;
+  const src = B()[selected];
+  // first free spot scanning right then up from the original
+  const g = grid();
+  for (let dy = 0; dy < g.ny; dy++)
+    for (let dx = 0; dx < g.nx; dx++) {
+      const nx = src.x + dx, ny = src.y + dy;
+      if (!dx && !dy) continue;
+      if (!canPlace(nx, ny, src.u, src.v, -1)) continue;
+      pushUndo();
+      B().push(Object.assign({}, src, { x: nx, y: ny, edges: Object.assign({}, src.edges) }));
+      selected = B().length - 1;
+      readControls(); drawLayerTabs(); drawMap(); refresh();
+      return;
+    }
+}
+
+document.addEventListener('keydown', (e) => {
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
+  if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateSelected(); return; }
+  if (selected < 0) return;
+  const b = B()[selected];
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    e.preventDefault(); pushUndo();
+    B().splice(selected, 1); selected = -1;
+    readControls(); drawLayerTabs(); drawMap(); refresh(); return;
+  }
+  const nudge = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key];
+  if (nudge) {
+    e.preventDefault();
+    const [dx, dy] = nudge;
+    if (e.shiftKey) {                       // shift-arrow grows or shrinks instead
+      const nu = Math.max(1, b.u + dx), nv = Math.max(1, b.v + dy);
+      if (canPlace(b.x, b.y, nu, nv, selected)) { pushUndo(); b.u = nu; b.v = nv; }
+    } else if (canPlace(b.x + dx, b.y + dy, b.u, b.v, selected)) {
+      pushUndo(); b.x += dx; b.y += dy;
+    }
+    writeControls(b); readControls(); drawMap(); refresh();
+  }
+});
+
 loadFromHash();
 readControls();
 initThree();
@@ -1025,3 +1130,4 @@ initMap();
 drawLayerTabs();
 drawMap();
 refresh();
+updateUndoButtons();

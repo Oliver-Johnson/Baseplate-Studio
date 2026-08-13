@@ -46,7 +46,41 @@ const BIN_DEFAULTS = {
   edges: null,          // {f,b,l,r} wall heights as a fraction; 0 = open, 1 = full
   base: 'standard',     // 'standard' | 'lowlip' | 'low' — see BASE_STYLES
   lipMin: 0.55,         // flat width of the lip's top rim
+  scoop: 0,             // radius of the front scoop fillet, 0 = none
+  label: 0,             // depth of the label shelf at the back, 0 = none
+  labelT: 1.2,          // thickness of the label shelf
 };
+
+/* Scoop and label shelf.
+ *
+ * Both are ADDED prisms, never cutters. ENGINE.md's rule is that anything which
+ * looks like a subtraction here can be built additively instead, which keeps the
+ * bins engine free of CSG entirely.
+ *
+ * The scoop fills the internal corner between the cavity floor and the front wall
+ * with a quarter-round, so contents can be swept up and out.
+ *
+ * The label shelf projects inward from the top of the back wall. Its underside runs
+ * at 45 degrees back to the wall so every layer overhangs the one below it by its
+ * own height — printable without support.
+ */
+function scoopPrism(G, hwI, hdI, floorZ, r, segs) {
+  const y0 = -hdI, prof = [[y0, floorZ], [y0 + r, floorZ]];
+  for (let k = 1; k <= segs; k++) {                 // arc from floor up to the wall
+    const a = (k / segs) * Math.PI / 2;
+    prof.push([y0 + r - r * Math.sin(a), floorZ + r - r * Math.cos(a)]);
+  }
+  prof.push([y0 - BLOAT, floorZ + r], [y0 - BLOAT, floorZ - BLOAT], [y0, floorZ - BLOAT]);
+  return G.profilePrism(prof, -hwI - BLOAT, hwI + BLOAT, (u, v) => [v, u]);
+}
+function labelPrism(G, hwI, hdI, H, depth, t) {
+  const yb = hdI;
+  const prof = [
+    [yb + BLOAT, H - t - depth], [yb + BLOAT, H], [yb - depth, H],
+    [yb - depth, H - t],
+  ];
+  return G.profilePrism(prof, -hwI - BLOAT, hwI + BLOAT, (u, v) => [v, u]);
+}
 
 /* Stacking lip.
  *
@@ -331,8 +365,21 @@ function buildBin(G, cfg) {
     const zTop = edgeHeights(outer, hw, hd, SPEC.r, c.edges, floorZ, H);
     polys.push(...wallRing(G, outer, inner, zBase, zTop));
 
-    /* dividers — separate overlapping shells, never unioned */
+    /* scoop and label shelf — added shells, and only where there is a wall to
+       attach them to (an open front has no corner to fill). */
+    const eF = c.edges && c.edges.f !== undefined ? c.edges.f : 1;
+    const eB = c.edges && c.edges.b !== undefined ? c.edges.b : 1;
     const iw = hw - c.wall, id = hd - c.wall;
+    if (c.scoop > 0.05 && eF > 0) {
+      const r = Math.min(c.scoop, id * 0.9, (H - floorZ) * 0.9);
+      if (r > 0.05) polys.push(...scoopPrism(G, iw, id, floorZ, r, Math.max(4, n)));
+    }
+    if (c.label > 0.05 && eB > 0.99) {
+      const d = Math.min(c.label, id * 0.8);
+      if (d > 0.05) polys.push(...labelPrism(G, iw, id, H, d, c.labelT));
+    }
+
+    /* dividers — separate overlapping shells, never unioned */
     const t = c.wall / 2;
     for (let k = 1; k <= c.divX; k++) {
       const x = -iw + (2 * iw) * k / (c.divX + 1);

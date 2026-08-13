@@ -76,6 +76,12 @@
       <button class="ghost" id="fillRest">Fill the rest with <span id="fillSize">1×1</span></button>
       <button class="ghost" id="clearAll">Clear all</button>
     </div>
+    <div class="row3" style="margin-top:8px">
+      <button class="ghost" id="undoBtn">Undo</button>
+      <button class="ghost" id="redoBtn">Redo</button>
+      <button class="ghost" id="dupBtn">Duplicate</button>
+    </div>
+    <div class="hint">Keys: <b>Del</b> removes the selected bin, <b>arrows</b> nudge it, <b>shift+arrows</b> resize it, <b>Ctrl+D</b> duplicates, <b>Ctrl+Z</b> / <b>Ctrl+Shift+Z</b> undo and redo.</div>
   </div>
 </section>
 
@@ -125,6 +131,11 @@
         <option value="0.5">Half</option><option value="0.25">Low lip</option>
         <option value="0">Open</option></select></label>
     </div>
+    <div class="row" id="featureRow">
+      <label class="f"><b>Front scoop (mm)</b><input id="scoop" type="number" step="1" min="0" value="0"></label>
+      <label class="f"><b>Label shelf (mm)</b><input id="label" type="number" step="1" min="0" value="0"></label>
+    </div>
+    <div class="hint" id="featureHint">A scoop fills the front inside corner with a curve so you can sweep contents out — try 8 mm. The label shelf juts in from the top of the back wall with a 45° underside, so it prints without support; 12 mm suits a printed label. Both need their wall to exist.</div>
     <div class="hint" id="edgeHint">Front is the front of the drawer, matching the map. Corner posts stay full height so the side walls keep their ends. Lowering any wall removes the stacking lip — nothing can sit on it.</div>
     <button class="ghost" id="presetTray" style="margin-top:8px">Make this a flat tray / lid</button>
     <label class="f"><b>Corner smoothness</b>
