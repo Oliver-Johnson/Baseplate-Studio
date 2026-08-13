@@ -263,6 +263,14 @@ function drawMap() {
   const W = g.nx * S, H = g.ny * S;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  // Size the element to the drawing rather than letting CSS stretch it: a box wider
+  // than its viewBox aspect gets letterboxed, and that dead margin is unclickable
+  // space the pointer maths then has to compensate for. Fit it here and there is none.
+  const availW = Math.max(140, ($('fillwrap').clientWidth || 620) - 28);
+  const availH = Math.min(560, (window.innerHeight || 900) * 0.62);
+  const sc = Math.min(availW / W, availH / H);
+  svg.setAttribute('width', Math.round(W * sc));
+  svg.setAttribute('height', Math.round(H * sc));
   while (svg.firstChild) svg.removeChild(svg.firstChild);
   const el = (n, a) => { const e = document.createElementNS(SVGNS, n);
     for (const k in a) e.setAttribute(k, a[k]); return e; };
@@ -322,12 +330,28 @@ function drawMap() {
       x: x * S + 1, y: sy(y, v) + 1, width: u * S - 2, height: v * S - 2, rx: 5 }));
   }
 }
+/* Screen point -> grid cell.
+   Goes through the SVG's own screen matrix rather than measuring the element box.
+   preserveAspectRatio letterboxes the drawing inside that box whenever the element's
+   aspect ratio differs from the viewBox's, so box-relative arithmetic is off by the
+   dead margin — and the margin changes as the element resizes. getScreenCTM accounts
+   for the viewBox, the letterboxing, page zoom and scroll together. */
 function cellFromEvent(e) {
-  const g = grid(), r = $('fillmap').getBoundingClientRect();
-  const x = Math.floor((e.clientX - r.left) / r.width * g.nx);
-  const yTop = Math.floor((e.clientY - r.top) / r.height * g.ny);
-  return { x: Math.max(0, Math.min(g.nx - 1, x)),
-           y: Math.max(0, Math.min(g.ny - 1, g.ny - 1 - yTop)) };
+  const g = grid(), svg = $('fillmap');
+  const m = svg.getScreenCTM && svg.getScreenCTM();
+  let vx, vy;
+  if (m) {
+    const p = svg.createSVGPoint ? svg.createSVGPoint() : new DOMPoint();
+    p.x = e.clientX; p.y = e.clientY;
+    const loc = p.matrixTransform(m.inverse());
+    vx = loc.x; vy = loc.y;
+  } else {                                    // detached or display:none
+    const r = svg.getBoundingClientRect();
+    vx = (e.clientX - r.left) / (r.width || 1) * g.nx * S;
+    vy = (e.clientY - r.top) / (r.height || 1) * g.ny * S;
+  }
+  return { x: Math.max(0, Math.min(g.nx - 1, Math.floor(vx / S))),
+           y: Math.max(0, Math.min(g.ny - 1, g.ny - 1 - Math.floor(vy / S))) };
 }
 function initMap() {
   const svg = $('fillmap');
@@ -670,7 +694,7 @@ function initThree() {
     dist = Math.min(4000, Math.max(80, dist * (1 + Math.sign(e.deltaY) * 0.12)));
     render();
   }, { passive: false });
-  window.addEventListener('resize', render);
+  window.addEventListener('resize', () => { drawMap(); render(); });
 }
 function geoOf(b) {
   const gm = geomFor(b);

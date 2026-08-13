@@ -101,7 +101,7 @@ footer .mono{font-family:var(--mono);font-size:11px}
 
 /* ---- bins: drawer fill map ---- */
 #fillwrap{padding:10px 14px 14px;overflow-x:auto}
-#fillmap{display:block;margin:0 auto;width:100%;height:auto;max-height:min(62vh,560px);touch-action:none;cursor:crosshair}
+#fillmap{display:block;margin:0 auto;max-width:100%;touch-action:none;cursor:crosshair}
 #fillmap .cell{fill:var(--panel2);stroke:var(--line);stroke-width:1}
 #fillmap .cell.free:hover{fill:rgba(79,195,232,.14)}
 #fillmap .bin{stroke:var(--cyan);stroke-width:2;fill:rgba(79,195,232,.20);cursor:pointer}
