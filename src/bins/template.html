@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drawerforge Bins — Gridfinity bins sized to your drawer</title>
+<style>
+/*__CSS__*/
+</style>
+</head>
+<body>
+<header>
+  <h1>DRAWER<span class="tm">FORGE</span> <span class="tm" style="opacity:.55">· BINS</span></h1>
+  <p>Gridfinity bins built to the published spec, sized to the drawer you already measured. Pick a footprint and a height; everything else follows.</p>
+  <div class="privacy">runs entirely in your browser — nothing is uploaded, no account, no tracking</div>
+</header>
+<div class="app">
+<div class="rail">
+
+<section class="p" id="s-drawer">
+  <h2><span class="n">01</span> Drawer &amp; grid <span class="caret">▾</span></h2>
+  <div class="body">
+    <div class="row">
+      <label class="f"><b>Drawer width (mm)</b><input id="drawerW" type="number" step="0.5" value="306"></label>
+      <label class="f"><b>Drawer depth (mm)</b><input id="drawerD" type="number" step="0.5" value="380"></label>
+    </div>
+    <div class="row">
+      <label class="f"><b>Usable height (mm)</b><input id="drawerH" type="number" step="0.5" value="93.9"></label>
+      <label class="f"><b>Baseplate height (mm)</b><input id="plateH" type="number" step="0.05" value="4.25"></label>
+    </div>
+    <div class="hint">Usable height is drawer floor to the lowest thing above. Baseplate height is 4.25 mm unless your joint forced a solid floor — the baseplate tool tells you.</div>
+    <div class="mono" id="gridSummary">—</div>
+    <div style="margin-top:8px"><a id="toPlates" class="ghost" href="../">← back to baseplates</a></div>
+  </div>
+</section>
+
+<section class="p" id="s-bin">
+  <h2><span class="n">02</span> Bin <span class="caret">▾</span></h2>
+  <div class="body">
+    <div class="row3">
+      <label class="f"><b>Width (cells)</b><input id="u" type="number" step="1" min="1" value="1"></label>
+      <label class="f"><b>Depth (cells)</b><input id="v" type="number" step="1" min="1" value="1"></label>
+      <label class="f"><b>Height (7 mm units)</b><input id="hUnits" type="number" step="1" min="1" value="3"></label>
+    </div>
+    <div class="hint" id="binSizeHint">—</div>
+    <label class="tog"><input id="solid" type="checkbox"> Solid block (no cavity)</label>
+    <div class="row" id="thickRow">
+      <label class="f"><b>Wall thickness (mm)</b><input id="wall" type="number" step="0.1" value="1.2"></label>
+      <label class="f"><b>Floor thickness (mm)</b><input id="floorT" type="number" step="0.1" value="1.2"></label>
+    </div>
+    <div class="row" id="divRow">
+      <label class="f"><b>Dividers across</b><input id="divX" type="number" step="1" min="0" value="0"></label>
+      <label class="f"><b>Dividers along</b><input id="divY" type="number" step="1" min="0" value="0"></label>
+    </div>
+    <div class="hint">Dividers are counts of walls, not compartments — 1 divider makes 2 compartments. They print as part of the bin, no supports.</div>
+    <label class="f"><b>Corner smoothness</b>
+      <select id="arcSegs">
+        <option value="8">Fast — 8 segments</option>
+        <option value="12" selected>Standard — 12 segments</option>
+        <option value="24">Smooth — 24 segments</option>
+      </select></label>
+  </div>
+</section>
+
+<section class="p" id="s-warn">
+  <h2><span class="n">03</span> Checks <span class="caret">▾</span></h2>
+  <div class="body"><div id="warnings"></div></div>
+</section>
+
+</div>
+<div class="stage">
+
+<div class="stagecard">
+  <h3>This bin</h3>
+  <table class="pieces"><tbody id="specRows"></tbody></table>
+</div>
+
+<div class="stagecard">
+  <h3>Preview</h3>
+  <div id="threewrap"><canvas id="three"></canvas><div id="status"></div><div id="threehint">drag rotate · wheel zoom</div></div>
+</div>
+
+<div class="stagecard">
+  <h3>Export</h3>
+  <button class="act" id="dlStl">Download this bin (.stl)</button>
+  <button class="ghost" id="shareBtn" style="margin-top:8px">Copy settings link</button>
+  <div class="hint">Prints flat as oriented, no supports. Print one before committing to a drawer's worth.</div>
+</div>
+
+</div>
+</div>
+<footer>
+  <div><b>Drawerforge</b> is free and open. Gridfinity was created by <a href="https://www.youtube.com/c/ZackFreedman" rel="noopener">Zack Freedman</a> (Voidstar Lab) as an open standard — these bins follow the published spec, so they fit any spec baseplate.</div>
+  <div style="margin-top:10px">Issues and feature requests <a href="https://github.com/Oliver-Johnson/Baseplate-Studio/issues" rel="noopener">on GitHub</a>. If it saved you time you can <a href="https://ko-fi.com/oliver_johnson" rel="noopener">buy me a coffee</a>.</div>
+  <div class="mono" style="margin-top:8px">All geometry is computed locally in your browser — nothing is uploaded. STL output is mm scale.</div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/*__CORE__*/
+</script>
+<script>
+/*__BIN__*/
+</script>
+<script>
+/*__UI__*/
+</script>
+</body>
+</html>

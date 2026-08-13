@@ -649,6 +649,14 @@ function shareLink() {
   const q = Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
   return location.origin + location.pathname + '#' + q;
 }
+// Hand the drawer across to the bins tool. Only the shared keys travel; the bins
+// tool re-emits anything it doesn't recognise, so a round trip is lossless.
+$('toBins').addEventListener('click', (e) => {
+  e.preventDefault();
+  const H = builds[layout.pieces[0].id] ? builds[layout.pieces[0].id].meta.H : state.plateHeight;
+  const o = { v: 2, w: state.drawerW, d: state.drawerD, ph: H.toFixed(2) };
+  location.href = 'bins/#' + Object.entries(o).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
+});
 $('shareBtn').addEventListener('click', () => {
   const link = shareLink();
   navigator.clipboard.writeText(link).then(

@@ -1,17 +1,17 @@
 #!/usr/bin/env node
-/* Drawerforge build — splices src/template.html + src/core.js + src/ui.js into index.html.
+/* Drawerforge build — splices sources into one self-contained HTML file per tool.
  *
  * The single self-contained HTML file is a deliberate product feature (offline use,
- * trivial hosting), so the sources live apart and the shipped artifact is generated.
+ * trivial hosting), so the sources live apart and the shipped artifacts are generated.
  *
- * Checks that must pass before anything is written (both have caught shipped bugs):
- *   1. syntax  — node --check on each script source
- *   2. id      — every $('id') referenced in ui.js exists as id="..." in the template
- *   3. display — every id hidden with style="display:none" in the template is un-hidden
- *                somewhere in ui.js, or it is unreachable in the UI
+ * Checks that must pass before anything is written (each has caught a shipped bug):
+ *   1. syntax  — node --check on every JS source
+ *   2. id      — every $('id') referenced in a tool's ui.js exists in its template
+ *   3. display — every id hidden with style="display:none" in a template is
+ *                un-hidden somewhere in that tool's ui.js, or it is dead UI
  *
- * Usage:  node build.js            build
- *         node build.js --check    verify index.html is up to date, write nothing
+ * Usage:  node build.js            build every tool
+ *         node build.js --check    verify outputs are up to date, write nothing
  */
 'use strict';
 const fs = require('fs');
@@ -20,11 +20,29 @@ const os = require('os');
 const { execFileSync } = require('child_process');
 
 const ROOT = __dirname;
-const SRC = path.join(ROOT, 'src');
-const OUT = path.join(ROOT, 'index.html');
 const checkOnly = process.argv.includes('--check');
 
-const read = (p) => fs.readFileSync(p, 'utf8');
+/* Each tool: a template with /*__MARKER__* / comments, and a file per marker.
+   CORE and the CSS are shared — one source, both tools, no drift. */
+const TOOLS = [
+  {
+    name: 'baseplates',
+    template: 'src/template.html',
+    out: 'index.html',
+    parts: { CSS: 'src/shared-ui/style.css', CORE: 'src/core.js', UI: 'src/ui.js' },
+    uiPart: 'UI',
+  },
+  {
+    name: 'bins',
+    template: 'src/bins/template.html',
+    out: 'bins/index.html',
+    parts: { CSS: 'src/shared-ui/style.css', CORE: 'src/core.js',
+             BIN: 'src/bins/bin.js', UI: 'src/bins/ui.js' },
+    uiPart: 'UI',
+  },
+];
+
+const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 const fail = (msg, detail) => {
   console.error('\n  BUILD FAILED: ' + msg);
   if (detail) for (const d of detail) console.error('    - ' + d);
@@ -32,82 +50,82 @@ const fail = (msg, detail) => {
   process.exit(1);
 };
 
-const template = read(path.join(SRC, 'template.html'));
-const core = read(path.join(SRC, 'core.js'));
-const ui = read(path.join(SRC, 'ui.js'));
-
 /* ---- 1. syntax ---------------------------------------------------------- */
-// node --check on a temp file; ui.js references core's globals, so check them
-// separately rather than concatenated (undeclared globals are not syntax errors).
-function syntaxCheck(name, source) {
-  const tmp = path.join(os.tmpdir(), `drawerforge-check-${process.pid}-${name}`);
+const syntaxChecked = new Set();
+function syntaxCheck(rel, source) {
+  if (syntaxChecked.has(rel)) return;
+  syntaxChecked.add(rel);
+  const tmp = path.join(os.tmpdir(), `drawerforge-${process.pid}-${rel.replace(/[\\/]/g, '_')}`);
   fs.writeFileSync(tmp, source);
   try {
     execFileSync(process.execPath, ['--check', tmp], { stdio: 'pipe' });
   } catch (e) {
-    fail(`syntax error in src/${name}`, String(e.stderr || e.message).trim().split('\n'));
+    fail(`syntax error in ${rel}`, String(e.stderr || e.message).trim().split('\n'));
   } finally {
     fs.unlinkSync(tmp);
   }
 }
-syntaxCheck('core.js', core);
-syntaxCheck('ui.js', ui);
 
-/* ---- 2. id audit -------------------------------------------------------- */
-// A silent template-patch miss once shipped a null-deref crash to a user.
-const templateIds = new Set();
-for (const m of template.matchAll(/\bid\s*=\s*["']([^"']+)["']/g)) templateIds.add(m[1]);
-
-const referenced = new Map(); // id -> count
-for (const m of ui.matchAll(/\$\(\s*['"]([^'"]+)['"]\s*\)/g)) {
-  referenced.set(m[1], (referenced.get(m[1]) || 0) + 1);
-}
-const missing = [...referenced.keys()].filter((id) => !templateIds.has(id));
-if (missing.length) {
-  fail(
-    `ui.js references ${missing.length} id(s) that do not exist in src/template.html`,
-    missing.map((id) => `$('${id}')  — referenced ${referenced.get(id)}x`)
-  );
-}
-
-/* ---- 3. display-reachability audit -------------------------------------- */
-// An element hidden inline in the template and never un-hidden by script is dead UI.
-// This is how the entire top-insert connector family became unreachable.
-const hiddenIds = [];
-for (const m of template.matchAll(/<[^>]*\bid\s*=\s*["']([^"']+)["'][^>]*>/g)) {
-  if (/style\s*=\s*["'][^"']*display\s*:\s*none/i.test(m[0])) hiddenIds.push(m[1]);
-}
-const unreachable = hiddenIds.filter((id) => {
-  // look for any assignment to this element's display, via $('id').style.display,
-  // a captured variable, or a classList toggle keyed on the id
-  const esc = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return !new RegExp(`['"]${esc}['"]`).test(ui) ||
-    !new RegExp(`['"]${esc}['"][^\\n]*\\)\\s*\\.style\\.display|${esc}[^\\n]*display`).test(ui);
-});
-if (unreachable.length) {
-  fail(
-    `${unreachable.length} element(s) are display:none in the template and never un-hidden by ui.js`,
-    unreachable.map((id) => `#${id} — unreachable in the UI; un-hide it or remove it`)
-  );
-}
-
-/* ---- splice ------------------------------------------------------------- */
 const MARK = (name) => new RegExp(`[ \\t]*\\r?\\n?/\\*__${name}__\\*/[ \\t]*\\r?\\n?`);
-for (const name of ['CORE', 'UI']) {
-  if (!MARK(name).test(template)) fail(`src/template.html is missing the /*__${name}__*/ marker`);
-}
-const out = template.replace(MARK('CORE'), () => core).replace(MARK('UI'), () => ui);
+let stale = 0;
 
-if (checkOnly) {
-  const current = fs.existsSync(OUT) ? read(OUT) : '';
-  if (current !== out) {
-    fail('index.html is out of date with src/ — run `node build.js` and commit the result');
+for (const tool of TOOLS) {
+  const template = read(tool.template);
+  const sources = {};
+  for (const [marker, rel] of Object.entries(tool.parts)) {
+    sources[marker] = read(rel);
+    if (rel.endsWith('.js')) syntaxCheck(rel, sources[marker]);
+    if (!MARK(marker).test(template))
+      fail(`${tool.template} is missing the /*__${marker}__*/ marker`);
   }
-  console.log('  index.html is up to date (' + out.length + ' bytes)');
-  process.exit(0);
+
+  /* ---- 2. id audit ------------------------------------------------------ */
+  const ui = sources[tool.uiPart] || '';
+  const templateIds = new Set();
+  for (const m of template.matchAll(/\bid\s*=\s*["']([^"']+)["']/g)) templateIds.add(m[1]);
+  const referenced = new Map();
+  for (const m of ui.matchAll(/\$\(\s*['"]([^'"]+)['"]\s*\)/g))
+    referenced.set(m[1], (referenced.get(m[1]) || 0) + 1);
+  const missing = [...referenced.keys()].filter((id) => !templateIds.has(id));
+  if (missing.length)
+    fail(`[${tool.name}] ui references ${missing.length} id(s) absent from ${tool.template}`,
+         missing.map((id) => `$('${id}')  — referenced ${referenced.get(id)}x`));
+
+  /* ---- 3. display-reachability audit ------------------------------------ */
+  const hidden = [];
+  for (const m of template.matchAll(/<[^>]*\bid\s*=\s*["']([^"']+)["'][^>]*>/g))
+    if (/style\s*=\s*["'][^"']*display\s*:\s*none/i.test(m[0])) hidden.push(m[1]);
+  const unreachable = hidden.filter((id) => {
+    const esc = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return !new RegExp(`['"]${esc}['"][^\\n]*\\)\\s*\\.style\\.display`).test(ui);
+  });
+  if (unreachable.length)
+    fail(`[${tool.name}] ${unreachable.length} element(s) are display:none and never un-hidden`,
+         unreachable.map((id) => `#${id} — unreachable in the UI; un-hide it or remove it`));
+
+  /* ---- splice ----------------------------------------------------------- */
+  let out = template;
+  for (const marker of Object.keys(tool.parts))
+    out = out.replace(MARK(marker), () => sources[marker]);
+
+  const outPath = path.join(ROOT, tool.out);
+  if (checkOnly) {
+    const current = fs.existsSync(outPath) ? fs.readFileSync(outPath, 'utf8') : '';
+    if (current !== out) {
+      console.error(`  STALE: ${tool.out} does not match src/ — run \`node build.js\``);
+      stale++;
+    } else {
+      console.log(`  ${tool.out} up to date (${out.length} bytes)`);
+    }
+    continue;
+  }
+
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  fs.writeFileSync(outPath, out);
+  console.log(`  built ${tool.out.padEnd(16)} ${String(out.length).padStart(7)} bytes` +
+              `   ids: ${referenced.size} referenced / ${templateIds.size} present`);
 }
 
-fs.writeFileSync(OUT, out);
-console.log(`  built index.html  ${out.length} bytes`);
-console.log(`    core.js  ${core.length}  ui.js  ${ui.length}  template  ${template.length}`);
-console.log(`    ids checked: ${referenced.size} referenced, ${templateIds.size} in template`);
+if (checkOnly && stale) {
+  fail(`${stale} output(s) out of date with src/ — run \`node build.js\` and commit the result`);
+}

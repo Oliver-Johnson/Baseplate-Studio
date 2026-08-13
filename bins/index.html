@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Drawerforge — Gridfinity baseplates cut to your drawer</title>
+<title>Drawerforge Bins — Gridfinity bins sized to your drawer</title>
 <style>
 :root{
   --bg:#171c22; --panel:#1f262e; --panel2:#242c35; --line:#2c353f;
@@ -108,8 +108,8 @@ footer .mono{font-family:var(--mono);font-size:11px}
 </head>
 <body>
 <header>
-  <h1>DRAWER<span class="tm">FORGE</span></h1>
-  <p>Gridfinity baseplates cut to your drawer — measured, split for your printer, joined, and ready to print. Start with the space you have; everything else follows.</p>
+  <h1>DRAWER<span class="tm">FORGE</span> <span class="tm" style="opacity:.55">· BINS</span></h1>
+  <p>Gridfinity bins built to the published spec, sized to the drawer you already measured. Pick a footprint and a height; everything else follows.</p>
   <div class="privacy">runs entirely in your browser — nothing is uploaded, no account, no tracking</div>
 </header>
 <div class="app">
@@ -122,201 +122,78 @@ footer .mono{font-family:var(--mono);font-size:11px}
       <label class="f"><b>Drawer width (mm)</b><input id="drawerW" type="number" step="0.5" value="306"></label>
       <label class="f"><b>Drawer depth (mm)</b><input id="drawerD" type="number" step="0.5" value="380"></label>
     </div>
-    <div class="hint">Internal dimensions. Measure at the tightest point and subtract 1–2&nbsp;mm so the assembly slides in.</div>
-    <label class="f"><b>Leftover space (margins)</b>
-      <select id="marginMode">
-        <option value="auto">Fill with solid margin, aligned…</option>
-        <option value="none">Leave as gap (plate = grid only)</option>
-        <option value="custom">Custom per side…</option>
-      </select>
-    </label>
-    <div class="row" id="alignRow">
-      <label class="f"><b>Align width</b>
-        <select id="alignX"><option value="center">Centre</option><option value="start">Right (margin left)</option><option value="end">Left (margin right)</option></select></label>
-      <label class="f"><b>Align depth</b>
-        <select id="alignY"><option value="center">Centre</option><option value="start">Back (margin front)</option><option value="end">Front (margin back)</option></select></label>
+    <div class="row">
+      <label class="f"><b>Usable height (mm)</b><input id="drawerH" type="number" step="0.5" value="93.9"></label>
+      <label class="f"><b>Baseplate height (mm)</b><input id="plateH" type="number" step="0.05" value="4.25"></label>
     </div>
-    <div class="row" id="customMargins" style="display:none">
-      <label class="f"><b>Left / Right (mm)</b><div class="row"><input id="mLeft" type="number" step="0.5" value="0"><input id="mRight" type="number" step="0.5" value="0"></div></label>
-      <label class="f"><b>Front / Back (mm)</b><div class="row"><input id="mFront" type="number" step="0.5" value="0"><input id="mBack" type="number" step="0.5" value="0"></div></label>
-    </div>
-    <div class="hint" id="gridSummary"></div>
+    <div class="hint">Usable height is drawer floor to the lowest thing above. Baseplate height is 4.25 mm unless your joint forced a solid floor — the baseplate tool tells you.</div>
+    <div class="mono" id="gridSummary">—</div>
+    <div style="margin-top:8px"><a id="toPlates" class="ghost" href="../">← back to baseplates</a></div>
   </div>
 </section>
 
-<section class="p" id="s-printer">
-  <h2><span class="n">02</span> Printer <span class="caret">▾</span></h2>
+<section class="p" id="s-bin">
+  <h2><span class="n">02</span> Bin <span class="caret">▾</span></h2>
   <div class="body">
-    <label class="f"><b>Preset</b>
-      <select id="bedPreset">
-        <option value="256,256,256">256 × 256 × 256 (Elegoo CC/CC2, Bambu X1/P1)</option>
-        <option value="220,220,250">220 × 220 × 250 (Ender 3, A1 mini class)</option>
-        <option value="250,210,220">250 × 210 × 220 (Prusa MK4 class)</option>
-        <option value="300,300,300">300 × 300 × 300 (large format)</option>
-        <option value="180,180,180">180 × 180 × 180 (compact)</option>
-        <option value="custom">Custom…</option>
-      </select></label>
     <div class="row3">
-      <label class="f"><b>Bed width</b><input id="bedW" type="number" value="256"></label>
-      <label class="f"><b>Bed depth</b><input id="bedD" type="number" value="256"></label>
-      <label class="f"><b>Height (Z)</b><input id="bedH" type="number" value="256"></label>
+      <label class="f"><b>Width (cells)</b><input id="u" type="number" step="1" min="1" value="1"></label>
+      <label class="f"><b>Depth (cells)</b><input id="v" type="number" step="1" min="1" value="1"></label>
+      <label class="f"><b>Height (7 mm units)</b><input id="hUnits" type="number" step="1" min="1" value="3"></label>
     </div>
-  </div>
-</section>
-
-<section class="p" id="s-split">
-  <h2><span class="n">03</span> Split <span class="caret">▾</span></h2>
-  <div class="body">
-    <div class="seg" id="splitSeg">
-      <button data-v="balanced" class="on">Balanced</button>
-      <button data-v="staggered">Staggered</button>
-      <button data-v="plates">Fewest plates</button>
-      <button data-v="manual">Manual</button>
+    <div class="hint" id="binSizeHint">—</div>
+    <label class="tog"><input id="solid" type="checkbox"> Solid block (no cavity)</label>
+    <div class="row" id="thickRow">
+      <label class="f"><b>Wall thickness (mm)</b><input id="wall" type="number" step="0.1" value="1.2"></label>
+      <label class="f"><b>Floor thickness (mm)</b><input id="floorT" type="number" step="0.1" value="1.2"></label>
     </div>
-    <div class="hint">Staggered offsets joints between rows like brickwork so seams never line up. Fewest plates searches split patterns and picks the one needing the fewest print beds — often pairing two narrow pieces on one plate. For full control click grid lines on the cut map; that switches to Manual.</div>
-  </div>
-</section>
-
-<section class="p" id="s-conn">
-  <h2><span class="n">04</span> Connectors <span class="caret">▾</span></h2>
-  <div class="body">
-    <label class="f"><b>Type</b>
-      <select id="connector">
-        <option value="dovetail">Dovetail tabs — drop-in, no extra filament</option>
-        <option value="puzzle">Puzzle tabs — jigsaw lock, strongest in-plane</option>
-        <option value="bowtie">Bowtie keys — separate keys, hidden underneath</option>
-        <option value="puzzlekey">Puzzle keys — separate jigsaw keys underneath</option>
-        <option value="snap">Snap clips — spring-fit keys, press to click in</option>
-        <option value="hclip">H-clips — tiny keys in the walls, no floor needed</option>
-        <option value="none">None — rely on drawer walls</option>
+    <div class="row" id="divRow">
+      <label class="f"><b>Dividers across</b><input id="divX" type="number" step="1" min="0" value="0"></label>
+      <label class="f"><b>Dividers along</b><input id="divY" type="number" step="1" min="0" value="0"></label>
+    </div>
+    <div class="hint">Dividers are counts of walls, not compartments — 1 divider makes 2 compartments. They print as part of the bin, no supports.</div>
+    <label class="f"><b>Corner smoothness</b>
+      <select id="arcSegs">
+        <option value="8">Fast — 8 segments</option>
+        <option value="12" selected>Standard — 12 segments</option>
+        <option value="24">Smooth — 24 segments</option>
       </select></label>
-    <div id="connHintDove" class="hint">Tabs on one piece drop into open-bottomed pockets on its neighbour. Assemble on a flat surface, then lower the whole plate into the drawer. Placed at every wall junction along each seam.</div>
-    <div id="connHintPuzzle" class="hint" style="display:none">Jigsaw lobes printed on one piece lock into matching cavities on its neighbour — the strongest in-plane joint. Adds a ~2.6&nbsp;mm solid floor that the lobes live in; assembles by lowering pieces together.</div>
-    <div id="connHintBow" class="hint" style="display:none">Recesses are cut into the underside of both pieces; printed keys bridge each seam. Adds a solid floor to house the keys — the keys STL is in Export and in the ZIP.</div>
-    <div id="connHintSnap" class="hint" style="display:none">Dog-bone recesses under both pieces take a sprung key: the slot through its middle lets it compress, so it clicks in and holds. Adds a solid floor. Keys STL in Export.</div>
-    <div id="connHintHclip" class="hint" style="display:none">Tiny H-shaped keys (≈3.6 × 3.8 mm) sink into pockets in the grid walls at each junction, pressed in from beneath during face-down assembly. No floor, almost no filament, invisible from above. Keys STL in Export.</div>
-    <label class="f" id="keyInsertRow" style="display:none"><b>Key insertion</b>
-      <select id="keyInsert">
-        <option value="bottom">From beneath — assemble face-down, then flip into the drawer</option>
-        <option value="top">From above — join the pieces inside the drawer, drop keys in</option>
-      </select></label>
-    <div class="hint" id="keyInsertHint" style="display:none">From above suits drawers you can't lower an assembled plate into: lay the pieces in place, then drop a key into each junction from the top. Keys sit just below flush; the rim gets a small opening at each junction, hidden under the bins' rounded corners.</div>
-    <label class="f" id="keyMountRow" style="display:none"><b>Key housing</b>
-      <select id="keyMount">
-        <option value="floor">Solid floor — full-size keys, strongest</option>
-        <option value="wall">Inside the walls — slim keys, no extra filament</option>
-      </select></label>
-    <div class="hint" id="keyMountHint" style="display:none">Wall housing sinks slim keys into the grid walls at each junction — the plate stays open-bottomed and uses no extra filament. Keys are smaller, so the hold is lighter; solid floor gives the strongest joint.</div>
-    <label class="f"><b>Fit clearance (mm per side)</b><input id="connClr" type="number" step="0.05" value="0.2"></label>
-    <div class="hint">0.2 suits most printers. Print the test tile pair first; tighten to 0.15 or loosen to 0.25 from there.</div>
   </div>
 </section>
 
-<section class="p" id="s-mag">
-  <h2><span class="n">05</span> Magnets &amp; screws <span class="caret">▾</span></h2>
-  <div class="body">
-    <label class="tog"><input id="magnets" type="checkbox"> Magnet pockets (4 per cell)</label>
-    <div class="row3" id="magRow" style="display:none">
-      <label class="f"><b>Ø (mm)</b><input id="magnetD" type="number" step="0.5" value="6"></label>
-      <label class="f"><b>Depth</b><input id="magnetH" type="number" step="0.1" value="2"></label>
-      <label class="f"><b>Open from</b><select id="magnetSide"><option value="bottom">Below</option><option value="top">Above</option></select></label>
-    </div>
-    <label class="tog"><input id="screws" type="checkbox"> Screw holes (counterbored, 4 per cell)</label>
-    <div class="row3" id="screwRow" style="display:none">
-      <label class="f"><b>Hole Ø</b><input id="screwHoleD" type="number" step="0.5" value="3"></label>
-      <label class="f"><b>Head Ø</b><input id="screwHeadD" type="number" step="0.5" value="6"></label>
-      <label class="f"><b>Head depth</b><input id="screwHeadDepth" type="number" step="0.1" value="2"></label>
-    </div>
-    <label class="f" id="baseModeRow" style="display:none"><b>Mounting base</b>
-      <select id="baseMode">
-        <option value="solid">Solid floor — full 2.8 mm base under everything</option>
-        <option value="bosses">Corner pockets only — bosses at each position, saves filament</option>
-      </select></label>
-    <div class="hint">Corner pockets match the light-weight style of other generators: small rounded bosses at each cell corner instead of a full floor. Gravity-fit drawers need neither magnets nor screws.</div>
-  </div>
-</section>
-
-<section class="p closed" id="s-prof">
-  <h2><span class="n">06</span> Socket profile <span class="caret">▾</span></h2>
-  <div class="body">
-    <label class="f"><b>Bin fit</b>
-      <select id="tolerance"><option value="standard">Standard (spec 0.25 mm)</option><option value="tight">Tight (−0.1 mm)</option><option value="loose">Loose (+0.1 mm)</option></select></label>
-    <div class="row">
-      <label class="f"><b>Grid pitch (mm)</b><input id="pitch" type="number" step="0.5" value="42"></label>
-      <label class="f"><b>Corner radius</b><input id="outerRadius" type="number" step="0.5" value="4"></label>
-    </div>
-    <label class="tog"><input id="perCorner" type="checkbox"> Set each plate corner separately</label>
-    <div class="row" id="cornerRow" style="display:none">
-      <label class="f"><b>Front-left / Front-right</b><div class="row"><input id="rFL" type="number" step="0.5" value="4"><input id="rFR" type="number" step="0.5" value="4"></div></label>
-      <label class="f"><b>Back-left / Back-right</b><div class="row"><input id="rBL" type="number" step="0.5" value="4"><input id="rBR" type="number" step="0.5" value="4"></div></label>
-    </div>
-    <div class="hint" id="cornerHint" style="display:none">For drawers or containers with rounded corners — match each radius to the drawer, front of drawer at the bottom of the cut map.</div>
-    <div class="row">
-      <label class="f"><b>Extra floor (mm)</b><input id="bottomPad" type="number" step="0.1" value="0"></label>
-      <label class="f"><b>Rim cutoff (mm)</b><input id="topCutoff" type="number" step="0.1" value="0.4"></label>
-    </div>
-    <div class="hint">Defaults follow the Gridfinity spec (42&nbsp;mm pitch, three-part profile, 4.25&nbsp;mm plate). Change pitch only for non-standard bins.</div>
-  </div>
-</section>
-
-<section class="p export" id="s-export">
-  <h2><span class="n">07</span> Export <span class="caret">▾</span></h2>
-  <div class="body">
-    <button class="act" id="dlAll">Download all pieces (.zip)</button>
-    <button class="ghost" id="dlTile">Test tile — bin fit (.stl)</button>
-    <button class="ghost" id="dlFit" style="display:none">Joint fit sample — 4 clearances (.stl)</button>
-    <button class="ghost" id="dlKeys" style="display:none">Connector keys (.stl)</button>
-    <button class="ghost" id="shareBtn">Copy settings link</button>
-    <div class="hint">Each ZIP includes every piece, a README with assembly order, and your settings. STLs are millimetre-scale, print flat as oriented, no supports.</div>
-  </div>
+<section class="p" id="s-warn">
+  <h2><span class="n">03</span> Checks <span class="caret">▾</span></h2>
+  <div class="body"><div id="warnings"></div></div>
 </section>
 
 </div>
 <div class="stage">
 
 <div class="stagecard">
-  <h3>Cut map — click grid lines to split <span class="tail" id="mapTail"></span></h3>
-  <div id="mapwrap"><svg id="cutmap"></svg></div>
-  <div id="warnings"></div>
+  <h3>This bin</h3>
+  <table class="pieces"><tbody id="specRows"></tbody></table>
 </div>
 
 <div class="stagecard">
-  <h3>Preview <span class="tail"><label class="tog" style="font-size:11px"><input type="checkbox" id="explode"> exploded</label></span></h3>
-  <div id="threewrap"><canvas id="three"></canvas><div id="status"></div><div id="threehint">drag rotate · wheel zoom · shift-drag pan</div></div>
+  <h3>Preview</h3>
+  <div id="threewrap"><canvas id="three"></canvas><div id="status"></div><div id="threehint">drag rotate · wheel zoom</div></div>
 </div>
 
 <div class="stagecard">
-  <h3>Print plan <span class="tail" id="planTail"></span></h3>
-  <div style="padding:10px 14px;display:grid;gap:10px">
-    <div class="row3">
-      <label class="f"><b>Part spacing (mm)</b><input id="plateGap" type="number" step="0.5" value="4"></label>
-      <label class="f" style="align-self:end"><label class="tog"><input id="stackToggle" type="checkbox"> Stack identical pieces</label></label>
-      <label class="f"><b>Stack gap (mm)</b><input id="stackGap" type="number" step="0.02" value="0.24"></label>
-    </div>
-    <div class="hint" id="stackHint" style="display:none">Experimental: any piece that fits fully inside the footprint of the one below prints stacked on top, separated by the gap layer — snap apart afterwards. Needs well-tuned bridging (the layer above spans open sockets); test with two first. Respects your printer's Z height.</div>
-    <div id="platesRow" style="display:flex;gap:12px;flex-wrap:wrap"></div>
-    <button class="act" id="dlPlates" style="justify-self:start">Download all print plates (.3mf)</button>
-  </div>
-</div>
-
-<div class="stagecard">
-  <h3>Pieces <span class="tail" id="pieceTail"></span></h3>
-  <table class="pieces"><thead><tr>
-    <th>Piece</th><th>Grid</th><th>Size (mm)</th><th>Joints</th><th>Bed fit</th><th></th>
-  </tr></thead><tbody id="pieceRows"></tbody></table>
+  <h3>Export</h3>
+  <button class="act" id="dlStl">Download this bin (.stl)</button>
+  <button class="ghost" id="shareBtn" style="margin-top:8px">Copy settings link</button>
+  <div class="hint">Prints flat as oriented, no supports. Print one before committing to a drawer's worth.</div>
 </div>
 
 </div>
 </div>
 <footer>
-  <div><b>Drawerforge</b> is free and open. Gridfinity was created by <a href="https://www.youtube.com/c/ZackFreedman" rel="noopener">Zack Freedman</a> (Voidstar Lab) as an open standard — this tool implements the published baseplate profile and adds drawer-first workflow, split control, and printable connectors.</div>
-  <div style="margin-top:10px">Got your grid sorted? <a id="toBins" href="bins/">Design the bins that go in it →</a> Your drawer dimensions carry across.</div>
-  <div style="margin-top:10px">Hey — thank you for using the tool! If you'd like to raise any issues or feature suggestions/requests, please raise them <a id="ghLink" href="https://github.com/Oliver-Johnson/Baseplate-Studio/issues" rel="noopener">on GitHub</a>. If it's saved you some time and you fancy it, you can also <a id="kofiLink" href="https://ko-fi.com/oliver_johnson" rel="noopener">buy me a coffee</a>.</div>
-  <div class="mono" style="margin-top:8px">All geometry is computed locally in your browser — nothing is uploaded. STL/3MF output is mm scale. v1.2</div>
+  <div><b>Drawerforge</b> is free and open. Gridfinity was created by <a href="https://www.youtube.com/c/ZackFreedman" rel="noopener">Zack Freedman</a> (Voidstar Lab) as an open standard — these bins follow the published spec, so they fit any spec baseplate.</div>
+  <div style="margin-top:10px">Issues and feature requests <a href="https://github.com/Oliver-Johnson/Baseplate-Studio/issues" rel="noopener">on GitHub</a>. If it saved you time you can <a href="https://ko-fi.com/oliver_johnson" rel="noopener">buy me a coffee</a>.</div>
+  <div class="mono" style="margin-top:8px">All geometry is computed locally in your browser — nothing is uploaded. STL output is mm scale.</div>
 </footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
 /* Drawerforge — Gridfinity geometry core.
    Self-contained CSG (BSP) + gridfinity builders + binary STL writer.
@@ -1983,723 +1860,497 @@ if (typeof module !== 'undefined') {
 }
 
 </script>
-<script>
+<script>/* Drawerforge — Gridfinity bin geometry.
+ *
+ * Built entirely by direct mesh construction and overlapping closed shells.
+ * There is NO CSG in this file: see docs/ENGINE rules — the hand-rolled BSP is
+ * fragile around the conical foot surfaces, and every feature here can be made
+ * additively instead. Shells overlap by BLOAT and the slicer fuses them.
+ *
+ * Spec (42 mm pitch), from the published Gridfinity specification:
+ *   footprint 41.5 mm square at its widest, corner fillet r = 3.75 mm
+ *   foot profile from the bottom: 35.6 -> 0.8 mm @45deg -> 37.2,
+ *                                 1.8 mm vertical,
+ *                                 2.15 mm @45deg -> 41.5
+ *   total foot height 4.75 mm; heights quantise to 7 mm units
+ *
+ * Every rounded square here shares one corner-arc centre at 17.00 mm
+ * (= 41.5/2 - 3.75). Keeping that constant is what makes clearance uniform
+ * around the perimeter — see docs/socket-clearance.md for why that matters.
+ *
+ * Runs in the browser and headless in Node (module.exports guard at the bottom).
+ */
 'use strict';
-/* Drawerforge UI. Core geometry functions are in scope from the previous script tag. */
+
+const SPEC = {
+  pitch: 42,
+  footH: 4.75,          // total height of the base
+  half: 41.5 / 2,       // 20.75 — half-width at the widest point
+  r: 3.75,              // corner fillet at the widest point
+  centre: 41.5 / 2 - 3.75, // 17.00 — corner-arc centre, constant at every height
+  unitH: 7,             // height quantum
+  // [z, half-width] — corner radius at each level is always (half - centre)
+  prof: [[0, 35.6 / 2], [0.8, 37.2 / 2], [2.6, 37.2 / 2], [4.75, 41.5 / 2]],
+};
+
+const BLOAT = 0.05;     // shell overlap; never rely on coincident faces
+
+const BIN_DEFAULTS = {
+  u: 1, v: 1,           // footprint in grid cells
+  hUnits: 3,            // height in 7 mm units (total, base included)
+  wall: 1.2,            // side wall thickness
+  floorT: 1.2,          // floor thickness above the top of the base
+  divX: 0, divY: 0,     // interior dividers (cuts, not compartments)
+  solid: false,         // no cavity at all
+  arcSegs: 12,          // corner-arc segments; only affects the bin's own smoothness
+  shrink: 0,            // extra clearance per side, on top of the spec's 0.25
+};
+
+/* ---------- 2D outlines --------------------------------------------------- */
+
+// Rounded rectangle centred on origin, CCW, sharing SPEC.centre where possible.
+function roundRect(hw, hd, r, n) {
+  r = Math.max(0.2, Math.min(r, Math.min(hw, hd) - 0.01));
+  const pts = [];
+  const cs = [[hw - r, hd - r, 0], [-hw + r, hd - r, 90],
+              [-hw + r, -hd + r, 180], [hw - r, -hd + r, 270]];
+  for (const [ox, oy, a0] of cs)
+    for (let k = 0; k <= n; k++) {
+      const a = (a0 + 90 * k / n) * Math.PI / 180;
+      pts.push([ox + r * Math.cos(a), oy + r * Math.sin(a)]);
+    }
+  return pts;
+}
+
+// The bin's outer outline at a given foot half-width, for a u x v footprint.
+// Extra cells extend the straight sections; the corners keep the spec radius.
+function outlineAt(u, v, half, shrink, n) {
+  const hw = (u - 1) * SPEC.pitch / 2 + half - shrink;
+  const hd = (v - 1) * SPEC.pitch / 2 + half - shrink;
+  return roundRect(hw, hd, half - SPEC.centre, n);
+}
+
+/* ---------- mesh helpers -------------------------------------------------- */
+
+function sweep(mk, rings, zs) {
+  // side faces between consecutive rings, as TRIANGLES — corner-arc faces are
+  // conical and a quad across them is non-planar (a confirmed mesh-destroyer).
+  const polys = [];
+  const n = rings[0].length;
+  for (let i = 0; i < rings.length - 1; i++)
+    for (let j = 0; j < n; j++) {
+      const k = (j + 1) % n;
+      const a0 = [rings[i][j][0], rings[i][j][1], zs[i]];
+      const b0 = [rings[i][k][0], rings[i][k][1], zs[i]];
+      const a1 = [rings[i + 1][j][0], rings[i + 1][j][1], zs[i + 1]];
+      const b1 = [rings[i + 1][k][0], rings[i + 1][k][1], zs[i + 1]];
+      let p = mk([a0, b0, b1]); if (p) polys.push(p);
+      p = mk([a0, b1, a1]); if (p) polys.push(p);
+    }
+  return polys;
+}
+
+function fanCap(mk, ring, z, up, cx, cy) {
+  const polys = [];
+  const c = [cx, cy, z];
+  const n = ring.length;
+  for (let j = 0; j < n; j++) {
+    const k = (j + 1) % n;
+    const a = [ring[j][0], ring[j][1], z], b = [ring[k][0], ring[k][1], z];
+    const p = mk(up ? [c, a, b] : [c, b, a]);
+    if (p) polys.push(p);
+  }
+  return polys;
+}
+
+// Closed annular wall between two CCW loops, from z0 to z1.
+function wallRing(G, outer, inner, z0, z1) {
+  const mk = G.makePoly, polys = [];
+  const n = outer.length;
+  for (let i = 0; i < n; i++) {            // outer skin, normals outward
+    const j = (i + 1) % n;
+    const p = mk([[outer[i][0], outer[i][1], z0], [outer[j][0], outer[j][1], z0],
+                  [outer[j][0], outer[j][1], z1], [outer[i][0], outer[i][1], z1]]);
+    if (p) polys.push(p);
+  }
+  const m = inner.length;
+  for (let i = 0; i < m; i++) {            // inner skin, normals into the cavity
+    const j = (i + 1) % m;
+    const p = mk([[inner[j][0], inner[j][1], z0], [inner[i][0], inner[i][1], z0],
+                  [inner[i][0], inner[i][1], z1], [inner[j][0], inner[j][1], z1]]);
+    if (p) polys.push(p);
+  }
+  for (const [z, up] of [[z1, true], [z0, false]]) {
+    const { pts, tris } = G.triangulateRing(outer, inner);
+    for (const t of tris) {
+      const vs = [[pts[t[0]][0], pts[t[0]][1], z],
+                  [pts[t[1]][0], pts[t[1]][1], z],
+                  [pts[t[2]][0], pts[t[2]][1], z]];
+      const p = mk(up ? vs : [vs[2], vs[1], vs[0]]);
+      if (p) polys.push(p);
+    }
+  }
+  return polys;
+}
+
+/* ---------- the bin ------------------------------------------------------- */
+
+function buildBin(G, cfg) {
+  const c = Object.assign({}, BIN_DEFAULTS, cfg || {});
+  const n = c.arcSegs;
+  const H = c.hUnits * SPEC.unitH;
+  if (H <= SPEC.footH + 0.5)
+    throw new Error(`hUnits ${c.hUnits} gives ${H} mm, which is not taller than the ${SPEC.footH} mm base`);
+
+  const polys = [];
+
+  /* feet — one closed shell per grid cell, overlapping the body above */
+  const zs = SPEC.prof.map((p) => p[0]).concat([SPEC.footH + BLOAT]);
+  for (let i = 0; i < c.u; i++)
+    for (let j = 0; j < c.v; j++) {
+      const cx = (i - (c.u - 1) / 2) * SPEC.pitch;
+      const cy = (j - (c.v - 1) / 2) * SPEC.pitch;
+      const rings = SPEC.prof.map(([, half]) => {
+        const h = half - c.shrink;
+        return roundRect(h, h, h - SPEC.centre, n).map((p) => [p[0] + cx, p[1] + cy]);
+      });
+      rings.push(rings[rings.length - 1]);      // BLOAT extension into the body
+      polys.push(...sweep(G.makePoly, rings, zs));
+      polys.push(...fanCap(G.makePoly, rings[0], zs[0], false, cx, cy));
+      polys.push(...fanCap(G.makePoly, rings[rings.length - 1], SPEC.footH + BLOAT, true, cx, cy));
+    }
+
+  /* body */
+  const outer = outlineAt(c.u, c.v, SPEC.half, c.shrink, n);
+  const floorZ = SPEC.footH + c.floorT;
+
+  if (c.solid || floorZ >= H - 0.2) {
+    polys.push(...G.extrudePoly(outer, SPEC.footH, H));
+  } else {
+    // solid slab from the top of the feet to the cavity floor
+    polys.push(...G.extrudePoly(outer, SPEC.footH, floorZ + BLOAT));
+    // wall ring above it
+    const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
+    const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
+    const inner = roundRect(hw - c.wall, hd - c.wall,
+                            Math.max(0.4, SPEC.r - c.wall), n);
+    polys.push(...wallRing(G, outer, inner, floorZ, H));
+
+    /* dividers — separate overlapping shells, never unioned */
+    const iw = hw - c.wall, id = hd - c.wall;
+    const t = c.wall / 2;
+    for (let k = 1; k <= c.divX; k++) {
+      const x = -iw + (2 * iw) * k / (c.divX + 1);
+      polys.push(...G.extrudePoly(
+        [[x - t, -id - BLOAT], [x + t, -id - BLOAT], [x + t, id + BLOAT], [x - t, id + BLOAT]],
+        floorZ - BLOAT, H));
+    }
+    for (let k = 1; k <= c.divY; k++) {
+      const y = -id + (2 * id) * k / (c.divY + 1);
+      polys.push(...G.extrudePoly(
+        [[-iw - BLOAT, y - t], [iw + BLOAT, y - t], [iw + BLOAT, y + t], [-iw - BLOAT, y + t]],
+        floorZ - BLOAT, H));
+    }
+  }
+
+  const meta = {
+    u: c.u, v: c.v, hUnits: c.hUnits, H,
+    W: (c.u - 1) * SPEC.pitch + 2 * (SPEC.half - c.shrink),
+    D: (c.v - 1) * SPEC.pitch + 2 * (SPEC.half - c.shrink),
+    footH: SPEC.footH, floorZ, cells: c.u * c.v,
+  };
+  return { polys: G.clampZ(polys, 0), meta };
+}
+
+if (typeof module !== 'undefined') {
+  module.exports = { buildBin, roundRect, outlineAt, SPEC, BIN_DEFAULTS };
+}
+</script>
+<script>/* Drawerforge Bins UI. Core geometry and buildBin are in scope from the previous
+   script tags (both files end with a module.exports guard, so in the browser their
+   functions land as globals). */
+'use strict';
+
 const $ = (id) => document.getElementById(id);
 
-// ---------- state ----------
-const state = Object.assign({}, DEFAULTS, {
-  marginMode: 'auto', splitMode: 'balanced', rowCuts: null, colCuts: null,
-});
-let layout = null;
-let builds = {};            // pieceId -> {polys, meta}
-let buildToken = 0;
-const PIECE_COLORS = ['#4fc3e8','#e8b34f','#7fd8a5','#e88a8a','#b18ae8','#7fb5e8','#e8d47f','#8ae8d4'];
+// the shared-core surface buildBin needs, gathered from the globals core.js defines
+const G = {
+  makePoly, triangulateRing, extrudePoly, clampZ,
+  polysToTriangles, stlBinary, checkManifold,
+};
 
-// ---------- read/write controls ----------
-const numIds = ['drawerW','drawerD','bedW','bedD','bedH','mLeft','mRight','mFront','mBack',
-  'pitch','outerRadius','bottomPad','topCutoff','magnetD','magnetH',
-  'screwHoleD','screwHeadD','screwHeadDepth'];
+const PLA_DENSITY = 1.24;      // g/cm3
+const state = {};
+let current = null;            // { polys, meta }
+let hashExtras = {};           // descriptor keys we don't own — re-emitted untouched
+
+/* ---------- controls ------------------------------------------------------ */
 function readControls() {
-  for (const id of numIds) state[id] = parseFloat($(id).value) || 0;
-  state.alignX = $('alignX').value; state.alignY = $('alignY').value;
-  const mm = $('marginMode').value;
-  state.marginMode = mm === 'custom' ? 'custom' : 'auto';
-  state.noMargin = mm === 'none';
-  if (state.noMargin) { state.marginMode = 'custom'; state.mLeft = state.mRight = state.mFront = state.mBack = 0; }
-  state.connector = $('connector').value;
-  state.keyType = ['bowtie','puzzlekey','snap'].includes(state.connector) ? state.connector : 'bowtie';
-  state.keyMount = $('keyMount').value;
-  state.keyInsert = $('keyInsert').value;
-  state.baseMode = $('baseMode').value;
-  if ($('perCorner').checked) {
-    state.cornerRadii = { ll: parseFloat($('rFL').value)||0, lr: parseFloat($('rFR').value)||0,
-                          ul: parseFloat($('rBL').value)||0, ur: parseFloat($('rBR').value)||0 };
-  } else state.cornerRadii = null;
-  state.tolerance = $('tolerance').value;
-  state.magnets = $('magnets').checked;
-  state.screws = $('screws').checked;
-  state.magnetSide = $('magnetSide').value;
-  const clr = parseFloat($('connClr').value) || 0.2;
-  state.tab = Object.assign({}, DEFAULTS.tab, { clr });
-  state.bowtie = Object.assign({}, DEFAULTS.bowtie, { clr: Math.max(0.1, clr - 0.05) });
-  state.key = Object.assign({}, DEFAULTS.key, { clr: Math.max(0.1, clr - 0.05) });
-  state.hclip = Object.assign({}, DEFAULTS.hclip, { clr: Math.max(0.08, clr - 0.05) });
-  state.puzzle = Object.assign({}, DEFAULTS.puzzle, { clr });
-  $('alignRow').style.display = mm === 'auto' ? '' : 'none';
-  $('customMargins').style.display = mm === 'custom' ? '' : 'none';
-  $('magRow').style.display = state.magnets ? '' : 'none';
-  $('screwRow').style.display = state.screws ? '' : 'none';
-  $('connHintDove').style.display = state.connector === 'dovetail' ? '' : 'none';
-  $('connHintPuzzle').style.display = state.connector === 'puzzle' ? '' : 'none';
-  $('connHintBow').style.display = (state.connector === 'bowtie' || state.connector === 'puzzlekey') ? '' : 'none';
-  $('connHintSnap').style.display = state.connector === 'snap' ? '' : 'none';
-  $('connHintHclip').style.display = state.connector === 'hclip' ? '' : 'none';
-  const hasKeys = ['bowtie','puzzlekey','snap'].includes(state.connector);
-  $('dlKeys').style.display = hasKeys ? '' : 'none';
-  $('keyMountRow').style.display = hasKeys ? '' : 'none';
-  $('keyMountHint').style.display = hasKeys ? '' : 'none';
-  $('dlKeys').textContent = state.connector === 'snap' ? 'Snap clips (.stl)' : 'Connector keys (.stl)';
-  // top-insert applies exactly where the key lives in the wall (see activeKeyDims)
-  const wallish = (hasKeys && state.keyMount === 'wall') || state.connector === 'hclip';
-  $('keyInsertRow').style.display = wallish ? '' : 'none';
-  $('keyInsertHint').style.display = wallish ? '' : 'none';
-  $('dlFit').style.display = state.connector === 'none' ? 'none' : '';
-  $('baseModeRow').style.display = (state.magnets || state.screws) ? '' : 'none';
-  $('cornerRow').style.display = $('perCorner').checked ? '' : 'none';
-  $('cornerHint').style.display = $('perCorner').checked ? '' : 'none';
+  const num = (id, d) => { const v = parseFloat($(id).value); return isFinite(v) ? v : d; };
+  const int = (id, d) => { const v = parseInt($(id).value, 10); return isFinite(v) ? v : d; };
+  state.drawerW = num('drawerW', 306);
+  state.drawerD = num('drawerD', 380);
+  state.drawerH = num('drawerH', 93.9);
+  state.plateH = num('plateH', 4.25);
+  state.u = Math.max(1, int('u', 1));
+  state.v = Math.max(1, int('v', 1));
+  state.hUnits = Math.max(1, int('hUnits', 3));
+  state.wall = num('wall', 1.2);
+  state.floorT = num('floorT', 1.2);
+  state.divX = Math.max(0, int('divX', 0));
+  state.divY = Math.max(0, int('divY', 0));
+  state.solid = $('solid').checked;
+  state.arcSegs = int('arcSegs', 12);
+
+  $('thickRow').style.display = state.solid ? 'none' : '';
+  $('divRow').style.display = state.solid ? 'none' : '';
 }
 
-// ---------- layout & validation ----------
-function recomputeLayout() {
-  readControls();
-  layout = computeLayout(state);
-  // clamp stored manual cuts to the current grid
-  if (state.splitMode === 'manual') {
-    state.rowCuts = layout.rowCuts.slice();
-    state.colCuts = layout.colCuts.map(c => c.slice());
+function grid() {
+  const nx = Math.floor(state.drawerW / SPEC.pitch);
+  const ny = Math.floor(state.drawerD / SPEC.pitch);
+  const avail = state.drawerH - state.plateH;
+  return { nx, ny, avail, maxUnits: Math.floor(avail / SPEC.unitH) };
+}
+
+/* ---------- analytic volume ----------------------------------------------
+   Computed from the parameters, never from mesh volume: the geometry is a set of
+   deliberately overlapping shells, so summing tetrahedra double-counts. */
+function areaRR(hw, hd, r) { return 4 * hw * hd - (4 - Math.PI) * r * r; }
+
+function volumeMm3() {
+  const c = state, half = SPEC.half, C = SPEC.centre;
+  const hwO = (c.u - 1) * SPEC.pitch / 2 + half;
+  const hdO = (c.v - 1) * SPEC.pitch / 2 + half;
+  const H = c.hUnits * SPEC.unitH, floorZ = SPEC.footH + c.floorT;
+
+  // feet: integrate the profile, one foot per cell
+  let footV = 0;
+  const N = 80;
+  for (let i = 0; i < N; i++) {
+    const z = SPEC.footH * (i + 0.5) / N;
+    let h = SPEC.prof[SPEC.prof.length - 1][1];
+    for (let k = 0; k < SPEC.prof.length - 1; k++) {
+      const [z0, h0] = SPEC.prof[k], [z1, h1] = SPEC.prof[k + 1];
+      if (z >= z0 && z <= z1) { h = h0 + (h1 - h0) * (z1 > z0 ? (z - z0) / (z1 - z0) : 0); break; }
+    }
+    footV += areaRR(h, h, h - C) * (SPEC.footH / N);
   }
-  drawMap();
-  drawWarnings();
-  drawPieceTable();
-  scheduleBuild();
+  footV *= c.u * c.v;
+
+  if (c.solid || floorZ >= H - 0.2)
+    return footV + areaRR(hwO, hdO, SPEC.r) * (H - SPEC.footH);
+
+  const slab = areaRR(hwO, hdO, SPEC.r) * c.floorT;
+  const hwI = hwO - c.wall, hdI = hdO - c.wall;
+  const walls = (areaRR(hwO, hdO, SPEC.r) - areaRR(hwI, hdI, Math.max(0.4, SPEC.r - c.wall)))
+                * (H - floorZ);
+  const divs = (c.divX * c.wall * 2 * hdI + c.divY * c.wall * 2 * hwI) * (H - floorZ);
+  return footV + slab + walls + divs;
 }
 
-function pieceFits(pc) {
-  const pitch = state.pitch;
-  const ext = state.connector === 'dovetail' ? state.tab.dp + 0.4 : 0;
-  const w = pc.mL + pc.nx*pitch + pc.mR + ext;
-  const d = pc.mF + pc.ny*pitch + pc.mB + ext;
-  return w <= state.bedW + 1e-6 && d <= state.bedD + 1e-6;
-}
-
-function warningsList() {
-  const out = [];
-  if (layout.nx < 1 || layout.ny < 1 || state.drawerW < state.pitch || state.drawerD < state.pitch)
-    out.push({ err: true, t: `Drawer smaller than one ${state.pitch} mm cell — nothing to generate.` });
-  for (const pc of layout.pieces) if (!pieceFits(pc))
-    out.push({ err: true, t: `Piece ${pc.id} (${(pc.mL+pc.nx*state.pitch+pc.mR).toFixed(0)} × ${(pc.mF+pc.ny*state.pitch+pc.mB).toFixed(0)} mm) exceeds the ${state.bedW} × ${state.bedD} bed — add a cut through it.` });
-  if (layout.pieces.some(pc => pc.nx*pc.ny === 1))
-    out.push({ t: 'A piece is a single cell — printable, but consider moving a cut for a sturdier layout.' });
-  const remX = state.drawerW - layout.nx*state.pitch, remY = state.drawerD - layout.ny*state.pitch;
-  if (remX > state.pitch * 0.75 || remY > state.pitch * 0.75)
-    out.push({ t: `Leftover space is large (${remX.toFixed(0)} × ${remY.toFixed(0)} mm) — nearly another cell. Double-check the drawer measurement.` });
-  const keyedC = ['bowtie','puzzlekey','snap'].includes(state.connector);
-  const wallishC = (keyedC && state.keyMount === 'wall') || state.connector === 'hclip';
-  if ((keyedC && state.keyMount === 'floor' || state.connector === 'puzzle') && layout.pieces.length > 1) {
-    const padV = state.connector === 'puzzle' ? 2.6 : state.key.depth + 0.8;
-    const what = state.connector === 'puzzle' ? 'the jigsaw lobes' :
-      state.connector === 'snap' ? 'the snap clips' : 'the keys';
-    out.push({ t: `This joint adds a ${Math.max(state.bottomPad, padV).toFixed(1)} mm solid floor to house ${what}. Prefer no floor? Pick a keyed joint and set Key housing to "Inside the walls".` });
-  }
-  if (wallishC &&
-      layout.seams.some(s => s.junctions.some(j => Math.abs(j - Math.round(j)) > 0.25)))
-    out.push({ t: 'One seam overlaps by a single cell — wall-housed keys need a wall junction, so that seam gets no connector. The neighbouring joints still hold the assembly.' });
-  if (state.noMargin && (remX > 0.5 || remY > 0.5))
-    out.push({ t: 'No margin selected: the plate will sit loose by the leftover amount. The drawer walls still contain it.' });
+/* ---------- checks -------------------------------------------------------- */
+function warnings() {
+  const g = grid(), out = [];
+  const H = state.hUnits * SPEC.unitH;
+  if (state.u > g.nx || state.v > g.ny)
+    out.push({ err: true, t: `This bin is ${state.u} × ${state.v} cells but the drawer grid is only ${g.nx} × ${g.ny}. It will not go in.` });
+  if (H > g.avail + 0.001)
+    out.push({ err: true, t: `At ${H} mm this bin is taller than the ${g.avail.toFixed(1)} mm above the baseplate. The tallest that clears is ${g.maxUnits} units (${g.maxUnits * SPEC.unitH} mm).` });
+  else if (H > g.avail - SPEC.unitH)
+    out.push({ t: `${H} mm uses nearly all of the ${g.avail.toFixed(1)} mm available — ${(g.avail - H).toFixed(1)} mm spare.` });
+  if (!state.solid && state.wall < 0.8)
+    out.push({ t: `${state.wall} mm walls are thinner than two perimeters at a 0.4 mm nozzle. 0.8 mm or more prints more reliably.` });
+  if (!state.solid && state.floorT < 0.8)
+    out.push({ t: `A ${state.floorT} mm floor is thin — 1.2 mm or more resists punch-through.` });
+  if (state.solid)
+    out.push({ t: 'Solid block: no cavity at all. This is a spacer, not a container, and it uses a lot of filament.' });
   return out;
 }
+
 function drawWarnings() {
-  const el = $('warnings');
-  el.innerHTML = warningsList().map(w => `<div class="w${w.err ? ' err' : ''}">${w.t}</div>`).join('');
+  const w = warnings();
+  $('warnings').innerHTML = w.length
+    ? w.map((x) => `<div class="w${x.err ? ' err' : ''}"><span>${x.t}</span></div>`).join('')
+    : '<div class="hint">No problems — this bin fits the drawer and prints cleanly.</div>';
 }
 
-// ---------- interactive cut map ----------
-function drawMap() {
-  const svg = $('cutmap');
-  const pitch = state.pitch;
-  const Wmm = state.drawerW, Dmm = state.drawerD;
-  const availW = Math.min(680, ($('mapwrap').clientWidth || 680) - 10);
-  const sc = Math.min(availW / (Wmm + 90), 460 / (Dmm + 90));
-  const ox = 58, oy = 26;
-  const X = (mm) => ox + mm * sc;
-  const Y = (mm) => oy + (Dmm - mm) * sc;     // front of drawer at the bottom
-  const w = ox + Wmm * sc + 34, h = oy + Dmm * sc + 56;
-  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-  svg.setAttribute('width', w); svg.setAttribute('height', h);
-  let s = '';
-  const gx0 = layout.mL, gy0 = layout.mF;
+/* ---------- rebuild ------------------------------------------------------- */
+let timer = null;
+function scheduleRebuild() { clearTimeout(timer); timer = setTimeout(rebuild, 180); }
 
-  // piece fills
-  layout.pieces.forEach((pc, i) => {
-    const x0 = pc.cellX0 === 0 ? 0 : gx0 + pc.cellX0 * pitch;
-    const x1 = pc.cellX0 + pc.nx === layout.nx ? Wmm : gx0 + (pc.cellX0 + pc.nx) * pitch;
-    const y0 = pc.cellY0 === 0 ? 0 : gy0 + pc.cellY0 * pitch;
-    const y1 = pc.cellY0 + pc.ny === layout.ny ? Dmm : gy0 + (pc.cellY0 + pc.ny) * pitch;
-    const col = PIECE_COLORS[i % PIECE_COLORS.length];
-    const bad = !pieceFits(pc);
-    s += `<rect x="${X(x0)}" y="${Y(y1)}" width="${(x1-x0)*sc}" height="${(y1-y0)*sc}" fill="${col}" opacity="${bad?0.28:0.16}"/>`;
-    s += `<text class="plabel${bad?' bad':''}" x="${X((x0+x1)/2)}" y="${Y((y0+y1)/2)-2}" text-anchor="middle">${pc.id}</text>`;
-    s += `<text class="psub" x="${X((x0+x1)/2)}" y="${Y((y0+y1)/2)+11}" text-anchor="middle">${pc.nx}×${pc.ny}</text>`;
-  });
+function rebuild() {
+  readControls();
+  const g = grid();
+  $('gridSummary').textContent =
+    `Grid: ${g.nx} × ${g.ny} cells · ${g.avail.toFixed(1)} mm above the baseplate · tallest bin ${g.maxUnits} units (${g.maxUnits * SPEC.unitH} mm)`;
+  $('binSizeHint').textContent =
+    `${(state.u * SPEC.pitch - 0.5).toFixed(1)} × ${(state.v * SPEC.pitch - 0.5).toFixed(1)} × ${(state.hUnits * SPEC.unitH).toFixed(1)} mm`;
 
-  // grid lines + hit targets
-  for (let i = 1; i < layout.nx; i++) {
-    const xm = gx0 + i * pitch;
-    s += `<line class="gridline" x1="${X(xm)}" y1="${Y(gy0)}" x2="${X(xm)}" y2="${Y(gy0 + layout.ny*pitch)}"/>`;
-  }
-  for (let j = 1; j < layout.ny; j++) {
-    const ym = gy0 + j * pitch;
-    s += `<line class="gridline" x1="${X(gx0)}" y1="${Y(ym)}" x2="${X(gx0 + layout.nx*pitch)}" y2="${Y(ym)}"/>`;
-  }
-  // active cuts: rows
-  const bandStarts = [0, ...layout.rowCuts];
-  for (const rc of layout.rowCuts) {
-    const ym = gy0 + rc * pitch;
-    s += `<line class="cutline" x1="${X(0)}" y1="${Y(ym)}" x2="${X(Wmm)}" y2="${Y(ym)}"/>`;
-  }
-  // active cuts: columns per band
-  layout.colCuts.forEach((cuts, b) => {
-    const yA = gy0 + bandStarts[b] * pitch;
-    const yB = b + 1 < bandStarts.length ? gy0 + bandStarts[b+1] * pitch
-                                         : gy0 + layout.ny * pitch;
-    const y0 = b === 0 ? 0 : yA;
-    const y1 = b + 1 < bandStarts.length ? yB : Dmm;
-    for (const c of cuts)
-      s += `<line class="cutline" x1="${X(gx0 + c*pitch)}" y1="${Y(y0)}" x2="${X(gx0 + c*pitch)}" y2="${Y(y1)}"/>`;
-  });
-  // hit targets — horizontal (whole-plate row cuts)
-  for (let j = 1; j < layout.ny; j++) {
-    const ym = gy0 + j * pitch;
-    s += `<line class="hitline" data-row="${j}" x1="${X(0)}" y1="${Y(ym)}" x2="${X(Wmm)}" y2="${Y(ym)}"/>`;
-  }
-  // hit targets — vertical, per band segment
-  layout.colCuts.forEach((cuts, b) => {
-    const yA = bandStarts[b], yB = b + 1 < bandStarts.length ? bandStarts[b+1] : layout.ny;
-    for (let i = 1; i < layout.nx; i++) {
-      const xm = gx0 + i * pitch;
-      s += `<line class="hitline" data-band="${b}" data-col="${i}" x1="${X(xm)}" y1="${Y(gy0 + yA*pitch)}" x2="${X(xm)}" y2="${Y(gy0 + yB*pitch)}"/>`;
-    }
-  });
-
-  // outline + dimension lines
-  s += `<rect x="${X(0)}" y="${Y(Dmm)}" width="${Wmm*sc}" height="${Dmm*sc}" fill="none" stroke="var(--ink)" stroke-width="1.4"/>`;
-  const dy = Y(0) + 22;
-  s += `<line class="dim" x1="${X(0)}" y1="${dy}" x2="${X(Wmm)}" y2="${dy}"/>`
-     + `<line class="dim" x1="${X(0)}" y1="${dy-4}" x2="${X(0)}" y2="${dy+4}"/>`
-     + `<line class="dim" x1="${X(Wmm)}" y1="${dy-4}" x2="${X(Wmm)}" y2="${dy+4}"/>`
-     + `<text x="${X(Wmm/2)}" y="${dy+14}" text-anchor="middle" font-size="11">${Wmm} mm</text>`;
-  const dx = X(0) - 20;
-  s += `<line class="dim" x1="${dx}" y1="${Y(0)}" x2="${dx}" y2="${Y(Dmm)}"/>`
-     + `<line class="dim" x1="${dx-4}" y1="${Y(0)}" x2="${dx+4}" y2="${Y(0)}"/>`
-     + `<line class="dim" x1="${dx-4}" y1="${Y(Dmm)}" x2="${dx+4}" y2="${Y(Dmm)}"/>`
-     + `<text x="${dx-6}" y="${Y(Dmm/2)}" text-anchor="middle" font-size="11" transform="rotate(-90 ${dx-6} ${Y(Dmm/2)})">${Dmm} mm</text>`;
-  s += `<text x="${X(Wmm/2)}" y="${h-6}" text-anchor="middle" font-size="10">▾ front of drawer</text>`;
-  svg.innerHTML = s;
-  $('mapTail').textContent = `${layout.nx} × ${layout.ny} cells · ${layout.pieces.length} piece${layout.pieces.length>1?'s':''}`;
-  $('gridSummary').innerHTML = `Grid: <span class="klabel">${layout.nx} × ${layout.ny}</span> cells (${(layout.nx*state.pitch).toFixed(0)} × ${(layout.ny*state.pitch).toFixed(0)} mm) · margins L ${layout.mL.toFixed(1)} / R ${layout.mR.toFixed(1)} / F ${layout.mF.toFixed(1)} / B ${layout.mB.toFixed(1)} mm`;
-
-  svg.querySelectorAll('.hitline').forEach(el => el.addEventListener('click', onMapClick));
-}
-
-function onMapClick(ev) {
-  const el = ev.currentTarget;
-  // seed manual state from the current layout
-  if (state.splitMode !== 'manual') {
-    state.splitMode = 'manual';
-    state.rowCuts = layout.rowCuts.slice();
-    state.colCuts = layout.colCuts.map(c => c.slice());
-    setSplitSeg('manual');
-  }
-  if (el.dataset.row !== undefined) {
-    const j = parseInt(el.dataset.row);
-    const i = state.rowCuts.indexOf(j);
-    const oldStarts = [0, ...state.rowCuts];
-    if (i >= 0) state.rowCuts.splice(i, 1); else { state.rowCuts.push(j); state.rowCuts.sort((a,b)=>a-b); }
-    // remap per-band col cuts onto the new bands by band start position
-    const newStarts = [0, ...state.rowCuts];
-    const byStart = {};
-    oldStarts.forEach((st, k) => byStart[st] = state.colCuts[k] || []);
-    state.colCuts = newStarts.map(st => {
-      if (byStart[st]) return byStart[st].slice();
-      // new band from a split: inherit the cuts of the band it came from
-      const src = oldStarts.filter(s0 => s0 < st).pop();
-      return (byStart[src] || []).slice();
-    });
-  } else {
-    const b = parseInt(el.dataset.band), c = parseInt(el.dataset.col);
-    if (!state.colCuts[b]) state.colCuts[b] = [];
-    const i = state.colCuts[b].indexOf(c);
-    if (i >= 0) state.colCuts[b].splice(i, 1); else { state.colCuts[b].push(c); state.colCuts[b].sort((a,bb)=>a-bb); }
-  }
-  recomputeLayout();
-}
-
-function setSplitSeg(v) {
-  document.querySelectorAll('#splitSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
-}
-
-// ---------- piece table ----------
-function drawPieceTable() {
-  const tb = $('pieceRows');
-  const pitch = state.pitch;
-  tb.innerHTML = layout.pieces.map((pc, i) => {
-    const w = pc.mL + pc.nx*pitch + pc.mR, d = pc.mF + pc.ny*pitch + pc.mB;
-    const fit = pieceFits(pc);
-    const built = builds[pc.id];
-    let joints = '…';
-    if (built) {
-      const m = built.meta, parts = [];
-      if (m.tabs) parts.push(`${m.tabs} tab`);
-      if (m.notches) parts.push(`${m.notches} pocket`);
-      if (m.puzzles) parts.push(`${m.puzzles} puzzle`);
-      if (m.bowties) parts.push(`${m.bowties} key`);
-      joints = parts.join(' + ') || '—';
-    }
-    return `<tr>
-      <td><span class="sw" style="background:${PIECE_COLORS[i%PIECE_COLORS.length]}"></span><b>${pc.id}</b></td>
-      <td class="mono">${pc.nx} × ${pc.ny}</td>
-      <td class="mono">${w.toFixed(1)} × ${d.toFixed(1)}</td>
-      <td class="mono">${joints || '—'}</td>
-      <td class="${fit?'':'bad'}">${fit ? 'fits' : 'TOO BIG'}</td>
-      <td><button class="ghost" data-dl="${pc.id}" ${built?'':'disabled'}>STL</button></td>
-    </tr>`;
-  }).join('');
-  tb.querySelectorAll('button[data-dl]').forEach(b => b.addEventListener('click', () => downloadPiece(b.dataset.dl)));
-  const tot = layout.pieces.length;
-  const okc = Object.keys(builds).length;
-  $('pieceTail').textContent = okc < tot ? `building ${okc}/${tot}…` : `${tot} ready`;
-}
-
-// ---------- async build ----------
-let buildTimer = null;
-function scheduleBuild() {
-  clearTimeout(buildTimer);
-  buildTimer = setTimeout(runBuild, 260);
-}
-async function runBuild() {
-  const token = ++buildToken;
-  builds = {};
-  printPlan = null; renderPrintPlan();
-  drawPieceTable();
-  clearThree();
-  const errs = warningsList().some(w => w.err);
-  if (errs) { $('status').textContent = 'resolve the errors above to generate'; return; }
-  for (const pc of layout.pieces) {
-    $('status').textContent = `building ${pc.id}…`;
-    await new Promise(r => setTimeout(r, 0));
-    if (token !== buildToken) return;
-    try {
-      const res = buildPiece(state, layout, pc);
-      builds[pc.id] = { polys: res.polys, meta: res };
-      addPieceToThree(pc, res);
-    } catch (e) {
-      console.error('build failed for', pc.id, e);
-      $('status').textContent = `piece ${pc.id} failed — try different cuts`;
-      return;
-    }
-    drawPieceTable();
+  try {
+    current = buildBin(G, state);
+  } catch (e) {
+    current = null;
+    $('status').textContent = e.message;
+    drawWarnings();
+    return;
   }
   $('status').textContent = '';
-  computePrintPlan();
-  fitThree();
+  drawWarnings();
+
+  const vol = volumeMm3();
+  const m = current.meta;
+  const rows = [
+    ['Footprint', `${m.W.toFixed(2)} × ${m.D.toFixed(2)} mm  (${m.u} × ${m.v} cells)`],
+    ['Height', `${m.H.toFixed(1)} mm  (${m.hUnits} units)`],
+    ['Cavity floor', state.solid ? 'solid' : `${m.floorZ.toFixed(2)} mm from the bottom`],
+    ['Compartments', state.solid ? '—' : `${(state.divX + 1) * (state.divY + 1)}`],
+    ['Material', `${(vol / 1000).toFixed(1)} cm³ ≈ ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g PLA`],
+    ['Triangles', `${G.polysToTriangles(current.polys).length}`],
+  ];
+  $('specRows').innerHTML = rows.map(([k, v]) =>
+    `<tr><td class="klabel">${k}</td><td>${v}</td></tr>`).join('');
+
+  showMesh(current.polys);
 }
 
-// ---------- three.js ----------
-let scene, camera, renderer, root, sph = { theta: -0.7, phi: 1.05, r: 420, cx: 0, cy: 0 };
+/* ---------- three.js preview ---------------------------------------------- */
+let scene, camera, renderer, mesh, wire;
+let theta = -0.7, phi = 1.05, dist = 160, dragging = null;
+
 function initThree() {
   const canvas = $('three');
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(42, 2, 1, 5000);
-  scene.add(new THREE.HemisphereLight(0xcfe8f4, 0x1a2027, 0.95));
-  const d = new THREE.DirectionalLight(0xffffff, 0.75); d.position.set(0.6, -1, 1.4); scene.add(d);
-  root = new THREE.Group(); scene.add(root);
-  const onResize = () => {
-    const w = canvas.clientWidth, h = canvas.clientHeight;
-    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
-  };
-  new ResizeObserver(onResize).observe(canvas); onResize();
-  // controls
-  let drag = null;
-  canvas.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, pan: e.shiftKey }; canvas.setPointerCapture(e.pointerId); });
-  canvas.addEventListener('pointermove', e => {
-    if (!drag) return;
-    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-    if (drag.pan) { sph.cx -= dx * sph.r * 0.0011; sph.cy += dy * sph.r * 0.0011; }
-    else { sph.theta -= dx * 0.0065; sph.phi = Math.max(0.03, Math.min(3.11, sph.phi - dy * 0.0065)); }
-    drag.x = e.clientX; drag.y = e.clientY;
+  camera = new THREE.PerspectiveCamera(38, 1, 1, 4000);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.62));
+  const d1 = new THREE.DirectionalLight(0xffffff, 0.85); d1.position.set(1, 1.4, 1); scene.add(d1);
+  const d2 = new THREE.DirectionalLight(0x88bbff, 0.35); d2.position.set(-1, -0.6, 0.4); scene.add(d2);
+
+  canvas.addEventListener('pointerdown', (e) => { dragging = [e.clientX, e.clientY]; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointerup', () => { dragging = null; });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    theta -= (e.clientX - dragging[0]) * 0.01;
+    phi = Math.min(3.11, Math.max(0.03, phi - (e.clientY - dragging[1]) * 0.01));
+    dragging = [e.clientX, e.clientY];
+    render();
   });
-  canvas.addEventListener('pointerup', () => drag = null);
-  canvas.addEventListener('wheel', e => { e.preventDefault(); sph.r = Math.max(60, Math.min(2200, sph.r * (1 + e.deltaY * 0.0011))); }, { passive: false });
-  (function loop() {
-    requestAnimationFrame(loop);
-    camera.position.set(
-      sph.cx + sph.r * Math.sin(sph.phi) * Math.sin(sph.theta),
-      sph.cy - sph.r * Math.sin(sph.phi) * Math.cos(sph.theta),
-      sph.r * Math.cos(sph.phi));
-    camera.up.set(0, 0, 1);
-    camera.lookAt(sph.cx, sph.cy, 0);
-    renderer.render(scene, camera);
-  })();
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    dist = Math.min(1200, Math.max(45, dist * (1 + Math.sign(e.deltaY) * 0.12)));
+    render();
+  }, { passive: false });
+  window.addEventListener('resize', render);
 }
-function clearThree() {
-  while (root.children.length) {
-    const m = root.children.pop();
-    m.geometry.dispose(); m.material.dispose();
-  }
-}
-function piecePlacement(pc) {
-  const pitch = state.pitch, gap = $('explode').checked ? 14 : 0.6;
-  const gx = pc.cellX0 === 0 ? 0 : layout.mL + pc.cellX0 * pitch;
-  const gy = pc.cellY0 === 0 ? 0 : layout.mF + pc.cellY0 * pitch;
-  return [gx + pc.seg * gap, gy + pc.band * gap];
-}
-function addPieceToThree(pc, res) {
-  const tris = polysToTriangles(res.polys);
+
+function showMesh(polys) {
+  if (mesh) { scene.remove(mesh); mesh.geometry.dispose(); }
+  if (wire) { scene.remove(wire); wire.geometry.dispose(); }
+  const tris = G.polysToTriangles(polys);
   const pos = new Float32Array(tris.length * 9);
-  let o = 0;
-  for (const t of tris) for (const v of t) { pos[o++] = v[0]; pos[o++] = v[1]; pos[o++] = v[2]; }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  g.computeVertexNormals();
-  const i = layout.pieces.indexOf(pc);
-  const mat = new THREE.MeshStandardMaterial({
-    color: PIECE_COLORS[i % PIECE_COLORS.length], flatShading: true,
-    metalness: 0.05, roughness: 0.75 });
-  const mesh = new THREE.Mesh(g, mat);
-  const [px, py] = piecePlacement(pc);
-  mesh.position.set(px, py, 0);
-  mesh.userData.pieceId = pc.id;
-  root.add(mesh);
+  let i = 0;
+  for (const t of tris) for (const v of t) { pos[i++] = v[0]; pos[i++] = v[2]; pos[i++] = -v[1]; }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.computeVertexNormals();
+  mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({
+    color: 0x6fd0e0, side: THREE.DoubleSide, flatShading: true }));
+  scene.add(mesh);
+  const m = current.meta;
+  dist = Math.max(m.W, m.D, m.H) * 2.6;
+  render();
 }
-function fitThree() {
-  sph.cx = state.drawerW / 2; sph.cy = state.drawerD / 2;
-  sph.r = Math.max(state.drawerW, state.drawerD) * 1.5;
-}
-$('explode').addEventListener('change', () => {
-  for (const mesh of root.children) {
-    const pc = layout.pieces.find(p => p.id === mesh.userData.pieceId);
-    if (pc) { const [px, py] = piecePlacement(pc); mesh.position.set(px, py, 0); }
-  }
-});
 
+function render() {
+  if (!renderer || !current) return;
+  const wrap = $('threewrap');
+  const w = wrap.clientWidth, h = wrap.clientHeight || 380;
+  renderer.setPixelRatio(window.devicePixelRatio || 1);
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+  const cy = current.meta.H / 2;
+  camera.position.set(
+    dist * Math.sin(phi) * Math.cos(theta),
+    cy + dist * Math.cos(phi),
+    dist * Math.sin(phi) * Math.sin(theta));
+  camera.lookAt(0, cy, 0);
+  renderer.render(scene, camera);
+}
 
-// ---------- print plan ----------
-let printPlan = null;
-function computePrintPlan() {
-  if (!layout || Object.keys(builds).length < layout.pieces.length) { printPlan = null; renderPrintPlan(); return; }
-  const gap = parseFloat($('plateGap').value) || 4;
-  const stack = $('stackToggle').checked;
-  const zGap = parseFloat($('stackGap').value) || 0.24;
-  $('stackHint').style.display = stack ? '' : 'none';
-  const items = layout.pieces.map(pc => {
-    const m = builds[pc.id].meta;
-    return { id: pc.id, w: m.W + m.protrusion.l + m.protrusion.r,
-             d: m.D + m.protrusion.f + m.protrusion.b, h: m.H, qty: 1, stackable: true };
-  });
-  if (['bowtie','puzzlekey','snap','hclip'].includes(state.connector)) {
-    const kd = activeKeyDims();
-    const nKeys = layout.seams.reduce((a, s) => a + s.junctions.length, 0);
-    if (nKeys) items.push({ id: 'key', w: kd.len, d: kd.wEnd,
-                            h: kd.depth - 0.15, qty: nKeys, stackable: false });
-  }
-  printPlan = { plates: packPlates(items, state.bedW, state.bedD, gap,
-    { stack, zGap, bedH: state.bedH || 1e9 }), merged: items, zGap };
-  renderPrintPlan();
-}
-function renderPrintPlan() {
-  const row = $('platesRow');
-  if (!printPlan) { row.innerHTML = '<div class="hint">Print plan appears when all pieces are built.</div>'; $('planTail').textContent = ''; $('dlPlates').disabled = true; return; }
-  $('dlPlates').disabled = false;
-  const plates = printPlan.plates;
-  const stacked = plates.some(pl => pl.placed.some(p => p.z > 0.01));
-  $('planTail').textContent = `${plates.length} print plate${plates.length > 1 ? 's' : ''}` + (stacked ? ' · stacked' : '');
-  const sc = 116 / Math.max(state.bedW, state.bedD);
-  row.innerHTML = plates.map((pl, i) => {
-    let svg = `<svg width="${state.bedW*sc+2}" height="${state.bedD*sc+2}" style="background:var(--panel2);border:1px solid var(--line);border-radius:5px">`;
-    for (const p of pl.placed) {
-      const ci = p.id === 'key' ? 7 : layout.pieces.findIndex(pc => pc.id === p.id);
-      const lvl = Math.round(p.z / (4.5 + printPlan.zGap));
-      svg += `<rect x="${p.x*sc+1}" y="${(state.bedD-p.y-p.d)*sc+1}" width="${p.w*sc}" height="${p.d*sc}" fill="${PIECE_COLORS[(ci<0?0:ci)%PIECE_COLORS.length]}" opacity="${p.z>0.01?0.35:0.55}" stroke="var(--line)"/>`;
-      if (p.id !== 'key')
-        svg += `<text x="${(p.x+p.w/2)*sc+1}" y="${(state.bedD-p.y-p.d/2)*sc+4+(lvl*10)}" text-anchor="middle" font-size="10" fill="var(--ink)">${p.id}${p.z>0.01?' ↥':''}</text>`;
-    }
-    svg += '</svg>';
-    return `<div style="display:grid;gap:4px;justify-items:center">${svg}<div class="hint">plate ${i+1}</div></div>`;
-  }).join('');
-}
-function platePolysAndItems(idx) {
-  const pl = printPlan.plates[idx];
-  const objs = [];
-  for (const p of pl.placed) {
-    let polys;
-    if (p.id === 'key') { const kd = activeKeyDims(); polys = buildKey(activeKeyShape(), kd, kd.depth - 0.15); }
-    else {
-      const b = builds[p.id];
-      if (!b) continue;
-      polys = transformPolys(b.polys, b.meta.protrusion.l, b.meta.protrusion.f, 0, 0);
-    }
-    objs.push({ name: p.id + (p.z > 0.01 ? `@${p.z.toFixed(2)}` : ''), polys, tx: p.x, ty: p.y, tz: p.z, rot: p.rot });
-  }
-  return objs;
-}
-async function plate3mfBytes(idx) {
-  const x = build3mfXML(platePolysAndItems(idx));
-  const pz = new JSZip();
-  pz.file('[Content_Types].xml', x.contentTypes);
-  pz.file('_rels/.rels', x.rels);
-  pz.file('3D/3dmodel.model', x.model);
-  return pz.generateAsync({ type: 'uint8array' });
-}
-$('dlPlates').addEventListener('click', async () => {
-  if (!printPlan) return;
-  const n = printPlan.plates.length;
-  if (n === 1) {
-    const buf = await plate3mfBytes(0);
-    saveBlob(buf, 'print-plates.3mf');
-    return;
-  }
-  const zip = new JSZip();
-  for (let i = 0; i < n; i++) zip.file(`plate-${i+1}.3mf`, await plate3mfBytes(i));
-  const blob = await zip.generateAsync({ type: 'blob' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `print-plates-x${n}.zip`; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-});
-$('plateGap').addEventListener('input', computePrintPlan);
-$('stackToggle').addEventListener('change', computePrintPlan);
-$('stackGap').addEventListener('input', computePrintPlan);
-
-// ---------- downloads ----------
+/* ---------- export -------------------------------------------------------- */
 function saveBlob(buf, name) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([buf], { type: 'application/octet-stream' }));
   a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
-function downloadPiece(id) {
-  const b = builds[id];
-  if (b) saveBlob(stlBinary(b.polys, `baseplate-${id}`), `baseplate-${id}.stl`);
-}
-$('dlTile').addEventListener('click', () => {
-  const tile = buildTestTile(Object.assign({}, state, { drawerW: state.pitch, drawerD: state.pitch,
-    marginMode: 'custom', mLeft: 0, mRight: 0, mFront: 0, mBack: 0 }));
-  saveBlob(stlBinary(tile.polys, 'test-tile'), 'baseplate-test-tile-1x1.stl');
+$('dlStl').addEventListener('click', () => {
+  if (!current) return;
+  const m = current.meta;
+  saveBlob(G.stlBinary(current.polys, 'bin'),
+           `gridfinity-bin-${m.u}x${m.v}x${m.hUnits}.stl`);
 });
-function activeKeyDims() {
-  const d = state.connector === 'hclip' ? Object.assign(hclipPrm(state.hclip), { depth: 2.3 })
-    : state.keyMount === 'wall' ? Object.assign({}, DEFAULTS.keySlim) : Object.assign({}, state.key);
-  if (state.keyInsert === 'top' &&
-      (state.connector === 'hclip' || state.keyMount === 'wall')) d.depth = 2.0;
-  return d;
-}
-function activeKeyShape() {
-  return state.connector === 'hclip' ? 'snap' : state.keyType;
-}
-function keysArray() {
-  const kd = activeKeyDims();
-  const wallish = state.keyMount === 'wall' || state.connector === 'hclip';
-  const nKeys = layout.seams.reduce((a, s) => a + s.junctions.filter(j =>
-    !wallish || Math.abs(j - Math.round(j)) <= 0.25).length, 0) || 1;
-  let polys = [];
-  const cols = Math.ceil(Math.sqrt(nKeys));
-  for (let k = 0; k < nKeys; k++) {
-    const key = buildKey(activeKeyShape(), kd, kd.depth - 0.15);
-    const dx = (k % cols) * (kd.len + 6), dy = Math.floor(k / cols) * (kd.wEnd + 6);
-    for (const p of key) polys.push({ verts: p.verts.map(v => [v[0]+dx, v[1]+dy, v[2]]), plane: p.plane });
-  }
-  return { polys, nKeys, kd };
-}
-$('dlFit').addEventListener('click', () => {
-  const H = layout && builds[layout.pieces[0].id] ? builds[layout.pieces[0].id].meta.H : 4.25;
-  const fsam = buildFitSample(state, H);
-  saveBlob(stlBinary(fsam.polys, 'fit-sample'),
-    `${state.connector}-fit-sample-clr-${fsam.clrs.map(c=>c.toFixed(2)).join('-')}.stl`);
-});
-$('dlKeys').addEventListener('click', () => {
-  if (state.connector === 'snap' && state.keyInsert === 'top') {
-    const prm = Object.assign({ legT: 1.0, legLen: 1.35, legC: 1.4, barb: 0.18,
-                                bridgeW: 1.7, bridgeD: 0.85, wall: 0.6 }, { clr: state.key.clr });
-    const H = layout && builds[layout.pieces[0].id] ? builds[layout.pieces[0].id].meta.H : 4.25;
-    const one = snapTopClip(prm, H);
-    const nKeys = layout.seams.reduce((a, s) => a + s.junctions.filter(j => Math.abs(j - Math.round(j)) <= 0.25).length, 0) || 1;
-    let polys = [];
-    const cols = Math.ceil(Math.sqrt(nKeys));
-    for (let k = 0; k < nKeys; k++) {
-      const dx = (k % cols) * 7, dy = Math.floor(k / cols) * 4;
-      for (const p of one) polys.push({ verts: p.verts.map(v => [v[0]+dx, v[1]+dy, v[2]]), plane: p.plane });
-    }
-    saveBlob(stlBinary(polys, 'snap-clips'), `snap-clips-x${nKeys}.stl`);
-    return;
-  }
-  const { polys, nKeys } = keysArray();
-  saveBlob(stlBinary(polys, 'connector-keys'), `${state.connector}-keys-x${nKeys}.stl`);
-});
-$('dlAll').addEventListener('click', async () => {
-  if (Object.keys(builds).length < layout.pieces.length) return;
-  const zip = new JSZip();
-  for (const pc of layout.pieces)
-    zip.file(`baseplate-${pc.id}.stl`, stlBinary(builds[pc.id].polys, pc.id));
-  if (['bowtie','puzzlekey','snap'].includes(state.connector)) {
-    const { polys, nKeys } = keysArray();
-    zip.file(`${state.connector}-keys-x${nKeys}.stl`, stlBinary(polys, 'keys'));
-  }
-  if (printPlan) {
-    for (let i = 0; i < printPlan.plates.length; i++)
-      zip.file(`print-plates/plate-${i+1}.3mf`, await plate3mfBytes(i));
-  }
-  zip.file('README.txt', readmeText());
-  const blob = await zip.generateAsync({ type: 'blob' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `gridfinity-baseplate-${layout.nx}x${layout.ny}.zip`; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-});
-function readmeText() {
-  const rows = [...new Set(layout.pieces.map(p => p.band))].length;
-  const lines = [];
-  lines.push('GRIDFINITY BASEPLATE — generated by Drawerforge');
-  lines.push('===============================================');
-  lines.push('https://drawerforge.co.uk');
-  lines.push('');
-  lines.push(`Drawer: ${state.drawerW} x ${state.drawerD} mm | Grid: ${layout.nx} x ${layout.ny} cells @ ${state.pitch} mm`);
-  lines.push(`Margins: L ${layout.mL.toFixed(1)} R ${layout.mR.toFixed(1)} F ${layout.mF.toFixed(1)} B ${layout.mB.toFixed(1)} mm`);
-  lines.push(`Split: ${state.splitMode} | Pieces: ${layout.pieces.length} in ${rows} row band(s)`);
-  lines.push(`Connectors: ${state.connector}` + (state.connector === 'dovetail' ? ` (clearance ${state.tab.clr} mm/side)` : ''));
-  if (state.magnets) lines.push(`Magnets: ${state.magnetD} x ${state.magnetH} mm, from ${state.magnetSide}`);
-  if (state.screws) lines.push(`Screws: ${state.screwHoleD} mm holes, ${state.screwHeadD} mm counterbore`);
-  lines.push('');
-  lines.push('LAYOUT (front of drawer at the bottom):');
-  const bandIds = {};
-  for (const pc of layout.pieces) (bandIds[pc.band] = bandIds[pc.band] || []).push(pc.id);
-  Object.keys(bandIds).sort((a, b) => b - a).forEach(b => lines.push('  ' + bandIds[b].join(' | ')));
-  lines.push('');
-  lines.push('PRINTING: flat as oriented, no supports needed. Print the test tile first');
-  lines.push('and check a bin fits before committing to the full plates.');
-  lines.push('');
-  if (printPlan) lines.push(`PRINT PLATES: ${printPlan.plates.length} — pre-arranged 3MF files in print-plates/ open directly in your slicer.`);
-  lines.push('');
-  if (state.connector === 'puzzle') {
-    lines.push('ASSEMBLY: lower the pieces together on a flat surface so each jigsaw lobe');
-    lines.push('drops into its cavity, then lift the assembled plate into the drawer.');
-  } else if (state.connector === 'hclip' || ((state.connector === 'puzzlekey' || state.connector === 'snap' || state.connector === 'bowtie') && state.keyMount === 'wall')) {
-    if (state.keyInsert === 'top' && state.connector === 'snap') {
-      lines.push('ASSEMBLY: lay the pieces in the drawer edge to edge, then press a U-clip');
-      lines.push('into each junction from above until it clicks. The bridge sits flush.');
-      lines.push('Print clips flat as oriented with a 0.4 mm nozzle and 2+ walls.');
-    } else if (state.keyInsert === 'top') {
-      lines.push('ASSEMBLY: lay the pieces in the drawer edge to edge, then drop a key into');
-      lines.push('each junction opening from above and press flush.');
-    } else {
-      lines.push('ASSEMBLY: place pieces face-down edge to edge, press a key into each pair');
-      lines.push('of wall pockets, then flip and lower into the drawer.');
-    }
-  } else if (state.connector === 'puzzlekey' || state.connector === 'snap') {
-    lines.push('ASSEMBLY: place pieces face-down edge to edge, press a key into each pair');
-    lines.push('of recesses' + (state.connector === 'snap' ? ' until it clicks' : '') + ', then flip and lower into the drawer.');
-  } else if (state.connector === 'dovetail') {
-    lines.push('ASSEMBLY: on a flat surface, lay the piece with tabs down first, then lower');
-    lines.push('each neighbour so its pockets drop over the tabs. Lift the assembled plate');
-    lines.push('into the drawer. Tight joints: a light scrape on the tab flanks.');
-  } else if (state.connector === 'bowtie') {
-    lines.push('ASSEMBLY: place pieces face-down edge to edge, press a bowtie key into each');
-    lines.push('pair of recesses, then flip the assembly and lower it into the drawer.');
-  }
-  lines.push('');
-  lines.push('Settings link: ' + shareLink());
-  lines.push('');
-  lines.push('-----------------------------------------------');
-  lines.push('Made with Drawerforge — https://drawerforge.co.uk');
-  lines.push('Free and open source (MIT). Runs entirely in your browser.');
-  lines.push('');
-  lines.push('Bugs & feature requests:');
-  lines.push('  https://github.com/Oliver-Johnson/Baseplate-Studio/issues');
-  lines.push('  (attaching the settings link above makes reports much easier to act on)');
-  lines.push('');
-  lines.push('If it saved you some time, there is a tip jar:');
-  lines.push('  https://ko-fi.com/oliver_johnson');
-  lines.push('');
-  lines.push('Gridfinity was created by Zack Freedman (Voidstar Lab) as an open standard.');
-  return lines.join('\n');
-}
 
-// ---------- share link ----------
+/* ---------- shared project descriptor -------------------------------------
+   One descriptor in the hash, shared with the baseplates tool. Keys we do not
+   recognise are re-emitted untouched, so a round trip through either tool is
+   lossless and neither has to know the other's schema. */
+const KEYS = { w: 'drawerW', d: 'drawerD', dh: 'drawerH', ph: 'plateH',
+               bu: 'u', bv: 'v', bh: 'hUnits', bw: 'wall', bf: 'floorT',
+               bdx: 'divX', bdy: 'divY', bs: 'solid', bseg: 'arcSegs' };
+
 function shareLink() {
-  const o = {
-    w: state.drawerW, d: state.drawerD, mm: $('marginMode').value,
-    ax: state.alignX, ay: state.alignY,
-    ml: state.mLeft, mr: state.mRight, mf: state.mFront, mb: state.mBack,
-    bw: state.bedW, bd: state.bedD, bh: state.bedH, sp: state.splitMode, km: state.keyMount, ki: state.keyInsert,
-    rc: state.rowCuts || '', cc: state.colCuts ? state.colCuts.map(c => c.join('.')).join('_') : '',
-    cn: state.connector, cl: state.tab.clr, to: state.tolerance,
-    mg: state.magnets ? 1 : 0, md: state.magnetD, mh: state.magnetH, ms: state.magnetSide,
-    sc: state.screws ? 1 : 0, sh: state.screwHoleD, sd: state.screwHeadD, se: state.screwHeadDepth,
-    pi: state.pitch, or: state.outerRadius, bp: state.bottomPad, tc: state.topCutoff,
-    bm: state.baseMode, pc: $('perCorner').checked ? 1 : 0,
-    r1: $('rFL').value, r2: $('rFR').value, r3: $('rBL').value, r4: $('rBR').value,
-  };
-  const q = Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
-  return location.origin + location.pathname + '#' + q;
+  const o = Object.assign({}, hashExtras, { v: 2 });
+  for (const [k, id] of Object.entries(KEYS))
+    o[k] = typeof state[id] === 'boolean' ? (state[id] ? 1 : 0) : state[id];
+  return location.origin + location.pathname + '#' +
+    Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
 }
-// Hand the drawer across to the bins tool. Only the shared keys travel; the bins
-// tool re-emits anything it doesn't recognise, so a round trip is lossless.
-$('toBins').addEventListener('click', (e) => {
-  e.preventDefault();
-  const H = builds[layout.pieces[0].id] ? builds[layout.pieces[0].id].meta.H : state.plateHeight;
-  const o = { v: 2, w: state.drawerW, d: state.drawerD, ph: H.toFixed(2) };
-  location.href = 'bins/#' + Object.entries(o).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
-});
+function loadFromHash() {
+  const h = location.hash.replace(/^#/, '');
+  if (!h) return;
+  const q = {};
+  for (const kv of h.split('&')) {
+    const i = kv.indexOf('=');
+    if (i > 0) q[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1));
+  }
+  for (const [k, v] of Object.entries(q)) {
+    if (k === 'v') continue;
+    const id = KEYS[k];
+    if (!id) { hashExtras[k] = v; continue; }   // someone else's key — keep it
+    const el = $(id === 'u' ? 'u' : id);
+    if (!el) continue;
+    if (el.type === 'checkbox') el.checked = v === '1' || v === 'true';
+    else el.value = v;
+  }
+}
 $('shareBtn').addEventListener('click', () => {
   const link = shareLink();
   navigator.clipboard.writeText(link).then(
     () => { $('shareBtn').textContent = 'Copied ✓'; setTimeout(() => $('shareBtn').textContent = 'Copy settings link', 1600); },
     () => prompt('Copy this link:', link));
 });
-function loadFromHash() {
-  if (!location.hash || location.hash.length < 3) return;
-  const q = Object.fromEntries(location.hash.slice(1).split('&').map(kv => kv.split('=').map(decodeURIComponent)));
-  const set = (id, v) => { if (v !== undefined && $(id)) $(id).value = v; };
-  set('drawerW', q.w); set('drawerD', q.d); set('marginMode', q.mm);
-  set('alignX', q.ax); set('alignY', q.ay);
-  set('mLeft', q.ml); set('mRight', q.mr); set('mFront', q.mf); set('mBack', q.mb);
-  set('bedW', q.bw); set('bedD', q.bd); set('bedH', q.bh); set('keyMount', q.km); set('keyInsert', q.ki);
-  set('connector', q.cn); set('connClr', q.cl); set('tolerance', q.to);
-  if (q.mg !== undefined) $('magnets').checked = q.mg === '1';
-  set('magnetD', q.md); set('magnetH', q.mh); set('magnetSide', q.ms);
-  if (q.sc !== undefined) $('screws').checked = q.sc === '1';
-  set('screwHoleD', q.sh); set('screwHeadD', q.sd); set('screwHeadDepth', q.se);
-  set('pitch', q.pi); set('outerRadius', q.or); set('bottomPad', q.bp); set('topCutoff', q.tc);
-  set('baseMode', q.bm);
-  if (q.pc !== undefined) $('perCorner').checked = q.pc === '1';
-  set('rFL', q.r1); set('rFR', q.r2); set('rBL', q.r3); set('rBR', q.r4);
-  if (q.sp) {
-    state.splitMode = q.sp; setSplitSeg(q.sp);
-    if (q.sp === 'manual') {
-      state.rowCuts = q.rc ? q.rc.split(',').map(Number).filter(n => !isNaN(n)) : [];
-      state.colCuts = q.cc ? q.cc.split('_').map(s => s ? s.split('.').map(Number) : []) : [];
-    }
-  }
-}
-
-// ---------- wiring ----------
-document.querySelectorAll('section.p>h2').forEach(h =>
-  h.addEventListener('click', () => h.parentElement.classList.toggle('closed')));
-document.querySelectorAll('#splitSeg button').forEach(b => b.addEventListener('click', () => {
-  state.splitMode = b.dataset.v;
-  if (b.dataset.v !== 'manual') { state.rowCuts = null; state.colCuts = null; }
-  setSplitSeg(b.dataset.v);
-  recomputeLayout();
-}));
-$('bedPreset').addEventListener('change', () => {
-  const v = $('bedPreset').value;
-  if (v !== 'custom') { const [w, d, h] = v.split(','); $('bedW').value = w; $('bedD').value = d; $('bedH').value = h; }
-  recomputeLayout();
+$('toPlates').addEventListener('click', (e) => {
+  e.preventDefault();
+  const o = Object.assign({}, hashExtras, { v: 2, w: state.drawerW, d: state.drawerD,
+                                            dh: state.drawerH, ph: state.plateH });
+  location.href = '../#' + Object.entries(o).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
 });
-for (const id of [...numIds, 'alignX', 'alignY', 'marginMode', 'connector', 'connClr',
-  'tolerance', 'magnetSide', 'magnets', 'screws', 'baseMode', 'perCorner', 'rFL', 'rFR', 'rBL', 'rBR', 'keyMount', 'keyInsert']) {
-  $(id).addEventListener('input', recomputeLayout);
-  $(id).addEventListener('change', recomputeLayout);
-}
-window.addEventListener('resize', () => { if (layout) drawMap(); });
 
-initThree();
+/* ---------- boot ---------------------------------------------------------- */
+for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'u', 'v', 'hUnits',
+                  'wall', 'floorT', 'divX', 'divY', 'solid', 'arcSegs'])
+  $(id).addEventListener('input', scheduleRebuild);
+$('solid').addEventListener('change', scheduleRebuild);
+$('arcSegs').addEventListener('change', scheduleRebuild);
+
+for (const s of document.querySelectorAll('section.p h2'))
+  s.addEventListener('click', () => s.parentElement.classList.toggle('closed'));
+
 loadFromHash();
-recomputeLayout();
-fitThree();
-
+initThree();
+rebuild();
 </script>
 </body>
 </html>
