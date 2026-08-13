@@ -72,6 +72,28 @@
       <label class="f"><b>Dividers along</b><input id="divY" type="number" step="1" min="0" value="0"></label>
     </div>
     <div class="hint">Dividers are counts of walls, not compartments — 1 divider makes 2 compartments.</div>
+    <div class="row" id="edgeRowA">
+      <label class="f"><b>Front wall</b><select id="edgeF">
+        <option value="1">Full height</option><option value="0.66">Two thirds</option>
+        <option value="0.5">Half</option><option value="0.25">Low lip</option>
+        <option value="0">Open</option></select></label>
+      <label class="f"><b>Back wall</b><select id="edgeB">
+        <option value="1">Full height</option><option value="0.66">Two thirds</option>
+        <option value="0.5">Half</option><option value="0.25">Low lip</option>
+        <option value="0">Open</option></select></label>
+    </div>
+    <div class="row" id="edgeRowB">
+      <label class="f"><b>Left wall</b><select id="edgeL">
+        <option value="1">Full height</option><option value="0.66">Two thirds</option>
+        <option value="0.5">Half</option><option value="0.25">Low lip</option>
+        <option value="0">Open</option></select></label>
+      <label class="f"><b>Right wall</b><select id="edgeR">
+        <option value="1">Full height</option><option value="0.66">Two thirds</option>
+        <option value="0.5">Half</option><option value="0.25">Low lip</option>
+        <option value="0">Open</option></select></label>
+    </div>
+    <div class="hint" id="edgeHint">Front is the front of the drawer, matching the map. Corner posts stay full height so the side walls keep their ends. Lowering any wall removes the stacking lip — nothing can sit on it.</div>
+    <button class="ghost" id="presetTray" style="margin-top:8px">Make this a flat tray / lid</button>
     <label class="f"><b>Corner smoothness</b>
       <select id="arcSegs">
         <option value="8">Fast — 8 segments</option>

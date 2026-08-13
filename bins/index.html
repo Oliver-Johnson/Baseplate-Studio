@@ -188,6 +188,28 @@ footer .mono{font-family:var(--mono);font-size:11px}
       <label class="f"><b>Dividers along</b><input id="divY" type="number" step="1" min="0" value="0"></label>
     </div>
     <div class="hint">Dividers are counts of walls, not compartments — 1 divider makes 2 compartments.</div>
+    <div class="row" id="edgeRowA">
+      <label class="f"><b>Front wall</b><select id="edgeF">
+        <option value="1">Full height</option><option value="0.66">Two thirds</option>
+        <option value="0.5">Half</option><option value="0.25">Low lip</option>
+        <option value="0">Open</option></select></label>
+      <label class="f"><b>Back wall</b><select id="edgeB">
+        <option value="1">Full height</option><option value="0.66">Two thirds</option>
+        <option value="0.5">Half</option><option value="0.25">Low lip</option>
+        <option value="0">Open</option></select></label>
+    </div>
+    <div class="row" id="edgeRowB">
+      <label class="f"><b>Left wall</b><select id="edgeL">
+        <option value="1">Full height</option><option value="0.66">Two thirds</option>
+        <option value="0.5">Half</option><option value="0.25">Low lip</option>
+        <option value="0">Open</option></select></label>
+      <label class="f"><b>Right wall</b><select id="edgeR">
+        <option value="1">Full height</option><option value="0.66">Two thirds</option>
+        <option value="0.5">Half</option><option value="0.25">Low lip</option>
+        <option value="0">Open</option></select></label>
+    </div>
+    <div class="hint" id="edgeHint">Front is the front of the drawer, matching the map. Corner posts stay full height so the side walls keep their ends. Lowering any wall removes the stacking lip — nothing can sit on it.</div>
+    <button class="ghost" id="presetTray" style="margin-top:8px">Make this a flat tray / lid</button>
     <label class="f"><b>Corner smoothness</b>
       <select id="arcSegs">
         <option value="8">Fast — 8 segments</option>
@@ -1949,7 +1971,8 @@ const BIN_DEFAULTS = {
   solid: false,         // no cavity at all
   arcSegs: 12,          // corner-arc segments; only affects the bin's own smoothness
   shrink: 0,            // extra clearance per side, on top of the spec's 0.25
-  lip: true,            // stacking lip on top
+  lip: true,            // stacking lip on top (only when every edge is full height)
+  edges: null,          // {f,b,l,r} wall heights as a fraction; 0 = open, 1 = full
   lipMin: 0.55,         // flat width of the lip's top rim
 };
 
@@ -1973,18 +1996,50 @@ const lipHeight = (lipMin) => 2.6 + (1.90 - lipMin);   // 3.95 at the default
 
 /* ---------- 2D outlines --------------------------------------------------- */
 
+// Straight-run subdivisions. The straights need their own vertices so a wall can
+// change height along a side; without them an edge's height would be dictated by
+// the corner arcs. Fixed, not a parameter: every ring in a bin must share a vertex
+// count so the skins stitch, and one constant is harder to get wrong than a
+// threaded argument.
+const SSEG = 4;
+
 // Rounded rectangle centred on origin, CCW, sharing SPEC.centre where possible.
 function roundRect(hw, hd, r, n) {
   r = Math.max(0.2, Math.min(r, Math.min(hw, hd) - 0.01));
-  const pts = [];
   const cs = [[hw - r, hd - r, 0], [-hw + r, hd - r, 90],
               [-hw + r, -hd + r, 180], [hw - r, -hd + r, 270]];
-  for (const [ox, oy, a0] of cs)
+  const arcs = cs.map(([ox, oy, a0]) => {
+    const out = [];
     for (let k = 0; k <= n; k++) {
       const a = (a0 + 90 * k / n) * Math.PI / 180;
-      pts.push([ox + r * Math.cos(a), oy + r * Math.sin(a)]);
+      out.push([ox + r * Math.cos(a), oy + r * Math.sin(a)]);
     }
+    return out;
+  });
+  const pts = [];
+  for (let c = 0; c < 4; c++) {
+    pts.push(...arcs[c]);
+    // arc ends are tangent, so the gap to the next arc is exactly the straight edge
+    const a = arcs[c][arcs[c].length - 1], b = arcs[(c + 1) % 4][0];
+    for (let k = 1; k < SSEG; k++)
+      pts.push([a[0] + (b[0] - a[0]) * k / SSEG, a[1] + (b[1] - a[1]) * k / SSEG]);
+  }
   return pts;
+}
+
+/* Which edge each outline vertex belongs to. Straights are classified by position;
+   corner-arc vertices take the taller of their two neighbours, so an open front
+   still leaves the side walls running the full length with a corner post. */
+function edgeHeights(outline, hw, hd, r, edges, zLow, zHigh) {
+  const E = 1e-6;
+  const frac = (k) => Math.max(0, Math.min(1, edges && edges[k] !== undefined ? edges[k] : 1));
+  return outline.map(([x, y]) => {
+    let f;
+    if (Math.abs(y) <= hd - r + E) f = x > 0 ? frac('r') : frac('l');
+    else if (Math.abs(x) <= hw - r + E) f = y > 0 ? frac('b') : frac('f');
+    else f = Math.max(x > 0 ? frac('r') : frac('l'), y > 0 ? frac('b') : frac('f'));
+    return zLow + f * (zHigh - zLow);
+  });
 }
 
 // The bin's outer outline at a given foot half-width, for a u x v footprint.
@@ -2028,32 +2083,37 @@ function fanCap(mk, ring, z, up, cx, cy) {
   return polys;
 }
 
-// Closed annular wall between two CCW loops, from z0 to z1.
-function wallRing(G, outer, inner, z0, z1) {
+// Closed annular wall between two CCW loops, from z0 up to a per-vertex top.
+// zTop may be a number or an array — an array lets one side stand full height
+// while another drops to the floor, which is how an open-fronted bin is made.
+function wallRing(G, outer, inner, z0, zTop) {
   const mk = G.makePoly, polys = [];
   const n = outer.length;
+  const zt = (i) => (Array.isArray(zTop) ? zTop[i] : zTop);
   for (let i = 0; i < n; i++) {            // outer skin, normals outward
     const j = (i + 1) % n;
     const p = mk([[outer[i][0], outer[i][1], z0], [outer[j][0], outer[j][1], z0],
-                  [outer[j][0], outer[j][1], z1], [outer[i][0], outer[i][1], z1]]);
-    if (p) polys.push(p);
+                  [outer[j][0], outer[j][1], zt(j)], [outer[i][0], outer[i][1], zt(i)]]);
+    if (p) polys.push(p);                  // planar: all four lie in one vertical plane
   }
-  const m = inner.length;
-  for (let i = 0; i < m; i++) {            // inner skin, normals into the cavity
-    const j = (i + 1) % m;
+  for (let i = 0; i < n; i++) {            // inner skin, normals into the cavity
+    const j = (i + 1) % n;
     const p = mk([[inner[j][0], inner[j][1], z0], [inner[i][0], inner[i][1], z0],
-                  [inner[i][0], inner[i][1], z1], [inner[j][0], inner[j][1], z1]]);
+                  [inner[i][0], inner[i][1], zt(i)], [inner[j][0], inner[j][1], zt(j)]]);
     if (p) polys.push(p);
   }
-  for (const [z, up] of [[z1, true], [z0, false]]) {
-    const { pts, tris } = G.triangulateRing(outer, inner);
-    for (const t of tris) {
-      const vs = [[pts[t[0]][0], pts[t[0]][1], z],
-                  [pts[t[1]][0], pts[t[1]][1], z],
-                  [pts[t[2]][0], pts[t[2]][1], z]];
-      const p = mk(up ? vs : [vs[2], vs[1], vs[0]]);
-      if (p) polys.push(p);
-    }
+  for (let i = 0; i < n; i++) {            // top ribbon — TRIANGLES: a varying top
+    const j = (i + 1) % n;                 // makes the quad non-planar
+    const oi = [outer[i][0], outer[i][1], zt(i)], oj = [outer[j][0], outer[j][1], zt(j)];
+    const ii = [inner[i][0], inner[i][1], zt(i)], ij = [inner[j][0], inner[j][1], zt(j)];
+    let p = mk([oi, oj, ij]); if (p) polys.push(p);
+    p = mk([oi, ij, ii]); if (p) polys.push(p);
+  }
+  const { pts, tris } = G.triangulateRing(outer, inner);
+  for (const t of tris) {                  // bottom annulus, normals down
+    const vs = t.map((ix) => [pts[ix][0], pts[ix][1], z0]);
+    const p = mk([vs[2], vs[1], vs[0]]);
+    if (p) polys.push(p);
   }
   return polys;
 }
@@ -2144,7 +2204,12 @@ function buildBin(G, cfg) {
     const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
     const inner = roundRect(hw - c.wall, hd - c.wall,
                             Math.max(0.4, SPEC.r - c.wall), n);
-    polys.push(...wallRing(G, outer, inner, floorZ, H));
+    // Start the ring below the cavity floor, buried in the slab. An "open" edge
+    // then has its top at floorZ and the ring is still a real volume there rather
+    // than a zero-height sliver — the degenerate case simply hides inside the slab.
+    const zBase = floorZ - Math.min(1.0, Math.max(0.2, c.floorT));
+    const zTop = edgeHeights(outer, hw, hd, SPEC.r, c.edges, floorZ, H);
+    polys.push(...wallRing(G, outer, inner, zBase, zTop));
 
     /* dividers — separate overlapping shells, never unioned */
     const iw = hw - c.wall, id = hd - c.wall;
@@ -2163,15 +2228,26 @@ function buildBin(G, cfg) {
     }
   }
 
-  /* stacking lip */
+  /* stacking lip — only on a bin whose walls all reach full height. A lip over a
+     lowered edge would have nothing under it, and nothing could seat on it anyway. */
   const hwO = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
   const hdO = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
-  const lipH = c.lip ? lipHeight(c.lipMin) : 0;
-  if (c.lip) polys.push(...lipRing(G, c, hwO, hdO, H, n));
+  const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) =>
+    c.edges[k] === undefined || c.edges[k] >= 1);
+  const hasLip = c.lip && allFull && !c.solid;
+  const lipH = hasLip ? lipHeight(c.lipMin) : 0;
+  if (hasLip) polys.push(...lipRing(G, c, hwO, hdO, H, n));
+
+  // H stays the stacking pitch whatever the walls do; topZ is how tall it really is,
+  // which for an all-open tray is just the floor.
+  const maxFrac = c.solid ? 1 : Math.max(...['f', 'b', 'l', 'r'].map((k) =>
+    (!c.edges || c.edges[k] === undefined) ? 1 : Math.max(0, Math.min(1, c.edges[k]))));
+  const topZ = (c.solid || floorZ >= H - 0.2) ? H
+    : floorZ + BLOAT + maxFrac * (H - floorZ - BLOAT);
 
   const meta = {
-    u: c.u, v: c.v, hUnits: c.hUnits, H,
-    lipH, totalH: H + lipH,          // H is the stacking pitch; totalH is what it occupies
+    u: c.u, v: c.v, hUnits: c.hUnits, H, hasLip, openEdges: !allFull,
+    lipH, totalH: topZ + lipH,       // H is the stacking pitch; totalH is what it occupies
     W: (c.u - 1) * SPEC.pitch + 2 * (SPEC.half - c.shrink),
     D: (c.v - 1) * SPEC.pitch + 2 * (SPEC.half - c.shrink),
     footH: SPEC.footH, floorZ, cells: c.u * c.v,
@@ -2216,12 +2292,16 @@ function grid() {
   const avail = state.drawerH - state.plateH;
   return { nx, ny, avail, maxUnits: Math.max(1, Math.floor((avail - LIP_H) / SPEC.unitH)) };
 }
+const EDGES = ['f', 'b', 'l', 'r'];
 const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
                          floorT: b.floorT, divX: b.divX, divY: b.divY,
-                         solid: b.solid, arcSegs: state.arcSegs });
+                         solid: b.solid, edges: b.edges, arcSegs: state.arcSegs });
+const edgeSig = (b) => EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1)).join(',');
+const allFullEdges = (b) => EDGES.every((k) => !b.edges || b.edges[k] === undefined || b.edges[k] >= 1);
 const typeKey = (b) => `${b.u}x${b.v}x${b.hUnits}` +
   (b.solid ? '-solid' : `-w${b.wall}-f${b.floorT}` +
-   (b.divX || b.divY ? `-d${b.divX}.${b.divY}` : ''));
+   (b.divX || b.divY ? `-d${b.divX}.${b.divY}` : '') +
+   (allFullEdges(b) ? '' : `-e${edgeSig(b)}`));
 
 function occupancyOf(k) {
   const g = grid();
@@ -2314,8 +2394,11 @@ function volumeMm3(c) {
   const hwI = hwO - c.wall, hdI = hdO - c.wall;
   const walls = (areaRR(hwO, hdO, SPEC.r) - areaRR(hwI, hdI, Math.max(0.4, SPEC.r - c.wall)))
                 * (H - floorZ);
+  const e = (k) => (c.edges && c.edges[k] !== undefined ? Math.max(0, Math.min(1, c.edges[k])) : 1);
+  const perim = 4 * hwO + 4 * hdO;
+  const wallFrac = (e('f') * 2 * hwO + e('b') * 2 * hwO + e('l') * 2 * hdO + e('r') * 2 * hdO) / perim;
   const divs = (c.divX * c.wall * 2 * hdI + c.divY * c.wall * 2 * hwI) * (H - floorZ);
-  return footV + slab + walls + divs + lipV;
+  return footV + slab + walls * wallFrac + divs + (allFullEdges(c) ? lipV : 0);
 }
 
 /* ---------- controls ------------------------------------------------------ */
@@ -2334,6 +2417,8 @@ function readControls() {
     wall: num('wall', 1.2), floorT: num('floorT', 1.2),
     divX: Math.max(0, int('divX', 0)), divY: Math.max(0, int('divY', 0)),
     solid: $('solid').checked,
+    edges: { f: parseFloat($('edgeF').value), b: parseFloat($('edgeB').value),
+             l: parseFloat($('edgeL').value), r: parseFloat($('edgeR').value) },
   };
   if (selected >= 0 && B()[selected]) {
     const b = B()[selected];
@@ -2346,6 +2431,10 @@ function readControls() {
   }
   $('thickRow').style.display = t.solid ? 'none' : '';
   $('divRow').style.display = t.solid ? 'none' : '';
+  $('edgeRowA').style.display = t.solid ? 'none' : '';
+  $('edgeRowB').style.display = t.solid ? 'none' : '';
+  $('edgeHint').style.display = t.solid ? 'none' : '';
+  $('presetTray').style.display = t.solid ? 'none' : '';
   $('selActions').style.display = selected >= 0 ? '' : 'none';
   $('binPanelTitle').textContent = selected >= 0 ? 'Selected bin' : 'New bins';
   $('fillSize').textContent = `${state.u}×${state.v}`;
@@ -2356,6 +2445,8 @@ function writeControls(src) {
   $('wall').value = src.wall; $('floorT').value = src.floorT;
   $('divX').value = src.divX; $('divY').value = src.divY;
   $('solid').checked = !!src.solid;
+  for (const [k, id] of [['f', 'edgeF'], ['b', 'edgeB'], ['l', 'edgeL'], ['r', 'edgeR']])
+    $(id).value = String(src.edges && src.edges[k] !== undefined ? src.edges[k] : 1);
 }
 
 /* ---------- layers -------------------------------------------------------- */
@@ -2471,7 +2562,7 @@ function initMap() {
     if (canPlace(x, y, u, v, -1)) {
       B().push({ x, y, u, v, hUnits: state.hUnits, wall: state.wall,
                  floorT: state.floorT, divX: state.divX, divY: state.divY,
-                 solid: state.solid });
+                 solid: state.solid, edges: Object.assign({}, state.edges) });
       selected = B().length - 1;
       writeControls(B()[selected]);
     }
@@ -2495,7 +2586,7 @@ $('fillRest').addEventListener('click', () => {
         if (cur > 0) { const st = seat(probe, cur); if (!st.flat || !st.solidBelow) continue; }
         B().push({ x, y, u, v, hUnits: state.hUnits, wall: state.wall,
                    floorT: state.floorT, divX: state.divX, divY: state.divY,
-                   solid: state.solid });
+                   solid: state.solid, edges: Object.assign({}, state.edges) });
         break;
       }
     }
@@ -2515,7 +2606,8 @@ $('applyAll').addEventListener('click', () => {
   const s = B()[selected];
   for (const b of B()) Object.assign(b, {
     hUnits: s.hUnits, wall: s.wall, floorT: s.floorT,
-    divX: s.divX, divY: s.divY, solid: s.solid });
+    divX: s.divX, divY: s.divY, solid: s.solid,
+    edges: Object.assign({}, s.edges) });
   drawMap(); refresh();
 });
 
@@ -2554,6 +2646,10 @@ function warnings() {
         const below = new Set();
         for (let dy = 0; dy < b.v; dy++)
           for (let dx = 0; dx < b.u; dx++) below.add(occB[b.y + dy][b.x + dx]);
+        const noLip = [...below].map((i) => layers[k - 1].bins[i])
+                                .filter((bb) => bb && !allFullEdges(bb));
+        if (noLip.length)
+          out.push({ err: true, t: `Layer ${k + 1}: a ${b.u}×${b.v} bin sits on a bin with a lowered or open wall. That bin has no stacking lip, so there is nothing to hold this one — it would sit on bare wall tops.` });
         if (below.size === 1) {
           const bb = layers[k - 1].bins[[...below][0]];
           if (bb && (bb.u !== b.u || bb.v !== b.v || bb.x !== b.x || bb.y !== b.y))
@@ -2778,14 +2874,17 @@ $('dlAll').addEventListener('click', async () => {
 /* ---------- shared project descriptor -------------------------------------- */
 const KEYS = { w: 'drawerW', d: 'drawerD', dh: 'drawerH', ph: 'plateH' };
 const packLayer = (L) => L.bins.map((b) =>
-  [b.x, b.y, b.u, b.v, b.hUnits, b.wall, b.floorT, b.divX, b.divY, b.solid ? 1 : 0].join('.')).join('_');
+  [b.x, b.y, b.u, b.v, b.hUnits, b.wall, b.floorT, b.divX, b.divY, b.solid ? 1 : 0]
+    .concat(EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1))).join('.')).join('_');
 const packAll = () => layers.map(packLayer).join('~');
 function unpackAll(s) {
   return (s || '').split('~').map((ls) => ({
     bins: ls.split('_').filter(Boolean).map((t) => {
       const p = t.split('.').map(Number);
+      const ed = {};
+      EDGES.forEach((k, i) => { ed[k] = p.length > 10 + i && isFinite(p[10 + i]) ? p[10 + i] : 1; });
       return { x: p[0], y: p[1], u: p[2], v: p[3], hUnits: p[4],
-               wall: p[5], floorT: p[6], divX: p[7], divY: p[8], solid: !!p[9] };
+               wall: p[5], floorT: p[6], divX: p[7], divY: p[8], solid: !!p[9], edges: ed };
     }),
   }));
 }
@@ -2832,8 +2931,16 @@ let timer = null;
 const schedule = () => { clearTimeout(timer); timer = setTimeout(() => {
   readControls(); geoCache.clear(); drawLayerTabs(); drawMap(); refresh(); }, 180); };
 for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'u', 'v', 'hUnits',
-                  'wall', 'floorT', 'divX', 'divY', 'solid', 'arcSegs'])
+                  'wall', 'floorT', 'divX', 'divY', 'solid', 'arcSegs',
+                  'edgeF', 'edgeB', 'edgeL', 'edgeR'])
   $(id).addEventListener('input', schedule);
+for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR'])
+  $(id).addEventListener('change', schedule);
+$('presetTray').addEventListener('click', () => {
+  for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR']) $(id).value = '0';
+  $('solid').checked = false;
+  readControls(); geoCache.clear(); drawMap(); refresh();
+});
 $('solid').addEventListener('change', schedule);
 $('arcSegs').addEventListener('change', schedule);
 for (const s of document.querySelectorAll('section.p h2'))

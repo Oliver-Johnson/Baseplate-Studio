@@ -31,12 +31,16 @@ function grid() {
   const avail = state.drawerH - state.plateH;
   return { nx, ny, avail, maxUnits: Math.max(1, Math.floor((avail - LIP_H) / SPEC.unitH)) };
 }
+const EDGES = ['f', 'b', 'l', 'r'];
 const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
                          floorT: b.floorT, divX: b.divX, divY: b.divY,
-                         solid: b.solid, arcSegs: state.arcSegs });
+                         solid: b.solid, edges: b.edges, arcSegs: state.arcSegs });
+const edgeSig = (b) => EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1)).join(',');
+const allFullEdges = (b) => EDGES.every((k) => !b.edges || b.edges[k] === undefined || b.edges[k] >= 1);
 const typeKey = (b) => `${b.u}x${b.v}x${b.hUnits}` +
   (b.solid ? '-solid' : `-w${b.wall}-f${b.floorT}` +
-   (b.divX || b.divY ? `-d${b.divX}.${b.divY}` : ''));
+   (b.divX || b.divY ? `-d${b.divX}.${b.divY}` : '') +
+   (allFullEdges(b) ? '' : `-e${edgeSig(b)}`));
 
 function occupancyOf(k) {
   const g = grid();
@@ -129,8 +133,11 @@ function volumeMm3(c) {
   const hwI = hwO - c.wall, hdI = hdO - c.wall;
   const walls = (areaRR(hwO, hdO, SPEC.r) - areaRR(hwI, hdI, Math.max(0.4, SPEC.r - c.wall)))
                 * (H - floorZ);
+  const e = (k) => (c.edges && c.edges[k] !== undefined ? Math.max(0, Math.min(1, c.edges[k])) : 1);
+  const perim = 4 * hwO + 4 * hdO;
+  const wallFrac = (e('f') * 2 * hwO + e('b') * 2 * hwO + e('l') * 2 * hdO + e('r') * 2 * hdO) / perim;
   const divs = (c.divX * c.wall * 2 * hdI + c.divY * c.wall * 2 * hwI) * (H - floorZ);
-  return footV + slab + walls + divs + lipV;
+  return footV + slab + walls * wallFrac + divs + (allFullEdges(c) ? lipV : 0);
 }
 
 /* ---------- controls ------------------------------------------------------ */
@@ -149,6 +156,8 @@ function readControls() {
     wall: num('wall', 1.2), floorT: num('floorT', 1.2),
     divX: Math.max(0, int('divX', 0)), divY: Math.max(0, int('divY', 0)),
     solid: $('solid').checked,
+    edges: { f: parseFloat($('edgeF').value), b: parseFloat($('edgeB').value),
+             l: parseFloat($('edgeL').value), r: parseFloat($('edgeR').value) },
   };
   if (selected >= 0 && B()[selected]) {
     const b = B()[selected];
@@ -161,6 +170,10 @@ function readControls() {
   }
   $('thickRow').style.display = t.solid ? 'none' : '';
   $('divRow').style.display = t.solid ? 'none' : '';
+  $('edgeRowA').style.display = t.solid ? 'none' : '';
+  $('edgeRowB').style.display = t.solid ? 'none' : '';
+  $('edgeHint').style.display = t.solid ? 'none' : '';
+  $('presetTray').style.display = t.solid ? 'none' : '';
   $('selActions').style.display = selected >= 0 ? '' : 'none';
   $('binPanelTitle').textContent = selected >= 0 ? 'Selected bin' : 'New bins';
   $('fillSize').textContent = `${state.u}×${state.v}`;
@@ -171,6 +184,8 @@ function writeControls(src) {
   $('wall').value = src.wall; $('floorT').value = src.floorT;
   $('divX').value = src.divX; $('divY').value = src.divY;
   $('solid').checked = !!src.solid;
+  for (const [k, id] of [['f', 'edgeF'], ['b', 'edgeB'], ['l', 'edgeL'], ['r', 'edgeR']])
+    $(id).value = String(src.edges && src.edges[k] !== undefined ? src.edges[k] : 1);
 }
 
 /* ---------- layers -------------------------------------------------------- */
@@ -286,7 +301,7 @@ function initMap() {
     if (canPlace(x, y, u, v, -1)) {
       B().push({ x, y, u, v, hUnits: state.hUnits, wall: state.wall,
                  floorT: state.floorT, divX: state.divX, divY: state.divY,
-                 solid: state.solid });
+                 solid: state.solid, edges: Object.assign({}, state.edges) });
       selected = B().length - 1;
       writeControls(B()[selected]);
     }
@@ -310,7 +325,7 @@ $('fillRest').addEventListener('click', () => {
         if (cur > 0) { const st = seat(probe, cur); if (!st.flat || !st.solidBelow) continue; }
         B().push({ x, y, u, v, hUnits: state.hUnits, wall: state.wall,
                    floorT: state.floorT, divX: state.divX, divY: state.divY,
-                   solid: state.solid });
+                   solid: state.solid, edges: Object.assign({}, state.edges) });
         break;
       }
     }
@@ -330,7 +345,8 @@ $('applyAll').addEventListener('click', () => {
   const s = B()[selected];
   for (const b of B()) Object.assign(b, {
     hUnits: s.hUnits, wall: s.wall, floorT: s.floorT,
-    divX: s.divX, divY: s.divY, solid: s.solid });
+    divX: s.divX, divY: s.divY, solid: s.solid,
+    edges: Object.assign({}, s.edges) });
   drawMap(); refresh();
 });
 
@@ -369,6 +385,10 @@ function warnings() {
         const below = new Set();
         for (let dy = 0; dy < b.v; dy++)
           for (let dx = 0; dx < b.u; dx++) below.add(occB[b.y + dy][b.x + dx]);
+        const noLip = [...below].map((i) => layers[k - 1].bins[i])
+                                .filter((bb) => bb && !allFullEdges(bb));
+        if (noLip.length)
+          out.push({ err: true, t: `Layer ${k + 1}: a ${b.u}×${b.v} bin sits on a bin with a lowered or open wall. That bin has no stacking lip, so there is nothing to hold this one — it would sit on bare wall tops.` });
         if (below.size === 1) {
           const bb = layers[k - 1].bins[[...below][0]];
           if (bb && (bb.u !== b.u || bb.v !== b.v || bb.x !== b.x || bb.y !== b.y))
@@ -593,14 +613,17 @@ $('dlAll').addEventListener('click', async () => {
 /* ---------- shared project descriptor -------------------------------------- */
 const KEYS = { w: 'drawerW', d: 'drawerD', dh: 'drawerH', ph: 'plateH' };
 const packLayer = (L) => L.bins.map((b) =>
-  [b.x, b.y, b.u, b.v, b.hUnits, b.wall, b.floorT, b.divX, b.divY, b.solid ? 1 : 0].join('.')).join('_');
+  [b.x, b.y, b.u, b.v, b.hUnits, b.wall, b.floorT, b.divX, b.divY, b.solid ? 1 : 0]
+    .concat(EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1))).join('.')).join('_');
 const packAll = () => layers.map(packLayer).join('~');
 function unpackAll(s) {
   return (s || '').split('~').map((ls) => ({
     bins: ls.split('_').filter(Boolean).map((t) => {
       const p = t.split('.').map(Number);
+      const ed = {};
+      EDGES.forEach((k, i) => { ed[k] = p.length > 10 + i && isFinite(p[10 + i]) ? p[10 + i] : 1; });
       return { x: p[0], y: p[1], u: p[2], v: p[3], hUnits: p[4],
-               wall: p[5], floorT: p[6], divX: p[7], divY: p[8], solid: !!p[9] };
+               wall: p[5], floorT: p[6], divX: p[7], divY: p[8], solid: !!p[9], edges: ed };
     }),
   }));
 }
@@ -647,8 +670,16 @@ let timer = null;
 const schedule = () => { clearTimeout(timer); timer = setTimeout(() => {
   readControls(); geoCache.clear(); drawLayerTabs(); drawMap(); refresh(); }, 180); };
 for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'u', 'v', 'hUnits',
-                  'wall', 'floorT', 'divX', 'divY', 'solid', 'arcSegs'])
+                  'wall', 'floorT', 'divX', 'divY', 'solid', 'arcSegs',
+                  'edgeF', 'edgeB', 'edgeL', 'edgeR'])
   $(id).addEventListener('input', schedule);
+for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR'])
+  $(id).addEventListener('change', schedule);
+$('presetTray').addEventListener('click', () => {
+  for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR']) $(id).value = '0';
+  $('solid').checked = false;
+  readControls(); geoCache.clear(); drawMap(); refresh();
+});
 $('solid').addEventListener('change', schedule);
 $('arcSegs').addEventListener('change', schedule);
 for (const s of document.querySelectorAll('section.p h2'))

@@ -42,7 +42,8 @@ const BIN_DEFAULTS = {
   solid: false,         // no cavity at all
   arcSegs: 12,          // corner-arc segments; only affects the bin's own smoothness
   shrink: 0,            // extra clearance per side, on top of the spec's 0.25
-  lip: true,            // stacking lip on top
+  lip: true,            // stacking lip on top (only when every edge is full height)
+  edges: null,          // {f,b,l,r} wall heights as a fraction; 0 = open, 1 = full
   lipMin: 0.55,         // flat width of the lip's top rim
 };
 
@@ -66,18 +67,50 @@ const lipHeight = (lipMin) => 2.6 + (1.90 - lipMin);   // 3.95 at the default
 
 /* ---------- 2D outlines --------------------------------------------------- */
 
+// Straight-run subdivisions. The straights need their own vertices so a wall can
+// change height along a side; without them an edge's height would be dictated by
+// the corner arcs. Fixed, not a parameter: every ring in a bin must share a vertex
+// count so the skins stitch, and one constant is harder to get wrong than a
+// threaded argument.
+const SSEG = 4;
+
 // Rounded rectangle centred on origin, CCW, sharing SPEC.centre where possible.
 function roundRect(hw, hd, r, n) {
   r = Math.max(0.2, Math.min(r, Math.min(hw, hd) - 0.01));
-  const pts = [];
   const cs = [[hw - r, hd - r, 0], [-hw + r, hd - r, 90],
               [-hw + r, -hd + r, 180], [hw - r, -hd + r, 270]];
-  for (const [ox, oy, a0] of cs)
+  const arcs = cs.map(([ox, oy, a0]) => {
+    const out = [];
     for (let k = 0; k <= n; k++) {
       const a = (a0 + 90 * k / n) * Math.PI / 180;
-      pts.push([ox + r * Math.cos(a), oy + r * Math.sin(a)]);
+      out.push([ox + r * Math.cos(a), oy + r * Math.sin(a)]);
     }
+    return out;
+  });
+  const pts = [];
+  for (let c = 0; c < 4; c++) {
+    pts.push(...arcs[c]);
+    // arc ends are tangent, so the gap to the next arc is exactly the straight edge
+    const a = arcs[c][arcs[c].length - 1], b = arcs[(c + 1) % 4][0];
+    for (let k = 1; k < SSEG; k++)
+      pts.push([a[0] + (b[0] - a[0]) * k / SSEG, a[1] + (b[1] - a[1]) * k / SSEG]);
+  }
   return pts;
+}
+
+/* Which edge each outline vertex belongs to. Straights are classified by position;
+   corner-arc vertices take the taller of their two neighbours, so an open front
+   still leaves the side walls running the full length with a corner post. */
+function edgeHeights(outline, hw, hd, r, edges, zLow, zHigh) {
+  const E = 1e-6;
+  const frac = (k) => Math.max(0, Math.min(1, edges && edges[k] !== undefined ? edges[k] : 1));
+  return outline.map(([x, y]) => {
+    let f;
+    if (Math.abs(y) <= hd - r + E) f = x > 0 ? frac('r') : frac('l');
+    else if (Math.abs(x) <= hw - r + E) f = y > 0 ? frac('b') : frac('f');
+    else f = Math.max(x > 0 ? frac('r') : frac('l'), y > 0 ? frac('b') : frac('f'));
+    return zLow + f * (zHigh - zLow);
+  });
 }
 
 // The bin's outer outline at a given foot half-width, for a u x v footprint.
@@ -121,32 +154,37 @@ function fanCap(mk, ring, z, up, cx, cy) {
   return polys;
 }
 
-// Closed annular wall between two CCW loops, from z0 to z1.
-function wallRing(G, outer, inner, z0, z1) {
+// Closed annular wall between two CCW loops, from z0 up to a per-vertex top.
+// zTop may be a number or an array — an array lets one side stand full height
+// while another drops to the floor, which is how an open-fronted bin is made.
+function wallRing(G, outer, inner, z0, zTop) {
   const mk = G.makePoly, polys = [];
   const n = outer.length;
+  const zt = (i) => (Array.isArray(zTop) ? zTop[i] : zTop);
   for (let i = 0; i < n; i++) {            // outer skin, normals outward
     const j = (i + 1) % n;
     const p = mk([[outer[i][0], outer[i][1], z0], [outer[j][0], outer[j][1], z0],
-                  [outer[j][0], outer[j][1], z1], [outer[i][0], outer[i][1], z1]]);
-    if (p) polys.push(p);
+                  [outer[j][0], outer[j][1], zt(j)], [outer[i][0], outer[i][1], zt(i)]]);
+    if (p) polys.push(p);                  // planar: all four lie in one vertical plane
   }
-  const m = inner.length;
-  for (let i = 0; i < m; i++) {            // inner skin, normals into the cavity
-    const j = (i + 1) % m;
+  for (let i = 0; i < n; i++) {            // inner skin, normals into the cavity
+    const j = (i + 1) % n;
     const p = mk([[inner[j][0], inner[j][1], z0], [inner[i][0], inner[i][1], z0],
-                  [inner[i][0], inner[i][1], z1], [inner[j][0], inner[j][1], z1]]);
+                  [inner[i][0], inner[i][1], zt(i)], [inner[j][0], inner[j][1], zt(j)]]);
     if (p) polys.push(p);
   }
-  for (const [z, up] of [[z1, true], [z0, false]]) {
-    const { pts, tris } = G.triangulateRing(outer, inner);
-    for (const t of tris) {
-      const vs = [[pts[t[0]][0], pts[t[0]][1], z],
-                  [pts[t[1]][0], pts[t[1]][1], z],
-                  [pts[t[2]][0], pts[t[2]][1], z]];
-      const p = mk(up ? vs : [vs[2], vs[1], vs[0]]);
-      if (p) polys.push(p);
-    }
+  for (let i = 0; i < n; i++) {            // top ribbon — TRIANGLES: a varying top
+    const j = (i + 1) % n;                 // makes the quad non-planar
+    const oi = [outer[i][0], outer[i][1], zt(i)], oj = [outer[j][0], outer[j][1], zt(j)];
+    const ii = [inner[i][0], inner[i][1], zt(i)], ij = [inner[j][0], inner[j][1], zt(j)];
+    let p = mk([oi, oj, ij]); if (p) polys.push(p);
+    p = mk([oi, ij, ii]); if (p) polys.push(p);
+  }
+  const { pts, tris } = G.triangulateRing(outer, inner);
+  for (const t of tris) {                  // bottom annulus, normals down
+    const vs = t.map((ix) => [pts[ix][0], pts[ix][1], z0]);
+    const p = mk([vs[2], vs[1], vs[0]]);
+    if (p) polys.push(p);
   }
   return polys;
 }
@@ -237,7 +275,12 @@ function buildBin(G, cfg) {
     const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
     const inner = roundRect(hw - c.wall, hd - c.wall,
                             Math.max(0.4, SPEC.r - c.wall), n);
-    polys.push(...wallRing(G, outer, inner, floorZ, H));
+    // Start the ring below the cavity floor, buried in the slab. An "open" edge
+    // then has its top at floorZ and the ring is still a real volume there rather
+    // than a zero-height sliver — the degenerate case simply hides inside the slab.
+    const zBase = floorZ - Math.min(1.0, Math.max(0.2, c.floorT));
+    const zTop = edgeHeights(outer, hw, hd, SPEC.r, c.edges, floorZ, H);
+    polys.push(...wallRing(G, outer, inner, zBase, zTop));
 
     /* dividers — separate overlapping shells, never unioned */
     const iw = hw - c.wall, id = hd - c.wall;
@@ -256,15 +299,26 @@ function buildBin(G, cfg) {
     }
   }
 
-  /* stacking lip */
+  /* stacking lip — only on a bin whose walls all reach full height. A lip over a
+     lowered edge would have nothing under it, and nothing could seat on it anyway. */
   const hwO = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
   const hdO = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
-  const lipH = c.lip ? lipHeight(c.lipMin) : 0;
-  if (c.lip) polys.push(...lipRing(G, c, hwO, hdO, H, n));
+  const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) =>
+    c.edges[k] === undefined || c.edges[k] >= 1);
+  const hasLip = c.lip && allFull && !c.solid;
+  const lipH = hasLip ? lipHeight(c.lipMin) : 0;
+  if (hasLip) polys.push(...lipRing(G, c, hwO, hdO, H, n));
+
+  // H stays the stacking pitch whatever the walls do; topZ is how tall it really is,
+  // which for an all-open tray is just the floor.
+  const maxFrac = c.solid ? 1 : Math.max(...['f', 'b', 'l', 'r'].map((k) =>
+    (!c.edges || c.edges[k] === undefined) ? 1 : Math.max(0, Math.min(1, c.edges[k]))));
+  const topZ = (c.solid || floorZ >= H - 0.2) ? H
+    : floorZ + BLOAT + maxFrac * (H - floorZ - BLOAT);
 
   const meta = {
-    u: c.u, v: c.v, hUnits: c.hUnits, H,
-    lipH, totalH: H + lipH,          // H is the stacking pitch; totalH is what it occupies
+    u: c.u, v: c.v, hUnits: c.hUnits, H, hasLip, openEdges: !allFull,
+    lipH, totalH: topZ + lipH,       // H is the stacking pitch; totalH is what it occupies
     W: (c.u - 1) * SPEC.pitch + 2 * (SPEC.half - c.shrink),
     D: (c.v - 1) * SPEC.pitch + 2 * (SPEC.half - c.shrink),
     footH: SPEC.footH, floorZ, cells: c.u * c.v,
