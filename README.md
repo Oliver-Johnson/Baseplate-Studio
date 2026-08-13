@@ -1,12 +1,12 @@
-# Baseplate Studio
+# Drawerforge
 
 **Gridfinity baseplates cut to your drawer — measured, split for your printer, joined, and ready to print.**
 
-Baseplate Studio is a free, open, browser-based generator for [Gridfinity](https://gridfinity.xyz/) baseplates that starts from the space you actually have. Enter your drawer's internal dimensions and it works out the grid, splits the plate to fit your print bed, adds printable connectors so the pieces join solidly, and exports everything as STL and 3MF — including pre-arranged print plates that open straight in your slicer.
+Drawerforge is a free, open, browser-based generator for [Gridfinity](https://gridfinity.xyz/) baseplates that starts from the space you actually have. Enter your drawer's internal dimensions and it works out the grid, splits the plate to fit your print bed, adds printable connectors so the pieces join solidly, and exports everything as STL and 3MF — including pre-arranged print plates that open straight in your slicer.
 
 Everything runs entirely in your browser. Nothing is uploaded, there's no account, and there's no tracking.
 
-**[▶ Use it here](https://YOUR_USERNAME.github.io/YOUR_REPO/)** *(update this link after enabling GitHub Pages)*
+**[▶ Use it here — drawerforge.co.uk](https://drawerforge.co.uk/)**
 
 ---
 
@@ -73,9 +73,9 @@ Some joint pockets intentionally leave a few small uncapped faces where a cut in
 
 ## Issues, suggestions & support
 
-Found a bug, or want a feature? **[Open an issue](https://github.com/YOUR_USERNAME/YOUR_REPO/issues)** — bug reports with a settings share-link attached are especially easy to act on.
+Found a bug, or want a feature? **[Open an issue](https://github.com/Oliver-Johnson/Baseplate-Studio/issues)** — bug reports with a settings share-link attached are especially easy to act on.
 
-If the tool saved you some time and you'd like to support it, there's a tip jar at **[ko-fi.com/YOUR_KOFI](https://ko-fi.com/YOUR_KOFI)** — entirely optional, always appreciated.
+If the tool saved you some time and you'd like to support it, there's a tip jar at **[ko-fi.com/oliver_johnson](https://ko-fi.com/oliver_johnson)** — entirely optional, always appreciated.
 
 ## License
 

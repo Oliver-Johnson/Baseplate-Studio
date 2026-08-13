@@ -1,0 +1,27 @@
+# Internal handover notes — not for publication
+HANDOVER.md
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Test / scratch geometry output
+*.stl
+*.3mf
+!test/reference-bin.stl
+__pycache__/
+*.pyc
+
+# OS cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Claude Code — local machine settings only; .claude/settings.json stays shareable
+.claude/settings.local.json
+
+# Editors
+.vscode/
+.idea/
+*.swp
