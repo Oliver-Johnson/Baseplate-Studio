@@ -104,40 +104,74 @@ function geomFor(b) {
   const k = typeKey(b) + '-s' + state.arcSegs;
   if (geoCache.has(k)) return geoCache.get(k);
   const r = buildBin(G, binCfg(b));
-  r.vol = volumeMm3(b);
+  const vv = volumeMm3(b);
+  r.vol = vv.filament; r.rawVol = vv.raw;
   geoCache.set(k, r);
   return r;
 }
 function areaRR(hw, hd, r) { return 4 * hw * hd - (4 - Math.PI) * r * r; }
+function perimRR(hw, hd, r) { return 4 * hw + 4 * hd - 8 * r + 2 * Math.PI * r; }
+
+/* Material estimate.
+ *
+ * Raw mesh volume is NOT what a printer uses. Thin features (walls, floor,
+ * dividers, lip) come out solid because they are only a few perimeters wide, but
+ * the feet are thick blocks that the slicer shells and then infills — and on a
+ * shallow bin the feet dominate. So thin parts are counted at full density and
+ * the base block is counted as shell + infill x core.
+ *
+ * Assumes 2 perimeters (0.8 mm) and 4 solid top/bottom layers (0.8 mm), which is
+ * a common default. Geometry is unaffected either way.
+ */
+const SHELL_T = 0.8, SKIN_T = 0.8;
+
+function footProfileHalf(z) {
+  let h = SPEC.prof[SPEC.prof.length - 1][1];
+  for (let q = 0; q < SPEC.prof.length - 1; q++) {
+    const [z0, h0] = SPEC.prof[q], [z1, h1] = SPEC.prof[q + 1];
+    if (z >= z0 && z <= z1) { h = h0 + (h1 - h0) * (z1 > z0 ? (z - z0) / (z1 - z0) : 0); break; }
+  }
+  return h;
+}
+
+// { raw, filament } in mm3
 function volumeMm3(c) {
-  const half = SPEC.half, C = SPEC.centre;
-  const hwO = (c.u - 1) * SPEC.pitch / 2 + half;
-  const hdO = (c.v - 1) * SPEC.pitch / 2 + half;
+  const C = SPEC.centre;
+  const hwO = (c.u - 1) * SPEC.pitch / 2 + SPEC.half;
+  const hdO = (c.v - 1) * SPEC.pitch / 2 + SPEC.half;
   const H = c.hUnits * SPEC.unitH, floorZ = SPEC.footH + c.floorT;
-  let footV = 0;
+  const cells = c.u * c.v;
+  const infill = Math.max(0, Math.min(1, (state.infill === undefined ? 15 : state.infill) / 100));
+
+  /* base block: the feet plus the solid floor slab above them */
+  let footV = 0, footLat = 0;
   const N = 60;
   for (let i = 0; i < N; i++) {
-    const z = SPEC.footH * (i + 0.5) / N;
-    let h = SPEC.prof[SPEC.prof.length - 1][1];
-    for (let q = 0; q < SPEC.prof.length - 1; q++) {
-      const [z0, h0] = SPEC.prof[q], [z1, h1] = SPEC.prof[q + 1];
-      if (z >= z0 && z <= z1) { h = h0 + (h1 - h0) * (z1 > z0 ? (z - z0) / (z1 - z0) : 0); break; }
-    }
+    const h = footProfileHalf(SPEC.footH * (i + 0.5) / N);
     footV += areaRR(h, h, h - C) * (SPEC.footH / N);
+    footLat += perimRR(h, h, h - C) * (SPEC.footH / N);
   }
-  footV *= c.u * c.v;
-  const lipV = areaRR(hwO, hdO, SPEC.r) * 0.35 * LIP_H / 1.9;   // thin tapering rim
-  if (c.solid || floorZ >= H - 0.2)
-    return footV + areaRR(hwO, hdO, SPEC.r) * (H - SPEC.footH) + lipV;
-  const slab = areaRR(hwO, hdO, SPEC.r) * c.floorT;
-  const hwI = hwO - c.wall, hdI = hdO - c.wall;
-  const walls = (areaRR(hwO, hdO, SPEC.r) - areaRR(hwI, hdI, Math.max(0.4, SPEC.r - c.wall)))
-                * (H - floorZ);
+  footV *= cells; footLat *= cells;
+  const slabH = (c.solid || floorZ >= H - 0.2) ? (H - SPEC.footH) : c.floorT;
+  const baseRaw = footV + areaRR(hwO, hdO, SPEC.r) * slabH;
+  const baseLat = footLat + perimRR(hwO, hdO, SPEC.r) * slabH;
+  const botA = cells * areaRR(SPEC.prof[0][1], SPEC.prof[0][1], SPEC.prof[0][1] - C);
+  const baseShell = baseLat * SHELL_T + (botA + areaRR(hwO, hdO, SPEC.r)) * SKIN_T;
+  const baseFil = Math.min(baseRaw, baseShell + infill * Math.max(0, baseRaw - baseShell));
+
+  if (c.solid || floorZ >= H - 0.2) return { raw: baseRaw, filament: baseFil };
+
+  /* thin parts — solid whatever the infill setting */
   const e = (k) => (c.edges && c.edges[k] !== undefined ? Math.max(0, Math.min(1, c.edges[k])) : 1);
+  const hwI = hwO - c.wall, hdI = hdO - c.wall;
+  const wallsFull = (areaRR(hwO, hdO, SPEC.r) - areaRR(hwI, hdI, Math.max(0.4, SPEC.r - c.wall)))
+                    * (H - floorZ);
   const perim = 4 * hwO + 4 * hdO;
   const wallFrac = (e('f') * 2 * hwO + e('b') * 2 * hwO + e('l') * 2 * hdO + e('r') * 2 * hdO) / perim;
   const divs = (c.divX * c.wall * 2 * hdI + c.divY * c.wall * 2 * hwI) * (H - floorZ);
-  return footV + slab + walls * wallFrac + divs + (allFullEdges(c) ? lipV : 0);
+  const lipV = allFullEdges(c) ? areaRR(hwO, hdO, SPEC.r) * 0.35 * LIP_H / 1.9 : 0;
+  const thin = wallsFull * wallFrac + divs + lipV;
+  return { raw: baseRaw + thin, filament: baseFil + thin };
 }
 
 /* ---------- controls ------------------------------------------------------ */
@@ -149,6 +183,7 @@ function readControls() {
   state.drawerH = num('drawerH', 84);
   state.plateH = num('plateH', 4.25);
   state.arcSegs = int('arcSegs', 12);
+  state.infill = num('infill', 15);
 
   const t = {
     u: Math.max(1, int('u', 1)), v: Math.max(1, int('v', 1)),
@@ -459,7 +494,7 @@ function refresh() {
       if (t) saveBlob(G.stlBinary(geomFor(t.b).polys, 'bin'), typeName(t) + '.stl');
     });
   $('totals').textContent = allBins().length
-    ? `${allBins().length} bins · ${ts.length} distinct type(s) · ${(vol / 1000).toFixed(0)} cm³ ≈ ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g PLA`
+    ? `${allBins().length} bins · ${ts.length} distinct type(s) · ≈ ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g PLA at ${state.infill}% infill`
     : '—';
 
   drawWarnings();
@@ -669,7 +704,7 @@ $('toPlates').addEventListener('click', (e) => {
 let timer = null;
 const schedule = () => { clearTimeout(timer); timer = setTimeout(() => {
   readControls(); geoCache.clear(); drawLayerTabs(); drawMap(); refresh(); }, 180); };
-for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'u', 'v', 'hUnits',
+for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'u', 'v', 'hUnits',
                   'wall', 'floorT', 'divX', 'divY', 'solid', 'arcSegs',
                   'edgeF', 'edgeB', 'edgeL', 'edgeR'])
   $(id).addEventListener('input', schedule);
