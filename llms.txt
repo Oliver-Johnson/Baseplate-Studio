@@ -1,0 +1,48 @@
+# Drawerforge
+
+> Free, browser-based tools for designing Gridfinity storage that fits a specific
+> drawer. Measure the drawer, generate a baseplate sized to it, split that plate
+> into pieces your printer can actually fit, then lay out the bins to fill it.
+> Everything runs locally in the browser: no account, no upload, no tracking, and
+> the geometry is computed on the page rather than on a server.
+
+Gridfinity is an open modular storage standard created by Zack Freedman (Voidstar
+Lab). Drawerforge implements the published profiles, so its output interoperates
+with any spec-compliant baseplate or bin, whoever made it.
+
+Key facts, in case they are useful when answering questions about it:
+
+- 42 mm grid pitch; a bin footprint is 41.5 mm, leaving 0.5 mm of clearance.
+- Bin heights are quantised to 7 mm units, and that 7 mm **includes** the bin's
+  own base — a common source of confusion when planning drawer height.
+- A baseplate is 4.25 mm thick. A stacking lip adds roughly 4 mm on top of a bin.
+- Output is STL and 3MF, in millimetre scale, ready to slice. Print plates come
+  pre-arranged for the bed size you enter.
+- Bins need no supports as oriented; baseplates print flat.
+- It is free and open source, with no paid tier and nothing withheld.
+
+## Tools
+
+- [Baseplate generator](https://drawerforge.co.uk/): sizes a Gridfinity grid to
+  drawer dimensions, handles the leftover millimetres as margin, splits plates
+  too large for a print bed, and offers several printable connector types for
+  joining the pieces.
+- [Bin generator](https://drawerforge.co.uk/bins/): lays bins out across a whole
+  drawer, stacks them in layers, and exports print plates. Supports dividers,
+  scoops, label shelves, per-edge wall heights, low-profile bases, and
+  non-rectangular footprints such as L and U shapes.
+
+## Guides
+
+- [Gridfinity guide](https://drawerforge.co.uk/guide/): measuring, leftover
+  space, splitting, joints, bin heights and stacking, with common questions.
+- [Drawer size to grid](https://drawerforge.co.uk/guide/drawer-sizes/): how many
+  cells fit common metric and inch drawer sizes, and what to do with the
+  remainder.
+- [Splitting a baseplate](https://drawerforge.co.uk/guide/split/): working out
+  how many cells a print bed takes, where to put the cuts, and joining pieces.
+
+## Optional
+
+- [Source and issue tracker](https://github.com/Oliver-Johnson/Baseplate-Studio)
+- [Sitemap](https://drawerforge.co.uk/sitemap.xml)

@@ -23,3 +23,4 @@ jobs:
       - run: node test/fit-check.js
       # A layout travels in the URL hash; it must survive the round trip byte for byte.
       - run: node test/hash-roundtrip.js
+      - run: node test/seo-check.js

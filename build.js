@@ -57,6 +57,7 @@ const TOOLS = [
     parts: { CSS: 'src/shared-ui/style.css', CHROME: 'src/shared-ui/chrome.js' } },
 ];
 
+const seo = require('./tools/seo.js');
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 const fail = (msg, detail) => {
   console.error('\n  BUILD FAILED: ' + msg);
@@ -122,6 +123,7 @@ for (const tool of TOOLS) {
   let out = template;
   for (const marker of Object.keys(tool.parts))
     out = out.replace(MARK(marker), () => sources[marker]);
+  out = seo.inject(out);   // FAQ markup generated from the page's own questions
 
   const outPath = path.join(ROOT, tool.out);
   if (checkOnly) {
