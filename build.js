@@ -40,6 +40,14 @@ const TOOLS = [
              BIN: 'src/bins/bin.js', UI: 'src/bins/ui.js' },
     uiPart: 'UI',
   },
+  {
+    // A prose page: shared stylesheet, no scripts. The id and display audits are
+    // trivially satisfied because there is no UI source to check against.
+    name: 'guide',
+    template: 'src/guide/template.html',
+    out: 'guide/index.html',
+    parts: { CSS: 'src/shared-ui/style.css' },
+  },
 ];
 
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');

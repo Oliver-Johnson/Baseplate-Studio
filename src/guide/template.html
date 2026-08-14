@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gridfinity for Drawers: Measuring, Splitting and Bin Heights — Drawerforge</title>
+<meta name="description" content="How to fit Gridfinity to a real drawer: measuring and what to subtract, what to do with leftover space, splitting a baseplate that is bigger than your printer bed, choosing a joint, and working out which bin heights actually fit.">
+<link rel="canonical" href="https://drawerforge.co.uk/guide/">
+<link rel="alternate" hreflang="en" href="https://drawerforge.co.uk/guide/">
+<link rel="alternate" hreflang="x-default" href="https://drawerforge.co.uk/guide/">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://drawerforge.co.uk/guide/">
+<meta property="og:site_name" content="Drawerforge">
+<meta property="og:title" content="Gridfinity for Drawers: Measuring, Splitting and Bin Heights">
+<meta property="og:description" content="Measuring a drawer, splitting a baseplate too big for your bed, choosing a joint, and which bin heights actually fit.">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Gridfinity for Drawers: Measuring, Splitting and Bin Heights">
+<meta name="twitter:description" content="Measuring a drawer, splitting a baseplate too big for your bed, choosing a joint, and which bin heights actually fit.">
+<style>
+/*__CSS__*/
+</style>
+</head>
+<body>
+<header>
+  <h1>DRAWER<span class="tm">FORGE</span> <span class="tm" style="opacity:.55">· GUIDE</span></h1>
+  <p>Fitting Gridfinity to a real drawer — measuring, leftover space, splitting a plate too big for your printer, and which bin heights actually fit.</p>
+  <div class="privacy">runs entirely in your browser — nothing is uploaded, no account, no tracking</div>
+  <nav>
+    <a href="../">Baseplates</a>
+    <a href="../bins/">Bins</a>
+    <a href="./" class="on">Guide</a>
+  </nav>
+</header>
+
+<article class="doc">
+
+<p class="lede">Gridfinity is a 42&nbsp;mm grid. Drawers are not. Almost everything awkward
+about fitting one to the other comes from that single fact, and most of the questions
+below are really the same question in different clothes: <em>what do I do with the space
+that isn't a whole number of cells?</em></p>
+
+<p>This page covers the decisions the tools ask you to make, and why they're asked. If
+you'd rather just start, open the <a href="../">baseplate generator</a> and put your
+drawer's dimensions in — everything here is also explained in place as you go.</p>
+
+<h2 id="measuring">Measuring your drawer</h2>
+
+<p>Measure the <strong>inside</strong> of the drawer, at its tightest point. Drawers are
+rarely square: runners bulge, joints leave fillets, and a drawer that measures 306&nbsp;mm
+at the front can measure 304&nbsp;mm at the back. Take the smallest number you find.</p>
+
+<p>Then <strong>subtract 1–2&nbsp;mm</strong> from each dimension. A baseplate that exactly
+matches the opening has to be forced in, and a printed plate has nowhere to go once it's
+seated. Two millimetres of slack is invisible in use and makes the difference between
+dropping the plate in and hammering it.</p>
+
+<p>Working in inches? The grid is metric and the tools are millimetre-based, so convert
+once and work in millimetres from there: multiply inches by 25.4. A 12&nbsp;inch drawer is
+304.8&nbsp;mm, which gives you seven cells with 10.8&nbsp;mm left over.</p>
+
+<h2 id="leftover">What happens to the leftover space</h2>
+
+<p>A 306&nbsp;mm drawer holds seven 42&nbsp;mm cells — 294&nbsp;mm — leaving 12&nbsp;mm
+spare. You have three sensible options:</p>
+
+<ul>
+  <li><strong>Fill it with solid margin.</strong> The plate is printed at the full drawer
+  size with a solid border. The plate can't shift, and the border gives the joints
+  something to bite into. This is the default.</li>
+  <li><strong>Leave it as a gap.</strong> The plate is grid-only and sits loose by the
+  leftover amount. Fine when the drawer walls contain it and you'd rather not spend the
+  filament.</li>
+  <li><strong>Put it where you want it.</strong> Margins can be set per side, so you can
+  push the grid to the back of the drawer and keep the spare space at the front where you
+  reach in.</li>
+</ul>
+
+<p>If the leftover is close to a whole cell — more than about 32&nbsp;mm — re-measure. It
+usually means a mistake rather than genuinely wasted space.</p>
+
+<h2 id="splitting">When the baseplate is bigger than your printer</h2>
+
+<p>This is the most common reason people give up on Gridfinity for drawers. A 306&nbsp;×&nbsp;380&nbsp;mm
+drawer needs a plate far larger than any consumer bed, so it has to be printed in pieces
+and joined.</p>
+
+<p>The largest single piece a 256&nbsp;×&nbsp;256&nbsp;mm bed will take is <strong>six
+cells</strong> along an axis — 251.5&nbsp;mm. On a 220&nbsp;×&nbsp;220&nbsp;mm bed it's five
+cells, 209.5&nbsp;mm.</p>
+
+<p>Rotating the piece diagonally doesn't help, which surprises people. A rectangle's
+bounding box is smallest at 0° or 90°, so a piece longer than the bed stays longer than the
+bed at every angle. Splitting is the only answer.</p>
+
+<p>How you split matters more than it looks:</p>
+
+<ul>
+  <li><strong>Balanced</strong> divides the plate evenly. Simple and predictable.</li>
+  <li><strong>Staggered</strong> offsets the joints between rows like brickwork, so no seam
+  runs the full width of the drawer. Noticeably more rigid.</li>
+  <li><strong>Fewest plates</strong> searches split patterns and picks the one needing the
+  fewest bed loads — it will often pair two narrow pieces on one plate that a naive split
+  would print separately. Usually the best starting point.</li>
+</ul>
+
+<p>The <a href="../">baseplate generator</a> shows the resulting pieces on a cut map, and
+you can click any grid line to move a cut by hand.</p>
+
+<h2 id="joints">Choosing a joint</h2>
+
+<p>Split pieces need to be held together, and the right joint depends mostly on
+<em>how you'll assemble it</em> rather than on strength.</p>
+
+<ul>
+  <li><strong>Dovetail tabs</strong> — printed onto the pieces, no loose parts, no extra
+  filament. Lay the tabbed piece down first and lower its neighbour onto it. The tab is
+  wider where it's buried than at its mouth, so it only goes in vertically.</li>
+  <li><strong>Puzzle tabs</strong> — a jigsaw lock, the strongest in-plane joint, but it
+  adds a solid floor to house the lobes and that costs filament.</li>
+  <li><strong>Keys and clips</strong> — separate printed parts that bridge the seam. They
+  can sit in a solid floor (strongest) or inside the grid walls (no extra filament at all).</li>
+  <li><strong>Inserted from above</strong> — worth knowing about if you can't lower an
+  assembled plate into the drawer. Lay the pieces in place and drop a key into each
+  junction from the top.</li>
+</ul>
+
+<p>Whichever you choose, <strong>print the joint fit sample first</strong>. It's four tile
+pairs at graduated clearances in one small print, and it tells you in five minutes which
+fit your printer actually produces — far cheaper than discovering it after a drawer's
+worth.</p>
+
+<h2 id="heights">Bin heights, and what actually fits</h2>
+
+<p>Bin heights are quantised to <strong>7&nbsp;mm units</strong>, and the single most
+common misunderstanding is what that measures. <strong>The 7&nbsp;mm is the bin's total
+height, including its own base</strong> — not height added on top of it.</p>
+
+<p>A Gridfinity bin's foot is 4.75&nbsp;mm tall. So a 1-unit bin is 7&nbsp;mm overall, of
+which 4.75 is foot and about 1.2 is floor, leaving roughly <strong>1&nbsp;mm of usable
+cavity</strong>. That's why 1-unit bins are rarely worth printing as standard.</p>
+
+<table class="doc">
+  <thead><tr><th>Units</th><th>Total height</th><th>Usable depth inside</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>7 mm</td><td>1.05 mm</td></tr>
+    <tr><td>2</td><td>14 mm</td><td>8.05 mm</td></tr>
+    <tr><td>3</td><td>21 mm</td><td>15.05 mm</td></tr>
+    <tr><td>4</td><td>28 mm</td><td>22.05 mm</td></tr>
+    <tr><td>6</td><td>42 mm</td><td>36.05 mm</td></tr>
+  </tbody>
+</table>
+
+<p>Three separate things stack up above your drawer floor, and it's easy to conflate them:
+the <strong>baseplate</strong> (4.25&nbsp;mm, and not part of the 7&nbsp;mm units), the
+<strong>bins</strong> (7&nbsp;mm × however many units), and the <strong>stacking lip</strong>
+on the topmost bin (about 4&nbsp;mm, and also not part of the units).</p>
+
+<p>So the arithmetic for a drawer is:</p>
+
+<p class="calc">4.25 &nbsp;+&nbsp; 7 × (total units) &nbsp;+&nbsp; 4 &nbsp;≤&nbsp; your usable height</p>
+
+<p>An 84&nbsp;mm drawer gives 79.75&nbsp;mm above the plate, which works out at ten units
+in total — 5&nbsp;+&nbsp;5 across two layers, or 4&nbsp;+&nbsp;3&nbsp;+&nbsp;3 across
+three. The <a href="../bins/">bin designer</a> does this sum for you and warns before you
+overshoot.</p>
+
+<h2 id="stacking">Stacking bins in layers</h2>
+
+<p>Bins stack because each one's lip is shaped like a baseplate socket — a bin sits on a bin
+exactly as it sits on a plate. Two things decide whether a stack actually works:</p>
+
+<ul>
+  <li><strong>Support at two opposite edges.</strong> A bin spanning a gap between two
+  others is fine — it's a plank on two beams. A bin resting entirely on one side of its
+  centre tips.</li>
+  <li><strong>Don't sit inside a bigger bin's footprint.</strong> The lip runs around the
+  perimeter; the middle is open cavity. A small bin placed inside a large one's outline has
+  nothing underneath and drops in. Span the bin below across its full width or its full
+  depth and you're on its rails.</li>
+</ul>
+
+<h2 id="faq">Common questions</h2>
+
+<h3>Do I need magnets?</h3>
+<p>In a drawer, usually not. The plate is contained by the drawer walls and the bins are
+held by the sockets. Magnets matter most when a plate is carried around or mounted
+vertically. They also force a solid floor, which is a real filament cost.</p>
+
+<h3>My drawer isn't a rectangle. Can I still use it?</h3>
+<p>Partly. You can size the grid to the largest rectangle that fits and leave the awkward
+region empty, or set per-side margins to push the grid away from an obstruction. Arbitrary
+outlines aren't supported yet.</p>
+
+<h3>Will these bins fit baseplates I already have?</h3>
+<p>Yes, provided yours follow the published Gridfinity spec — 42&nbsp;mm pitch, 41.5&nbsp;mm
+bins. Some generators produce thicker, padded plates that aren't spec; parts aren't
+interchangeable with those.</p>
+
+<h3>How much filament is a full drawer?</h3>
+<p>More than people expect. A 7&nbsp;×&nbsp;9 drawer filled with 4-unit bins is comfortably
+over half a kilo and days of printing. The bin designer estimates material as you go, at
+your slicer's infill setting, so you can see it before you commit.</p>
+
+<h3>What's the difference between a solid and a skeleton baseplate?</h3>
+<p>A skeleton plate leaves out the bulk beneath the sockets, keeping the rim and the wall
+band. It's lighter and faster to print. Cells carrying a joint stay solid, and it's
+unavailable with magnets or screws, which need that material.</p>
+
+<h3>Do I have to print the whole drawer at once?</h3>
+<p>No, and it's a bad idea to try. Print one bin first and check it seats in your plate
+before committing to a drawer's worth. The layout you plan is saved in the page URL, so you
+can come back to it later.</p>
+
+<p class="cta"><a href="../">Start with the baseplate generator →</a>
+&nbsp;·&nbsp; <a href="../bins/">Plan a drawer of bins →</a></p>
+
+</article>
+
+<footer>
+  <div><b>Drawerforge</b> is free and open. Gridfinity was created by <a href="https://www.youtube.com/c/ZackFreedman" rel="noopener">Zack Freedman</a> (Voidstar Lab) as an open standard — these tools implement the published profiles.</div>
+  <div style="margin-top:10px">Issues and feature requests <a href="https://github.com/Oliver-Johnson/Baseplate-Studio/issues" rel="noopener">on GitHub</a>. If it saved you time you can <a href="https://ko-fi.com/oliver_johnson" rel="noopener">buy me a coffee</a>.</div>
+  <div class="mono" style="margin-top:8px">All geometry is computed locally in your browser — nothing is uploaded. STL and 3MF output is mm scale.</div>
+</footer>
+</body>
+</html>

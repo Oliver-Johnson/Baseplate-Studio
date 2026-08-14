@@ -129,3 +129,23 @@ header nav a.on:hover{color:#0c1116}
 #fillmap .bin.sel{cursor:move}
 #fillmap .bwarn{fill:var(--amber);font-size:15px;font-weight:700}
 #fillmap .bnote{fill:var(--cyan);font-size:9px;opacity:.85}
+
+/* ---- prose pages ---- */
+article.doc{max-width:760px;margin:0 auto;padding:26px 22px 70px;line-height:1.62}
+article.doc p{margin:0 0 15px;color:var(--ink)}
+article.doc .lede{font-size:16px;color:var(--ink)}
+article.doc h2{font-size:19px;margin:34px 0 12px;letter-spacing:.01em}
+article.doc h3{font-size:14.5px;margin:22px 0 6px;color:var(--cyan)}
+article.doc ul{margin:0 0 15px 20px}
+article.doc li{margin-bottom:8px}
+article.doc strong{color:#fff}
+article.doc em{color:var(--dim);font-style:italic}
+article.doc .calc{font-family:var(--mono);background:var(--panel);border:1px solid var(--line);
+  border-radius:6px;padding:12px 14px;text-align:center;font-size:13px}
+article.doc table.doc{width:100%;border-collapse:collapse;margin:0 0 18px}
+article.doc table.doc th,article.doc table.doc td{padding:7px 12px;text-align:left;font-size:13px;
+  border-bottom:1px solid var(--line)}
+article.doc table.doc th{color:var(--dim);font-weight:500;font-size:11px;letter-spacing:.08em;
+  text-transform:uppercase}
+article.doc table.doc td{font-family:var(--mono)}
+article.doc .cta{margin-top:34px;padding-top:18px;border-top:1px solid var(--line);font-size:14px}
