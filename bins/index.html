@@ -182,6 +182,15 @@ article.doc .cta{margin-top:34px;padding-top:18px;border-top:1px solid var(--lin
 .stagetop #threewrap{flex:1 1 auto;min-height:420px}
 /* A wide drawer's map needs the whole stage; the 3D view drops beneath it. */
 .stagetop.wide{grid-template-columns:1fr}
+
+/* Hover tooltip for the 3D view, and stop the map's labels being text-selected
+   mid-drag — dragging a bin should move it, not highlight its caption. */
+#tip{position:fixed;display:none;z-index:50;pointer-events:none;
+  background:var(--panel);border:1px solid var(--cyan);border-radius:5px;
+  padding:5px 9px;font-size:12px;color:var(--ink);white-space:nowrap;
+  box-shadow:0 4px 14px rgba(0,0,0,.5)}
+#fillmap,#fillmap text{user-select:none;-webkit-user-select:none}
+#threewrap{user-select:none;-webkit-user-select:none}
 </style>
 </head>
 <body>
@@ -2644,12 +2653,17 @@ const S = 40;               // map cell size, svg units
 const state = {};           // drawer + defaults for new bins
 let layers = [{ bins: [] }];
 let cur = 0;                // layer being edited, 0 = sitting on the baseplate
-let selected = -1;
+let selected = -1;          // the primary selection: what resize and move act on
+let selExtra = new Set();   // ctrl-clicked companions, edited together with it
 let hashExtras = {};
 let pendingNotes = null;
 const geoCache = new Map();
 
 const B = () => layers[cur].bins;
+// every selected index, primary first, filtered to bins that still exist
+const selAll = () => (selected < 0 ? []
+  : [selected, ...selExtra].filter((v, i, a) => a.indexOf(v) === i && B()[v]));
+const clearSel = () => { selected = -1; selExtra.clear(); };
 const LIP_H = lipHeight(0.55);
 
 /* ---------- model --------------------------------------------------------- */
@@ -2832,12 +2846,14 @@ function readControls() {
     edges: { f: parseFloat($('edgeF').value), b: parseFloat($('edgeB').value),
              l: parseFloat($('edgeL').value), r: parseFloat($('edgeR').value) },
   };
-  if (selected >= 0 && B()[selected]) {
+  const sel = selAll();
+  if (sel.length) {
+    // size only applies to a single bin; several at once would have to overlap
     const b = B()[selected];
-    if ((t.u !== b.u || t.v !== b.v) && !canPlace(b.x, b.y, t.u, t.v, selected)) {
+    if (sel.length > 1 || ((t.u !== b.u || t.v !== b.v) && !canPlace(b.x, b.y, t.u, t.v, selected))) {
       t.u = b.u; t.v = b.v; $('u').value = b.u; $('v').value = b.v;
     }
-    Object.assign(b, t);
+    for (const i of sel) Object.assign(B()[i], t, { edges: Object.assign({}, t.edges) });
   } else {
     Object.assign(state, t);
   }
@@ -2850,15 +2866,18 @@ function readControls() {
   $('featureHint').style.display = t.solid ? 'none' : '';
   $('presetTray').style.display = t.solid ? 'none' : '';
   $('selActions').style.display = selected >= 0 ? '' : 'none';
-  const sel = selected >= 0 ? B()[selected] : null;
-  const needsSplit = !!sel && !fitsBed(sel.u, sel.v) && !!splitPlan(sel.u, sel.v);
+  $('sizeRow').style.display = selAll().length > 1 ? 'none' : '';
+  const selBin = selected >= 0 ? B()[selected] : null;
+  const needsSplit = !!selBin && !fitsBed(selBin.u, selBin.v) && !!splitPlan(selBin.u, selBin.v);
   $('splitFit').style.display = needsSplit ? '' : 'none';
   $('splitHint').style.display = needsSplit ? '' : 'none';
   if (needsSplit) {
-    const sp = describeSplit(sel.u, sel.v);
+    const sp = describeSplit(selBin.u, selBin.v);
     $('splitFit').textContent = `Split into ${sp.text} to fit the bed`;
   }
-  $('binPanelTitle').textContent = selected >= 0 ? 'Selected bin' : 'New bins';
+  const nSel = selAll().length;
+  $('binPanelTitle').textContent = nSel > 1 ? `${nSel} bins selected`
+    : nSel === 1 ? 'Selected bin' : 'New bins';
   $('fillSize').textContent = `${state.u}×${state.v}`;
   $('delLayer').style.display = layers.length > 1 ? '' : 'none';
 }
@@ -2883,7 +2902,7 @@ function drawLayerTabs() {
     b.textContent = `Layer ${i + 1}` + (L.bins.length ? ` · ${L.bins.length}` : '');
     if (i === cur) b.className = 'on';
     b.addEventListener('click', () => {
-      cur = i; selected = -1; readControls(); drawLayerTabs(); drawMap(); refresh();
+      cur = i; clearSel(); readControls(); drawLayerTabs(); drawMap(); refresh();
     });
     bar.appendChild(b);
   });
@@ -2891,14 +2910,14 @@ function drawLayerTabs() {
 $('addLayer').addEventListener('click', () => {
   pushUndo();
   layers.push({ bins: [] });
-  cur = layers.length - 1; selected = -1;
+  cur = layers.length - 1; clearSel();
   readControls(); drawLayerTabs(); drawMap(); refresh();
 });
 $('delLayer').addEventListener('click', () => {
   if (layers.length < 2) return;
   pushUndo();
   layers.splice(cur, 1);
-  cur = Math.min(cur, layers.length - 1); selected = -1;
+  cur = Math.min(cur, layers.length - 1); clearSel();
   readControls(); drawLayerTabs(); drawMap(); refresh();
 });
 
@@ -2958,7 +2977,7 @@ function drawMap() {
 
   B().forEach((b, i) => {
     const issues = binIssues(b, cur);
-    const r = el('rect', { class: 'bin' + (i === selected ? ' sel' : '') + (issues.length ? ' clash' : ''),
+    const r = el('rect', { class: 'bin' + (selAll().includes(i) ? ' sel' : '') + (issues.length ? ' clash' : ''),
       x: b.x * S + 2, y: sy(b.y, b.v) + 2, width: b.u * S - 4, height: b.v * S - 4, rx: 5 });
     r.dataset.i = i;
     svg.appendChild(r);
@@ -2968,6 +2987,11 @@ function drawMap() {
     const t2 = el('text', { class: 'bsub', x: cx, y: cy + 12, 'text-anchor': 'middle' });
     t2.textContent = `${b.hUnits}u · ${b.hUnits * SPEC.unitH}mm`;
     svg.appendChild(t1); svg.appendChild(t2);
+    // hovering a bin says what you decided goes in it
+    const tip = document.createElementNS(SVGNS, 'title');
+    tip.textContent = (b.note ? b.note + ' — ' : '') +
+      `${b.u}×${b.v}, ${b.hUnits} units (${b.hUnits * SPEC.unitH} mm)`;
+    r.appendChild(tip);
     if (b.note) {
       const t3 = el('text', { class: 'bnote', x: cx, y: cy + 25, 'text-anchor': 'middle' });
       t3.textContent = b.note.length > b.u * 7 ? b.note.slice(0, b.u * 7 - 1) + '…' : b.note;
@@ -2981,7 +3005,7 @@ function drawMap() {
       warn.appendChild(tip);
       svg.appendChild(warn);
     }
-    if (i === selected)                       // corner grips, drawn last so they hit first
+    if (i === selected && selAll().length === 1)   // grips need one bin, not several
       for (const [hx, hy, key] of [[b.x, b.y, 'lf'], [b.x + b.u, b.y, 'rf'],
                                    [b.x, b.y + b.v, 'lb'], [b.x + b.u, b.y + b.v, 'rb']]) {
         const h = el('rect', { class: 'grip', x: hx * S - 6, y: (g.ny - hy) * S - 6,
@@ -3039,8 +3063,20 @@ function initMap() {
     }
 
     const hit = occupancy()[c.y][c.x];
-    if (hit !== -1) {                                    // grab to move; a still
-      const b = B()[hit];                                // release is just a select
+    if (hit !== -1) {
+      if (e.ctrlKey || e.metaKey) {                      // add or remove from the set
+        if (hit === selected) {                          // dropping the primary promotes another
+          const rest = [...selExtra]; selExtra.delete(rest[0]);
+          selected = rest.length ? rest[0] : -1;
+        } else if (selExtra.has(hit)) selExtra.delete(hit);
+        else if (selected < 0) selected = hit;
+        else selExtra.add(hit);
+        if (selected >= 0) writeControls(B()[selected]);
+        readControls(); drawMap(); refresh();
+        return;
+      }
+      const b = B()[hit];                                // grab to move; a still
+      selExtra.clear();                                  // release is just a select
       selected = hit;
       writeControls(b);
       pushUndo();
@@ -3050,7 +3086,7 @@ function initMap() {
       return;
     }
 
-    selected = -1;                                       // draw a new bin
+    clearSel();                                          // draw a new bin
     drag = { mode: 'create', x0: c.x, y0: c.y, x1: c.x, y1: c.y };
     if (svg.setPointerCapture) svg.setPointerCapture(e.pointerId);
     readControls(); drawMap();
@@ -3111,7 +3147,7 @@ function initMap() {
 $('fillRest').addEventListener('click', () => {
   pushUndo();
   const g = grid();
-  selected = -1; readControls();
+  clearSel(); readControls();
   const sup = support(cur);
   for (let y = 0; y < g.ny; y++)
     for (let x = 0; x < g.nx; x++) {
@@ -3133,13 +3169,14 @@ $('fillRest').addEventListener('click', () => {
 });
 $('clearAll').addEventListener('click', () => {
   pushUndo();
-  layers[cur].bins = []; selected = -1;
+  layers[cur].bins = []; clearSel();
   readControls(); drawLayerTabs(); drawMap(); refresh();
 });
 $('delBin').addEventListener('click', () => {
   if (selected < 0) return;
   pushUndo();
-  B().splice(selected, 1); selected = -1;
+  for (const i of selAll().sort((a, b) => b - a)) B().splice(i, 1);
+  clearSel();
   readControls(); drawLayerTabs(); drawMap(); refresh();
 });
 $('splitFit').addEventListener('click', () => {
@@ -3159,7 +3196,7 @@ $('splitFit').addEventListener('click', () => {
     }
     oy += vv;
   }
-  selected = -1;
+  clearSel();
   readControls(); drawLayerTabs(); drawMap(); refresh();
 });
 $('applyAll').addEventListener('click', () => {
@@ -3192,7 +3229,7 @@ function pushUndo() {
 function applySnap(snap) {
   const o = JSON.parse(snap);
   layers = o.layers; cur = Math.min(o.cur, layers.length - 1);
-  selected = -1;
+  clearSel();
   readControls(); drawLayerTabs(); drawMap(); refresh();
 }
 function undo() {
@@ -3483,12 +3520,26 @@ function initThree() {
   group = new THREE.Group(); scene.add(group);
   canvas.addEventListener('pointerdown', (e) => { dragging = [e.clientX, e.clientY]; canvas.setPointerCapture(e.pointerId); });
   canvas.addEventListener('pointerup', () => { dragging = null; });
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
   canvas.addEventListener('pointermove', (e) => {
-    if (!dragging) return;
-    theta -= (e.clientX - dragging[0]) * 0.01;
-    phi = Math.min(3.11, Math.max(0.03, phi - (e.clientY - dragging[1]) * 0.01));
-    dragging = [e.clientX, e.clientY]; render();
+    if (dragging) {
+      theta -= (e.clientX - dragging[0]) * 0.01;
+      phi = Math.min(3.11, Math.max(0.03, phi - (e.clientY - dragging[1]) * 0.01));
+      dragging = [e.clientX, e.clientY]; render();
+      hideTip();
+      return;
+    }
+    // which bin is under the cursor? the meshes carry their bin on userData
+    const r = canvas.getBoundingClientRect();
+    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1,
+            -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    const hit = ray.intersectObjects(group.children, false)
+                   .find((h) => h.object.userData && h.object.userData.bin);
+    if (hit) showTip(e, hit.object.userData.bin, hit.object.userData.layer);
+    else hideTip();
   });
+  canvas.addEventListener('pointerleave', hideTip);
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
     dist = Math.min(4000, Math.max(80, dist * (1 + Math.sign(e.deltaY) * 0.12)));
@@ -3525,10 +3576,18 @@ function showScene() {
 
   layers.forEach((L, k) => {
     if (!matCache[k]) matCache[k] = new THREE.MeshLambertMaterial({
-      color: MATS[k % MATS.length], side: THREE.DoubleSide, flatShading: true,
-      transparent: k > cur, opacity: k > cur ? 0.55 : 1 });
+      color: MATS[k % MATS.length], side: THREE.DoubleSide, flatShading: true });
+    /* Fade anything stacked above the layer being edited, so it stops hiding the one
+       you are working on. Updated every draw: the material is cached per layer, and
+       baking this in at creation meant switching layers changed nothing. */
+    const above = k > cur;
+    matCache[k].transparent = above;
+    matCache[k].opacity = above ? 0.28 : 1;
+    matCache[k].depthWrite = !above;
+    matCache[k].needsUpdate = true;
     for (const b of L.bins) {
       const m = new THREE.Mesh(geoOf(b), matCache[k]);
+      m.userData.bin = b; m.userData.layer = k;
       m.position.set((b.x + b.u / 2) * SPEC.pitch - gw / 2, seat(b, k).z,
                      -((b.y + b.v / 2) * SPEC.pitch - gd / 2));
       group.add(m);
@@ -3549,6 +3608,19 @@ function render() {
   camera.lookAt(0, 20, 0);
   renderer.render(scene, camera);
 }
+
+/* ---------- hover tooltip -------------------------------------------------- */
+function showTip(e, b, k) {
+  const el = $('tip');
+  el.textContent = (b.note ? b.note + ' — ' : '') +
+    `${b.u}×${b.v}, ${b.hUnits} units (${b.hUnits * SPEC.unitH} mm)` +
+    (k !== undefined && layers.length > 1 ? ` · layer ${k + 1}` : '');
+  el.style.display = 'block';
+  const pad = 14;
+  el.style.left = Math.min(e.clientX + pad, window.innerWidth - el.offsetWidth - 8) + 'px';
+  el.style.top = Math.max(8, e.clientY - el.offsetHeight - 10) + 'px';
+}
+function hideTip() { const el = $('tip'); if (el) el.style.display = 'none'; }
 
 /* ---------- export -------------------------------------------------------- */
 function saveBlob(buf, name) {
@@ -3762,7 +3834,8 @@ document.addEventListener('keydown', (e) => {
   const b = B()[selected];
   if (e.key === 'Delete' || e.key === 'Backspace') {
     e.preventDefault(); pushUndo();
-    B().splice(selected, 1); selected = -1;
+    for (const i of selAll().sort((x, y) => y - x)) B().splice(i, 1);
+    clearSel();
     readControls(); drawLayerTabs(); drawMap(); refresh(); return;
   }
   const nudge = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key];
@@ -3794,5 +3867,6 @@ drawMap();
 refresh();
 updateUndoButtons();
 </script>
+<div id="tip"></div>
 </body>
 </html>

@@ -164,3 +164,12 @@ article.doc .cta{margin-top:34px;padding-top:18px;border-top:1px solid var(--lin
 .stagetop #threewrap{flex:1 1 auto;min-height:420px}
 /* A wide drawer's map needs the whole stage; the 3D view drops beneath it. */
 .stagetop.wide{grid-template-columns:1fr}
+
+/* Hover tooltip for the 3D view, and stop the map's labels being text-selected
+   mid-drag — dragging a bin should move it, not highlight its caption. */
+#tip{position:fixed;display:none;z-index:50;pointer-events:none;
+  background:var(--panel);border:1px solid var(--cyan);border-radius:5px;
+  padding:5px 9px;font-size:12px;color:var(--ink);white-space:nowrap;
+  box-shadow:0 4px 14px rgba(0,0,0,.5)}
+#fillmap,#fillmap text{user-select:none;-webkit-user-select:none}
+#threewrap{user-select:none;-webkit-user-select:none}
