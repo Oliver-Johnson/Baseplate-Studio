@@ -24,6 +24,10 @@ const state = {};           // drawer + defaults for new bins
 let layers = [{ bins: [] }];
 let cur = 0;                // layer being edited, 0 = sitting on the baseplate
 let selected = -1;          // the primary selection: what resize and move act on
+/* Carving was alt-click only, which meant the feature may as well not have existed:
+   the sole mention was a line of grey help text, while merge — the other route to the
+   same shapes — had a button. This is that button. Alt-click still works. */
+let carving = false;
 let selExtra = new Set();   // ctrl-clicked companions, edited together with it
 let hashExtras = {};
 let pendingNotes = null;
@@ -124,14 +128,40 @@ function canPlaceBin(b, x, y, ignore) {
   }
   return true;
 }
-// occupied offsets within a bin's own bounding box
+/* Occupied offsets within a bin's own bounding box. The clip is the invariant that
+   holds everything together: a bin can never occupy a cell outside its own box. A
+   resize used to leave the old mask in place, and those out-of-box cells drew nothing
+   on the map yet still blocked other bins from being dropped there and still built in
+   the preview — a bin you could neither see nor get rid of. */
 function binCells(b) {
-  if (b.cells && b.cells.length) return b.cells;
+  if (b.cells && b.cells.length) {
+    const kept = b.cells.filter(([x, y]) => x >= 0 && y >= 0 && x < b.u && y < b.v);
+    if (kept.length) return kept;
+  }
   const out = [];
   for (let x = 0; x < b.u; x++) for (let y = 0; y < b.v; y++) out.push([x, y]);
   return out;
 }
-const isCarved = (b) => !!(b.cells && b.cells.length && b.cells.length < b.u * b.v);
+const isCarved = (b) => binCells(b).length < b.u * b.v;
+
+/* The one way to change a footprint. Resizing a carved bin has to reconcile the mask,
+   and what carries across is the HOLES rather than the kept cells: clip the kept cells
+   and growing a bin leaves its new column empty, which is not what dragging a grip
+   outwards means. Carrying the holes grows and shrinks an L the way you would expect,
+   and a shape whose holes swallow the whole new box falls back to a plain rectangle. */
+function setFootprint(b, nu, nv) {
+  if (b.cells && b.cells.length) {
+    const kept = new Set(binCells(b).map((c) => c[0] + ',' + c[1]));
+    const holes = new Set();
+    for (let x = 0; x < b.u; x++) for (let y = 0; y < b.v; y++)
+      if (!kept.has(x + ',' + y)) holes.add(x + ',' + y);
+    const next = [];
+    for (let x = 0; x < nu; x++) for (let y = 0; y < nv; y++)
+      if (!holes.has(x + ',' + y)) next.push([x, y]);
+    b.cells = next.length && next.length < nu * nv ? next : null;
+  }
+  b.u = nu; b.v = nv;
+}
 const allBins = () => layers.flatMap((L, k) => L.bins.map((b) => ({ b, k })));
 
 /* ---------- geometry + volume --------------------------------------------- */
@@ -175,7 +205,8 @@ function volumeMm3(c) {
   const hwO = (c.u - 1) * SPEC.pitch / 2 + SPEC.half;
   const hdO = (c.v - 1) * SPEC.pitch / 2 + SPEC.half;
   const H = c.hUnits * SPEC.unitH, floorZ = SPEC.footH + c.floorT;
-  const cells = c.u * c.v;
+  // a carved bin has fewer feet and less floor than its bounding box implies
+  const cells = binCells(c).length;
   const infill = Math.max(0, Math.min(1, (state.infill === undefined ? 15 : state.infill) / 100));
 
   /* base block: the feet plus the solid floor slab above them */
@@ -249,7 +280,12 @@ function readControls() {
     } else if ((t.u !== b.u || t.v !== b.v) && !canPlace(b.x, b.y, t.u, t.v, selected)) {
       t.u = b.u; t.v = b.v; $('u').value = b.u; $('v').value = b.v;
     }
+    /* u and v never ride the bulk assign — a footprint change has to reconcile the
+       carve mask, so it goes through setFootprint. */
+    const nu = t.u, nv = t.v; delete t.u; delete t.v;
     for (const i of sel) Object.assign(B()[i], t, { edges: Object.assign({}, t.edges) });
+    if (sel.length === 1 && nu !== undefined && (nu !== b.u || nv !== b.v))
+      setFootprint(b, nu, nv);
   } else {
     Object.assign(state, t);
   }
@@ -263,6 +299,13 @@ function readControls() {
   $('presetTray').style.display = t.solid ? 'none' : '';
   $('selActions').style.display = selected >= 0 ? '' : 'none';
   $('sizeRow').style.display = selAll().length > 1 ? 'none' : '';
+  const one = selAll().length === 1;
+  if (!one) carving = false;
+  $('carveMode').style.display = one ? '' : 'none';
+  $('carveHint').style.display = one && carving ? '' : 'none';
+  $('carveMode').classList.toggle('on', carving);
+  $('fillmap').classList.toggle('carving', carving);
+  $('carveMode').textContent = carving ? 'Done carving' : 'Carve this bin into a shape';
   $('mergeBins').style.display = selAll().length > 1 ? '' : 'none';
   $('mergeHint').style.display = selAll().length > 1 ? '' : 'none';
   const selBin = selected >= 0 ? B()[selected] : null;
@@ -374,7 +417,7 @@ function drawMap() {
         width: b.u * S - 6, height: b.v * S - 6, rx: 5 }));
 
   B().forEach((b, i) => {
-    const issues = binIssues(b, cur);
+    const issues = binIssues(b, cur).filter((x) => typeof x === 'string' || !x.note);
     const cls = 'bin' + (selAll().includes(i) ? ' sel' : '') + (issues.length ? ' clash' : '');
     const cells = binCells(b);
     const held = new Set(cells.map(([dx, dy]) => dx + ',' + dy));
@@ -485,7 +528,7 @@ function initMap() {
 
     /* Alt-click carves. Inside the selected bin it removes a cell; on a cell the bin
        once covered it puts one back, so a carve can be undone by the same gesture. */
-    if (e.altKey && selected >= 0 && B()[selected]) {
+    if ((e.altKey || carving) && selected >= 0 && B()[selected]) {
       const b = B()[selected];
       const dx = c.x - b.x, dy = c.y - b.y;
       if (dx >= 0 && dy >= 0 && dx < b.u && dy < b.v) {
@@ -498,8 +541,13 @@ function initMap() {
           b.cells = cells.length === b.u * b.v ? null : cells;
         }
         readControls(); drawMap(); refresh();
+        return;
       }
-      return;
+      /* Outside the bin. Alt is a deliberate modifier, so it swallows the click either
+         way; a plain click in carve mode must stay a click, or the mode traps you with
+         no way to select anything else. Clicking away simply leaves the mode. */
+      if (e.altKey) return;
+      carving = false;
     }
     const hit = occupancy()[c.y][c.x];
     if (hit !== -1) {
@@ -556,7 +604,7 @@ function initMap() {
     const nu = Math.abs(c.x - drag.ax) + 1, nv = Math.abs(c.y - drag.ay) + 1;
     if (nx === b.x && ny === b.y && nu === b.u && nv === b.v) return;
     if (!canPlace(nx, ny, nu, nv, drag.idx)) return;
-    b.x = nx; b.y = ny; b.u = nu; b.v = nv;
+    b.x = nx; b.y = ny; setFootprint(b, nu, nv);
     drag.moved = true;
     writeControls(b); drawMap();
   });
@@ -641,6 +689,11 @@ $('splitFit').addEventListener('click', () => {
 /* Merge the selection into one bin. Union the cells they cover, take the bounding box
    as the new footprint, and keep only the cells that were actually occupied — which is
    the same mask the carve gesture produces, so the two routes meet in the same place. */
+$('carveMode').addEventListener('click', () => {
+  carving = !carving;
+  readControls(); drawMap();
+});
+
 $('mergeBins').addEventListener('click', () => {
   const sel = selAll();
   if (sel.length < 2) return;
@@ -823,7 +876,11 @@ function binIssues(b, k) {
     if (!m.ok)
       out.push(`${m.why} — it still prints, but it is not one solid bin` +
         (m.why.indexOf('pieces') >= 0 ? ' and will come out as separate parts' : ''));
-    out.push('is a carved shape, so it has no stacking lip, dividers, scoop or label — nothing can stack on it');
+    /* A note, not a fault. A carved bin keeps its stacking lip and takes bins on top
+       exactly like a rectangle; only the features that need a rectangle to mean
+       anything are left off. Flagging the shape itself in red made carving look
+       broken the moment you started. */
+    out.push({ note: true, t: 'is a carved shape — it keeps its stacking lip and still takes bins on top, but dividers, the scoop and the label shelf need a rectangle, so they are left off' });
   }
 
   const fw = (b.u - 1) * SPEC.pitch + 2 * SPEC.half, fd = (b.v - 1) * SPEC.pitch + 2 * SPEC.half;
@@ -864,8 +921,11 @@ function warnings() {
     out.push({ t: `Tallest stack ${tot.toFixed(1)} mm of ${g.avail.toFixed(1)} mm available — ${(g.avail - tot).toFixed(1)} mm spare (includes the ${LIP_H.toFixed(2)} mm top lip).` });
 
   layers.forEach((L, k) => L.bins.forEach((b) => {
-    for (const t of binIssues(b, k))
-      out.push({ err: true, t: `Layer ${k + 1}, the ${b.u}×${b.v} bin at column ${b.x + 1} row ${b.y + 1}: ${t}.` });
+    for (const it of binIssues(b, k)) {
+      const x = typeof it === 'string' ? { err: true, t: it } : it;
+      out.push({ err: !x.note, note: x.note,
+                 t: `Layer ${k + 1}, the ${b.u}×${b.v} bin at column ${b.x + 1} row ${b.y + 1}: ${x.t}.` });
+    }
   }));
 
   if (!allBins().length)
@@ -902,7 +962,7 @@ function refresh() {
   $('binSizeHint').textContent =
     `${(src.u * SPEC.pitch - 0.5).toFixed(1)} × ${(src.v * SPEC.pitch - 0.5).toFixed(1)} × ${(src.hUnits * SPEC.unitH).toFixed(1)} mm (+${LIP_H.toFixed(2)} lip)`;
 
-  const used = B().reduce((a, b) => a + b.u * b.v, 0);
+  const used = B().reduce((a, b) => a + binCells(b).length, 0);
   const total = g.nx * g.ny;
   const pct = total ? Math.round(100 * used / total) : 0;
   $('coverage').textContent =
@@ -966,8 +1026,28 @@ function drawPlan() {
               `style="background:var(--panel2);border:1px solid var(--line);border-radius:4px">`;
     for (const p of pl.placed) {
       const c = COLORS[(byKey.get(p.id) || 0) % COLORS.length];
-      svg += `<rect x="${p.x * sc + 1}" y="${(state.bedD - p.y - p.d) * sc + 1}" ` +
-             `width="${p.w * sc}" height="${p.d * sc}" fill="${c}" opacity="0.5" stroke="var(--line)"/>`;
+      /* Draw the shape that actually prints. The packer works in bounding boxes, which
+         is correct — a carved bin still sweeps its full box — but drawing the box made
+         the plan claim an L was a rectangle. Cells are placed the same way the 3D plate
+         places the mesh: centre the bin on the origin, rotate, then translate. */
+      const t = printPlan.types.find((x) => x.key === p.id);
+      const b = t && t.b;
+      const cells = b && isCarved(b) ? binCells(b) : null;
+      if (!cells) {
+        svg += `<rect x="${p.x * sc + 1}" y="${(state.bedD - p.y - p.d) * sc + 1}" ` +
+               `width="${p.w * sc}" height="${p.d * sc}" fill="${c}" opacity="0.5" stroke="var(--line)"/>`;
+        continue;
+      }
+      const P = 42, HALF = 20.75;
+      const midX = p.x + p.w / 2, midY = p.y + p.d / 2;
+      for (const [dx, dy] of cells) {
+        let cx = (dx - (b.u - 1) / 2) * P, cy = (dy - (b.v - 1) / 2) * P;
+        if (p.rot === 90) { const t2 = cx; cx = -cy; cy = t2; }
+        const X = midX + cx, Y = midY + cy;
+        svg += `<rect x="${(X - HALF) * sc + 1}" y="${(state.bedD - Y - HALF) * sc + 1}" ` +
+               `width="${2 * HALF * sc}" height="${2 * HALF * sc}" fill="${c}" ` +
+               `opacity="0.5" stroke="var(--line)"/>`;
+      }
     }
     svg += '</svg>';
     return `<div style="display:grid;gap:4px;justify-items:center">${svg}` +
@@ -1308,6 +1388,7 @@ document.addEventListener('keydown', (e) => {
   if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
   if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
   if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateSelected(); return; }
+  if (e.key === 'Escape' && carving) { e.preventDefault(); carving = false; readControls(); drawMap(); return; }
   if (selected < 0) return;
   const b = B()[selected];
   if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -1322,7 +1403,7 @@ document.addEventListener('keydown', (e) => {
     const [dx, dy] = nudge;
     if (e.shiftKey) {                       // shift-arrow grows or shrinks instead
       const nu = Math.max(1, b.u + dx), nv = Math.max(1, b.v + dy);
-      if (canPlace(b.x, b.y, nu, nv, selected)) { pushUndo(); b.u = nu; b.v = nv; }
+      if (canPlace(b.x, b.y, nu, nv, selected)) { pushUndo(); setFootprint(b, nu, nv); }
     } else if (canPlace(b.x + dx, b.y + dy, b.u, b.v, selected)) {
       pushUndo(); b.x += dx; b.y += dy;
     }

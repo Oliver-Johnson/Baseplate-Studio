@@ -86,6 +86,11 @@ select{font-family:var(--sans)}
 button.act{background:var(--cyan);color:#0c1116;border:none;border-radius:6px;padding:9px 12px;
   font-weight:600;cursor:pointer;font-size:13px}
 button.act:disabled{opacity:.45;cursor:default}
+/* An active mode has to look active, or you cannot tell whether your next click
+   is going to carve a hole in the bin or just select something. */
+button.act.on{background:var(--amber);box-shadow:0 0 0 2px rgba(0,0,0,.35) inset}
+#fillmap.carving{cursor:crosshair}
+#fillmap.carving .binbox{opacity:.9}
 button.ghost{background:transparent;color:var(--cyan);border:1px solid var(--cyan);border-radius:6px;
   padding:8px 12px;cursor:pointer;font-size:12.5px}
 button.ghost:disabled{opacity:.4;cursor:default}

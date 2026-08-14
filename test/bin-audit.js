@@ -96,7 +96,17 @@ for (const cs of CASES) {
               `${ok ? 'watertight' : man.bad + ' BAD EDGES'}`.padStart(12) +
               `${wOk ? '' : '  FOOTPRINT MISMATCH exp ' + expW + 'x' + expD}` +
               `${hOk ? '' : '  HEIGHT MISMATCH: zmax ' + zmax.toFixed(2) + ' vs totalH ' + r.meta.totalH.toFixed(2) + ', pitch ' + r.meta.H}`);
-  if (!ok || !wOk || !hOk) bad++;
+  /* A carved shape is still a bin: it takes a stacking lip like any other, so it
+     must report one and stand the same height as the rectangle of the same units.
+     Losing the lip silently would make anything carved unstackable. */
+  let lipOk = true;
+  if (cs.cells && !cs.solid && !cs.edges) {
+    const expTotal = cs.hUnits * 7 + 3.95;
+    lipOk = r.meta.hasLip === true && Math.abs(r.meta.totalH - expTotal) < 0.001;
+    if (!lipOk) console.log(`${''.padEnd(14)}  LIP MISSING: hasLip ${r.meta.hasLip}, ` +
+      `totalH ${r.meta.totalH.toFixed(2)} vs ${expTotal.toFixed(2)}`);
+  }
+  if (!ok || !wOk || !hOk || !lipOk) bad++;
 
   fs.writeFileSync(path.join(outDir, `bin-${cs.name}.stl`),
                    Buffer.from(G.stlBinary(r.polys, cs.name)));

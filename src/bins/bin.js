@@ -392,11 +392,38 @@ function maskCheck(mask, u, v) {
 /* Carved body: a slab per cell and a wall panel per exposed edge, all overlapping.
    A cell's slab reaches the bin's outer face where an edge is exposed and past the
    cell boundary where it is not, so neighbours fuse. */
-function carvedBody(G, c, mask, H, floorZ, zTop) {
+function carvedBody(G, c, mask, H, floorZ, zTop, lipSteps) {
   const polys = [], P = SPEC.pitch, half = SPEC.half;
   const ox = (c.u - 1) * P / 2, oy = (c.v - 1) * P / 2;   // mask cell -> bin coords
   const has = (x, y) => mask.has(cellKey(x, y));
   const wall = c.wall;
+
+  /* An exposed edge is one shell from the floor to the top of its stacking lip.
+     The lip was tried as its own shell first and it cost 12 bad edges a shape: its
+     base ring landed on the wall's top cap with the same corner coordinates, so
+     four faces met on one edge. Carrying the profile up through the same sweep
+     removes the interface rather than papering over it — there is nothing left to
+     coincide. Widths are insets from the outer face, so the ledge where the 1.2 mm
+     wall becomes the 2.70 mm lip base falls out of the profile for free. */
+  const wallProfile = (top) => {
+    /* The step from wall thickness to lip base gets BLOAT of height rather than
+       being exactly horizontal. Both rings share the outer-face vertices, so at
+       equal z that quad has zero area, makePoly drops it, and each panel loses two
+       triangles — 72 boundary edges across an L. A 0.05 mm rise costs nothing and
+       keeps every face real. */
+    const st = [[floorZ - BLOAT, wall], [top - (lipSteps ? BLOAT : 0), wall]];
+    if (lipSteps) for (const [dz, t] of lipSteps) st.push([H + dz, t]);
+    return st;
+  };
+  const sweptPanel = (steps, rect) => {
+    const rings = steps.map(([, t]) => rect(t));
+    const zs = steps.map(([z]) => z);
+    polys.push(...sweep(G.makePoly, rings, zs));
+    const mid = (r) => [(r[0][0] + r[2][0]) / 2, (r[0][1] + r[2][1]) / 2];
+    const a = mid(rings[0]), b = mid(rings[rings.length - 1]);
+    polys.push(...fanCap(G.makePoly, rings[0], zs[0], false, a[0], a[1]));
+    polys.push(...fanCap(G.makePoly, rings[rings.length - 1], zs[zs.length - 1], true, b[0], b[1]));
+  };
 
   for (const key of mask) {
     const [x, y] = key.split(',').map(Number);
@@ -408,14 +435,13 @@ function carvedBody(G, c, mask, H, floorZ, zTop) {
     polys.push(...G.extrudePoly([[x0, y0], [x1, y0], [x1, y1], [x0, y1]],
                                 SPEC.footH - BLOAT, floorZ + BLOAT));
     if (zTop <= floorZ + 0.01) continue;
-    // one wall panel per exposed edge, run long so panels meet at the corners
-    const L = x0 - BLOAT, R = x1 + BLOAT, F = y0 - BLOAT, B = y1 + BLOAT;
-    const panel = (a, b, cc, d) =>
-      polys.push(...G.extrudePoly([[a, b], [cc, b], [cc, d], [a, d]], floorZ - BLOAT, zTop));
-    if (e.l) panel(x0, F, x0 + wall, B);
-    if (e.r) panel(x1 - wall, F, x1, B);
-    if (e.f) panel(L, y0, R, y0 + wall);
-    if (e.b) panel(L, y1 - wall, R, y1);
+    // one panel per exposed edge, run long so panels meet at the corners
+    const L = x0 - BLOAT, R = x1 + BLOAT, F = y0 - BLOAT, Bk = y1 + BLOAT;
+    const steps = wallProfile(zTop);
+    if (e.l) sweptPanel(steps, (t) => [[x0, F], [x0 + t, F], [x0 + t, Bk], [x0, Bk]]);
+    if (e.r) sweptPanel(steps, (t) => [[x1 - t, F], [x1, F], [x1, Bk], [x1 - t, Bk]]);
+    if (e.f) sweptPanel(steps, (t) => [[L, y0], [R, y0], [R, y0 + t], [L, y0 + t]]);
+    if (e.b) sweptPanel(steps, (t) => [[L, y1 - t], [R, y1 - t], [R, y1], [L, y1]]);
   }
   return polys;
 }
@@ -455,12 +481,23 @@ function buildBin(G, cfg) {
   const outer = outlineAt(c.u, c.v, SPEC.half, c.shrink, n);
   const floorZ = st.footH + c.floorT;
 
+  /* Whether there is a lip has to be known before the body: a carved bin's wall
+     panels carry their own lip, so the decision cannot wait until after. A lip over
+     a lowered edge would have nothing under it and nothing could seat on it. */
+  const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) =>
+    c.edges[k] === undefined || c.edges[k] >= 1);
+  const hasLip = c.lip && allFull && !c.solid;
+  const lipH = hasLip ? (st.lipH !== null ? st.lipH : lipHeight(c.lipMin)) : 0;
+  const lipSteps = hasLip
+    ? st.lip.concat([[lipH, st.rim !== null ? st.rim : c.lipMin]]) : null;
+
   if (!full) {
-    /* Carved shapes are built cell by cell. Dividers, scoop, label and the lip all
-       assume a rectangle, so they are left off rather than guessed at — the UI says
-       so instead of silently dropping them. */
+    /* Carved shapes are built cell by cell. Dividers, scoop and the label shelf still
+       assume a rectangle and are left off rather than guessed at. The stacking lip is
+       not one of them: it rides on the wall panels, so a carved bin still stacks. */
     const zTop = (c.solid || floorZ >= H - 0.2) ? H : H;
-    polys.push(...carvedBody(G, c, mask, H, c.solid ? H - 0.01 : floorZ, zTop));
+    polys.push(...carvedBody(G, c, mask, H, c.solid ? H - 0.01 : floorZ, zTop,
+                             c.solid ? null : lipSteps));
   } else if (c.solid || floorZ >= H - 0.2) {
     polys.push(...G.extrudePoly(outer, st.footH - BLOAT, H));
   } else {
@@ -508,15 +545,10 @@ function buildBin(G, cfg) {
     }
   }
 
-  /* stacking lip — only on a bin whose walls all reach full height. A lip over a
-     lowered edge would have nothing under it, and nothing could seat on it anyway. */
+  /* A rectangle's lip is still its own swept ring around the rounded outline. */
   const hwO = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
   const hdO = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
-  const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) =>
-    c.edges[k] === undefined || c.edges[k] >= 1);
-  const hasLip = c.lip && allFull && !c.solid && full;
-  const lipH = hasLip ? (st.lipH !== null ? st.lipH : lipHeight(c.lipMin)) : 0;
-  if (hasLip) polys.push(...lipRing(G, c, hwO, hdO, H, n));
+  if (hasLip && full) polys.push(...lipRing(G, c, hwO, hdO, H, n));
 
   // H stays the stacking pitch whatever the walls do; topZ is how tall it really is,
   // which for an all-open tray is just the floor.
