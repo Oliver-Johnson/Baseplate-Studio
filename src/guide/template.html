@@ -85,8 +85,10 @@ drawer needs a plate far larger than any consumer bed, so it has to be printed i
 and joined.</p>
 
 <p>The largest single piece a 256&nbsp;×&nbsp;256&nbsp;mm bed will take is <strong>six
-cells</strong> along an axis — 251.5&nbsp;mm. On a 220&nbsp;×&nbsp;220&nbsp;mm bed it's five
-cells, 209.5&nbsp;mm.</p>
+cells</strong> along an axis — 252&nbsp;mm, since baseplate pieces tile at the full
+42&nbsp;mm pitch. On a 220&nbsp;×&nbsp;220&nbsp;mm bed it's five cells, 210&nbsp;mm.
+(Bins are slightly smaller than their cells — 41.5&nbsp;mm rather than 42 — so a six-cell
+bin is 251.5&nbsp;mm. Easy to conflate the two.)</p>
 
 <p>Rotating the piece diagonally doesn't help, which surprises people. A rectangle's
 bounding box is smallest at 0° or 90°, so a piece longer than the bed stays longer than the
@@ -210,6 +212,14 @@ unavailable with magnets or screws, which need that material.</p>
 <p>No, and it's a bad idea to try. Print one bin first and check it seats in your plate
 before committing to a drawer's worth. The layout you plan is saved in the page URL, so you
 can come back to it later.</p>
+
+<h2 id="more">Going further</h2>
+<ul>
+  <li><a href="split/">Baseplate too big for your printer?</a> — how many cells each bed
+  takes, why rotating diagonally never helps, and how to split and rejoin well.</li>
+  <li><a href="drawer-sizes/">Drawer size to grid</a> — reference tables in millimetres and
+  inches, and what to do with the leftover space.</li>
+</ul>
 
 <p class="cta"><a href="../">Start with the baseplate generator →</a>
 &nbsp;·&nbsp; <a href="../bins/">Plan a drawer of bins →</a></p>

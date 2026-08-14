@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gridfinity Baseplate Too Big for Your Printer? How to Split It — Drawerforge</title>
+<meta name="description" content="Your drawer needs a Gridfinity baseplate larger than your print bed. How many cells each printer can take, why printing it diagonally does not help, how to split it well, and how to join the pieces.">
+<link rel="canonical" href="https://drawerforge.co.uk/guide/split/">
+<link rel="alternate" hreflang="en" href="https://drawerforge.co.uk/guide/split/">
+<link rel="alternate" hreflang="x-default" href="https://drawerforge.co.uk/guide/split/">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://drawerforge.co.uk/guide/split/">
+<meta property="og:site_name" content="Drawerforge">
+<meta property="og:title" content="Gridfinity Baseplate Too Big for Your Printer? How to Split It">
+<meta property="og:description" content="How many cells each printer bed takes, why rotating diagonally does not help, and how to split and join a large baseplate.">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Gridfinity Baseplate Too Big for Your Printer? How to Split It">
+<meta name="twitter:description" content="How many cells each printer bed takes, why rotating diagonally does not help, and how to split and join a large baseplate.">
+<style>
+/*__CSS__*/
+</style>
+</head>
+<body>
+<header>
+  <h1>DRAWER<span class="tm">FORGE</span> <span class="tm" style="opacity:.55">· GUIDE</span></h1>
+  <p>Splitting a Gridfinity baseplate that is bigger than your printer bed — how many cells fit, and how to join the pieces back up.</p>
+  <div class="privacy">runs entirely in your browser — nothing is uploaded, no account, no tracking</div>
+  <nav>
+    <a href="../../">Baseplates</a>
+    <a href="../../bins/">Bins</a>
+    <a href="../" class="on">Guide</a>
+  </nav>
+</header>
+
+<article class="doc">
+
+<p class="lede">Any drawer worth organising needs a baseplate bigger than a consumer print
+bed. A 306&nbsp;×&nbsp;380&nbsp;mm drawer wants a plate more than twice the area a
+256&nbsp;mm bed can take. So it gets printed in pieces and joined — and the interesting
+question is not <em>whether</em> to split it, but <em>where</em>.</p>
+
+<h2 id="bed">How many cells your printer can take</h2>
+
+<p>A baseplate tiles at 42&nbsp;mm, so an <em>n</em>-cell piece is exactly
+<em>n</em>&nbsp;×&nbsp;42&nbsp;mm. That makes the limit easy:</p>
+
+<table class="doc">
+  <thead><tr><th>Printer</th><th>Bed</th><th>Largest piece</th><th>Size</th></tr></thead>
+  <tbody>
+    <tr><td>Bambu A1 mini</td><td>180 × 180</td><td>4 × 4</td><td>168 × 168 mm</td></tr>
+    <tr><td>Ender 3 / Bambu A1</td><td>220 × 220</td><td>5 × 5</td><td>210 × 210 mm</td></tr>
+    <tr><td>Prusa MK4</td><td>250 × 210</td><td>5 × 5</td><td>210 × 210 mm</td></tr>
+    <tr><td>Elegoo Centauri / Bambu X1, P1</td><td>256 × 256</td><td>6 × 6</td><td>252 × 252 mm</td></tr>
+    <tr><td>Large format</td><td>300 × 300</td><td>7 × 7</td><td>294 × 294 mm</td></tr>
+    <tr><td>Bambu H2D</td><td>350 × 320</td><td>8 × 7</td><td>336 × 294 mm</td></tr>
+  </tbody>
+</table>
+
+<p>Leave a little margin on top of these if your joint adds a protruding tab — the
+generator accounts for that automatically, but it is why a piece that looks like it should
+just fit sometimes does not.</p>
+
+<h2 id="rotation">Why printing it diagonally doesn't help</h2>
+
+<p>The first instinct is to rotate the piece 45° and use the bed's diagonal. It doesn't
+work, and it's worth understanding why so you don't waste an evening on it.</p>
+
+<p>A rectangle <em>W</em>&nbsp;×&nbsp;<em>D</em> rotated by θ occupies a bounding box of
+<em>W</em>·cosθ&nbsp;+&nbsp;<em>D</em>·sinθ by <em>W</em>·sinθ&nbsp;+&nbsp;<em>D</em>·cosθ.
+Both terms grow as soon as θ leaves 0° or 90°. The bounding box of a rectangle is always
+smallest square-on.</p>
+
+<p>Concretely: a 7&nbsp;×&nbsp;4 piece is 293.5&nbsp;×&nbsp;167.5&nbsp;mm. Its best
+orientation on a 256&nbsp;mm bed still needs 293.5&nbsp;mm. Every angle is worse. The
+diagonal only helps for something long and <em>thin</em>, and a baseplate piece never is.</p>
+
+<h2 id="where">Where to put the cuts</h2>
+
+<p>Once you accept splitting, the arrangement matters more than the count:</p>
+
+<ul>
+  <li><strong>Balanced</strong> — divide evenly. Predictable, and every piece prints the
+  same, which is convenient if you're running them back to back.</li>
+  <li><strong>Staggered</strong> — offset the joints between rows like brickwork, so no
+  seam runs the full width of the drawer. Meaningfully more rigid, because a continuous
+  seam is a hinge.</li>
+  <li><strong>Fewest plates</strong> — search the split patterns and pick whichever needs
+  the fewest bed loads. This often beats intuition: two narrow pieces frequently share a
+  plate that an evenly-split layout would print separately.</li>
+</ul>
+
+<p>For a 306&nbsp;×&nbsp;380&nbsp;mm drawer on a 256&nbsp;mm bed, the fewest-plates search
+finds a three-plate solution where the obvious split needs four. That is an entire print
+saved by moving a cut.</p>
+
+<h2 id="joining">Joining the pieces</h2>
+
+<p>Split pieces sitting loose in a drawer will drift apart every time it's opened, so they
+need joining. The choice depends mostly on how you can assemble them:</p>
+
+<ul>
+  <li><strong>Dovetail tabs</strong> print onto the pieces themselves — no loose parts and
+  no extra filament. Lay the tabbed piece down, lower its neighbour onto it, then lift the
+  assembly into the drawer.</li>
+  <li><strong>Separate keys</strong> bridge the seam from underneath. Stronger, but they
+  need assembling face-down and flipping, which is awkward for a big plate.</li>
+  <li><strong>Top-inserted keys</strong> exist for exactly the case where you cannot lower
+  an assembled plate in — a deep drawer, or one with a lip. Lay the pieces in place and
+  drop a key into each junction from above.</li>
+</ul>
+
+<p>Dovetails only go together vertically: the buried part is wider than the mouth, so a
+piece has to be lowered onto its neighbour rather than slid. That also means assembly has
+an order, and the generator prints it in the README bundled with your export.</p>
+
+<h2 id="faq">Common questions</h2>
+
+<h3>Will the seams be visible or catch on things?</h3>
+<p>The seam sits in the wall between cells, where the bins already leave a gap. Bins bridge
+across it and hide it. A well-fitting joint is not noticeable in use.</p>
+
+<h3>Is a split plate weaker than one piece?</h3>
+<p>In the drawer, it barely matters — the plate rests on a flat floor and is contained by
+the drawer walls, so it is never asked to resist bending. Staggering the joints removes
+the one real weakness, a continuous seam across the full width.</p>
+
+<h3>Can I print the pieces in different colours?</h3>
+<p>Yes, and it looks deliberate rather than accidental if you stagger the joints. Each
+piece is a separate STL.</p>
+
+<h3>What if one piece still doesn't fit after splitting?</h3>
+<p>Add another cut. The cut map lets you click any grid line to place one by hand, and it
+warns when a piece exceeds your bed rather than letting you discover it in the slicer.</p>
+
+<p class="cta"><a href="../../">Split a baseplate for your drawer →</a>
+&nbsp;·&nbsp; <a href="../">Back to the guide</a>
+&nbsp;·&nbsp; <a href="../drawer-sizes/">Drawer size to grid →</a></p>
+
+</article>
+
+<footer>
+  <div><b>Drawerforge</b> is free and open. Gridfinity was created by <a href="https://www.youtube.com/c/ZackFreedman" rel="noopener">Zack Freedman</a> (Voidstar Lab) as an open standard — these tools implement the published profiles.</div>
+  <div style="margin-top:10px">Issues and feature requests <a href="https://github.com/Oliver-Johnson/Baseplate-Studio/issues" rel="noopener">on GitHub</a>. If it saved you time you can <a href="https://ko-fi.com/oliver_johnson" rel="noopener">buy me a coffee</a>.</div>
+  <div class="mono" style="margin-top:8px">All geometry is computed locally in your browser — nothing is uploaded. STL and 3MF output is mm scale.</div>
+</footer>
+</body>
+</html>

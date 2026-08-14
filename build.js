@@ -48,6 +48,10 @@ const TOOLS = [
     out: 'guide/index.html',
     parts: { CSS: 'src/shared-ui/style.css' },
   },
+  { name: 'guide-split', template: 'src/guide/split.html',
+    out: 'guide/split/index.html', parts: { CSS: 'src/shared-ui/style.css' } },
+  { name: 'guide-sizes', template: 'src/guide/drawer-sizes.html',
+    out: 'guide/drawer-sizes/index.html', parts: { CSS: 'src/shared-ui/style.css' } },
 ];
 
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
