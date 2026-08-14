@@ -2576,9 +2576,47 @@ function buildBin(G, cfg) {
   return { polys: G.clampZ(polys, 0), meta };
 }
 
+/* ---------- layout packing -------------------------------------------------
+ * Bins travel in the URL hash, so the encoding has to be compact. It also has to
+ * survive the values it carries: the original separator was '.', and wall
+ * thickness 1.2 split into "1" and "2", shifting every later field so a bin came
+ * back with dividers it never had. Separators are now characters that cannot
+ * occur in a non-negative number, and packBin refuses to emit one that could.
+ *
+ * Pure functions living here rather than in the UI so they can be tested headlessly.
+ */
+const SEP = { field: '-', bin: '_', layer: '~' };
+const BASES = ['standard', 'lowlip', 'low'];
+const PACK_EDGES = ['f', 'b', 'l', 'r'];
+
+function packBin(b) {
+  const f = [b.x, b.y, b.u, b.v, b.hUnits, b.wall, b.floorT, b.divX, b.divY,
+             b.solid ? 1 : 0]
+    .concat(PACK_EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1)))
+    .concat([Math.max(0, BASES.indexOf(b.base || 'standard')), b.scoop || 0, b.label || 0]);
+  for (const v of f)
+    if (String(v).includes(SEP.field) || String(v).includes(SEP.bin) || String(v).includes(SEP.layer))
+      throw new Error(`bin field ${v} contains a separator — packing would corrupt it`);
+  return f.join(SEP.field);
+}
+function unpackBin(t) {
+  const p = t.split(SEP.field).map(Number);
+  const edges = {};
+  PACK_EDGES.forEach((k, i) => { edges[k] = isFinite(p[10 + i]) ? p[10 + i] : 1; });
+  return { x: p[0], y: p[1], u: p[2], v: p[3], hUnits: p[4],
+           wall: p[5], floorT: p[6], divX: p[7], divY: p[8], solid: !!p[9],
+           edges, base: BASES[p[14]] || 'standard',
+           scoop: isFinite(p[15]) ? p[15] : 0, label: isFinite(p[16]) ? p[16] : 0 };
+}
+const packLayers = (layers) =>
+  layers.map((L) => L.bins.map(packBin).join(SEP.bin)).join(SEP.layer);
+const unpackLayers = (s) => (s || '').split(SEP.layer)
+  .map((ls) => ({ bins: ls.split(SEP.bin).filter(Boolean).map(unpackBin) }));
+
 if (typeof module !== 'undefined') {
   module.exports = { buildBin, roundRect, outlineAt, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
-    lipHeight, BASE_STYLES, footProfile, STUB_H, REQUIRED_CORE };
+    lipHeight, BASE_STYLES, footProfile, STUB_H, REQUIRED_CORE,
+    packBin, unpackBin, packLayers, unpackLayers };
 }
 </script>
 <script>/* Drawerforge Bins UI. Core geometry and buildBin are in scope from the previous
@@ -3627,33 +3665,14 @@ $('dlAll').addEventListener('click', async () => {
 
 /* ---------- shared project descriptor -------------------------------------- */
 const KEYS = { w: 'drawerW', d: 'drawerD', dh: 'drawerH', ph: 'plateH' };
-const packLayer = (L) => L.bins.map((b) =>
-  [b.x, b.y, b.u, b.v, b.hUnits, b.wall, b.floorT, b.divX, b.divY, b.solid ? 1 : 0]
-    .concat(EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1)))
-    .concat([['standard', 'lowlip', 'low'].indexOf(b.base || 'standard'), b.scoop || 0, b.label || 0])
-    .join('.')).join('_');
-const packAll = () => layers.map(packLayer).join('~');
-function unpackAll(s) {
-  return (s || '').split('~').map((ls) => ({
-    bins: ls.split('_').filter(Boolean).map((t) => {
-      const p = t.split('.').map(Number);
-      const ed = {};
-      EDGES.forEach((k, i) => { ed[k] = p.length > 10 + i && isFinite(p[10 + i]) ? p[10 + i] : 1; });
-      const bs = ['standard', 'lowlip', 'low'][p[14]] || 'standard';
-      return { x: p[0], y: p[1], u: p[2], v: p[3], hUnits: p[4],
-               wall: p[5], floorT: p[6], divX: p[7], divY: p[8], solid: !!p[9],
-               edges: ed, base: bs,
-               scoop: isFinite(p[15]) ? p[15] : 0, label: isFinite(p[16]) ? p[16] : 0 };
-    }),
-  }));
-}
+// packing lives in bin.js so it can be tested headlessly
 function descriptor() {
   const o = Object.assign({}, hashExtras, { v: 2 });
   for (const [k, id] of Object.entries(KEYS)) o[k] = state[id];
-  o.bl = packAll();
+  o.bl = packLayers(layers);
+  o.bseg = state.arcSegs;
   const notes = layers.map((L) => L.bins.map((b) => b.note || ''));
   if (notes.some((L) => L.some((n) => n))) o.bnotes = JSON.stringify(notes);
-  o.bseg = state.arcSegs;
   return o;
 }
 const encodeDesc = (o) => Object.entries(o).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
@@ -3670,7 +3689,7 @@ function loadFromHash() {
   }
   for (const [k, val] of Object.entries(q)) {
     if (k === 'v') continue;
-    if (k === 'bl') { const ls = unpackAll(val); if (ls.length) layers = ls; continue; }
+    if (k === 'bl') { const ls = unpackLayers(val); if (ls.length) layers = ls; continue; }
     if (k === 'bseg') { $('arcSegs').value = val; continue; }
     if (k === 'bnotes') { pendingNotes = val; continue; }
     const id = KEYS[k];

@@ -1044,33 +1044,14 @@ $('dlAll').addEventListener('click', async () => {
 
 /* ---------- shared project descriptor -------------------------------------- */
 const KEYS = { w: 'drawerW', d: 'drawerD', dh: 'drawerH', ph: 'plateH' };
-const packLayer = (L) => L.bins.map((b) =>
-  [b.x, b.y, b.u, b.v, b.hUnits, b.wall, b.floorT, b.divX, b.divY, b.solid ? 1 : 0]
-    .concat(EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1)))
-    .concat([['standard', 'lowlip', 'low'].indexOf(b.base || 'standard'), b.scoop || 0, b.label || 0])
-    .join('.')).join('_');
-const packAll = () => layers.map(packLayer).join('~');
-function unpackAll(s) {
-  return (s || '').split('~').map((ls) => ({
-    bins: ls.split('_').filter(Boolean).map((t) => {
-      const p = t.split('.').map(Number);
-      const ed = {};
-      EDGES.forEach((k, i) => { ed[k] = p.length > 10 + i && isFinite(p[10 + i]) ? p[10 + i] : 1; });
-      const bs = ['standard', 'lowlip', 'low'][p[14]] || 'standard';
-      return { x: p[0], y: p[1], u: p[2], v: p[3], hUnits: p[4],
-               wall: p[5], floorT: p[6], divX: p[7], divY: p[8], solid: !!p[9],
-               edges: ed, base: bs,
-               scoop: isFinite(p[15]) ? p[15] : 0, label: isFinite(p[16]) ? p[16] : 0 };
-    }),
-  }));
-}
+// packing lives in bin.js so it can be tested headlessly
 function descriptor() {
   const o = Object.assign({}, hashExtras, { v: 2 });
   for (const [k, id] of Object.entries(KEYS)) o[k] = state[id];
-  o.bl = packAll();
+  o.bl = packLayers(layers);
+  o.bseg = state.arcSegs;
   const notes = layers.map((L) => L.bins.map((b) => b.note || ''));
   if (notes.some((L) => L.some((n) => n))) o.bnotes = JSON.stringify(notes);
-  o.bseg = state.arcSegs;
   return o;
 }
 const encodeDesc = (o) => Object.entries(o).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
@@ -1087,7 +1068,7 @@ function loadFromHash() {
   }
   for (const [k, val] of Object.entries(q)) {
     if (k === 'v') continue;
-    if (k === 'bl') { const ls = unpackAll(val); if (ls.length) layers = ls; continue; }
+    if (k === 'bl') { const ls = unpackLayers(val); if (ls.length) layers = ls; continue; }
     if (k === 'bseg') { $('arcSegs').value = val; continue; }
     if (k === 'bnotes') { pendingNotes = val; continue; }
     const id = KEYS[k];

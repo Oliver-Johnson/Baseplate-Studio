@@ -437,7 +437,45 @@ function buildBin(G, cfg) {
   return { polys: G.clampZ(polys, 0), meta };
 }
 
+/* ---------- layout packing -------------------------------------------------
+ * Bins travel in the URL hash, so the encoding has to be compact. It also has to
+ * survive the values it carries: the original separator was '.', and wall
+ * thickness 1.2 split into "1" and "2", shifting every later field so a bin came
+ * back with dividers it never had. Separators are now characters that cannot
+ * occur in a non-negative number, and packBin refuses to emit one that could.
+ *
+ * Pure functions living here rather than in the UI so they can be tested headlessly.
+ */
+const SEP = { field: '-', bin: '_', layer: '~' };
+const BASES = ['standard', 'lowlip', 'low'];
+const PACK_EDGES = ['f', 'b', 'l', 'r'];
+
+function packBin(b) {
+  const f = [b.x, b.y, b.u, b.v, b.hUnits, b.wall, b.floorT, b.divX, b.divY,
+             b.solid ? 1 : 0]
+    .concat(PACK_EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1)))
+    .concat([Math.max(0, BASES.indexOf(b.base || 'standard')), b.scoop || 0, b.label || 0]);
+  for (const v of f)
+    if (String(v).includes(SEP.field) || String(v).includes(SEP.bin) || String(v).includes(SEP.layer))
+      throw new Error(`bin field ${v} contains a separator — packing would corrupt it`);
+  return f.join(SEP.field);
+}
+function unpackBin(t) {
+  const p = t.split(SEP.field).map(Number);
+  const edges = {};
+  PACK_EDGES.forEach((k, i) => { edges[k] = isFinite(p[10 + i]) ? p[10 + i] : 1; });
+  return { x: p[0], y: p[1], u: p[2], v: p[3], hUnits: p[4],
+           wall: p[5], floorT: p[6], divX: p[7], divY: p[8], solid: !!p[9],
+           edges, base: BASES[p[14]] || 'standard',
+           scoop: isFinite(p[15]) ? p[15] : 0, label: isFinite(p[16]) ? p[16] : 0 };
+}
+const packLayers = (layers) =>
+  layers.map((L) => L.bins.map(packBin).join(SEP.bin)).join(SEP.layer);
+const unpackLayers = (s) => (s || '').split(SEP.layer)
+  .map((ls) => ({ bins: ls.split(SEP.bin).filter(Boolean).map(unpackBin) }));
+
 if (typeof module !== 'undefined') {
   module.exports = { buildBin, roundRect, outlineAt, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
-    lipHeight, BASE_STYLES, footProfile, STUB_H, REQUIRED_CORE };
+    lipHeight, BASE_STYLES, footProfile, STUB_H, REQUIRED_CORE,
+    packBin, unpackBin, packLayers, unpackLayers };
 }

@@ -21,3 +21,5 @@ jobs:
       # real-mesh cross-sections, and bin-to-socket clearance derived independently.
       - run: node test/bin-audit.js
       - run: node test/fit-check.js
+      # A layout travels in the URL hash; it must survive the round trip byte for byte.
+      - run: node test/hash-roundtrip.js
