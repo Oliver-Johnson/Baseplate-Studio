@@ -237,6 +237,27 @@ function fanCap(mk, ring, z, up, cx, cy) {
   return polys;
 }
 
+/* Band between two CCW loops that correspond index-for-index.
+ *
+ * Every loop in a bin comes from roundRect with the same segment count, so the two
+ * rims pair up vertex for vertex and a direct strip is exact. This deliberately
+ * avoids triangulateRing's keyhole + ear-clipping path, which bails out SILENTLY on
+ * a thin ring: on a 1.2 mm wall it returned 57 of the 128 triangles needed, covering
+ * 119.5 of 187.0 mm2 and leaving the rest as holes. That is where the slicer's
+ * non-manifold edges were coming from.
+ */
+function ringStrip(mk, outer, inner, z, up) {
+  const polys = [], n = outer.length;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const o0 = [outer[i][0], outer[i][1], z], o1 = [outer[j][0], outer[j][1], z];
+    const i0 = [inner[i][0], inner[i][1], z], i1 = [inner[j][0], inner[j][1], z];
+    let p = mk(up ? [o0, o1, i1] : [i1, o1, o0]); if (p) polys.push(p);
+    p = mk(up ? [o0, i1, i0] : [i0, i1, o0]); if (p) polys.push(p);
+  }
+  return polys;
+}
+
 // Closed annular wall between two CCW loops, from z0 up to a per-vertex top.
 // zTop may be a number or an array — an array lets one side stand full height
 // while another drops to the floor, which is how an open-fronted bin is made.
@@ -263,12 +284,7 @@ function wallRing(G, outer, inner, z0, zTop) {
     let p = mk([oi, oj, ij]); if (p) polys.push(p);
     p = mk([oi, ij, ii]); if (p) polys.push(p);
   }
-  const { pts, tris } = G.triangulateRing(outer, inner);
-  for (const t of tris) {                  // bottom annulus, normals down
-    const vs = t.map((ix) => [pts[ix][0], pts[ix][1], z0]);
-    const p = mk([vs[2], vs[1], vs[0]]);
-    if (p) polys.push(p);
-  }
+  polys.push(...ringStrip(mk, outer, inner, z0, false));   // bottom annulus
   return polys;
 }
 
@@ -306,16 +322,10 @@ function lipRing(G, c, hwO, hdO, H, n) {
                           [outer[k][0], outer[k][1], H + lipH], [outer[j][0], outer[j][1], H + lipH]]);
     if (p) polys.push(p);
   }
-  // caps: bottom (down) and the flat top rim (up)
-  for (const [z, ring2, up] of [[H - BLOAT, inner[0], false],
-                                [H + lipH, inner[inner.length - 1], true]]) {
-    const { pts, tris } = G.triangulateRing(outer, ring2);
-    for (const t of tris) {
-      const vs = t.map((ix) => [pts[ix][0], pts[ix][1], z]);
-      const p = G.makePoly(up ? vs : [vs[2], vs[1], vs[0]]);
-      if (p) polys.push(p);
-    }
-  }
+  // caps: bottom (down) and the flat top rim (up) — index-paired strips, not the
+  // keyhole triangulator, which silently leaves a thin ring half covered
+  polys.push(...ringStrip(G.makePoly, outer, inner[0], H - BLOAT, false));
+  polys.push(...ringStrip(G.makePoly, outer, inner[inner.length - 1], H + lipH, true));
   return polys;
 }
 
@@ -353,10 +363,10 @@ function buildBin(G, cfg) {
   const floorZ = st.footH + c.floorT;
 
   if (c.solid || floorZ >= H - 0.2) {
-    polys.push(...G.extrudePoly(outer, st.footH, H));
+    polys.push(...G.extrudePoly(outer, st.footH - BLOAT, H));
   } else {
     // solid slab from the top of the feet to the cavity floor
-    polys.push(...G.extrudePoly(outer, st.footH, floorZ + BLOAT));
+    polys.push(...G.extrudePoly(outer, st.footH - BLOAT, floorZ + BLOAT));
     // wall ring above it
     const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
     const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;

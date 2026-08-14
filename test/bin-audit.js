@@ -29,10 +29,18 @@ const CASES = [
   { name: '1x1x3-solid', u: 1, v: 1, hUnits: 3, solid: true },
   { name: '2x1x3-div', u: 2, v: 1, hUnits: 3, divX: 1 },
   { name: '3x2x5-div', u: 3, v: 2, hUnits: 5, divX: 2, divY: 1 },
+  { name: '1x1x1', u: 1, v: 1, hUnits: 1 },
+  { name: '2x1x3-scoop', u: 2, v: 1, hUnits: 3, scoop: 8 },
+  { name: '2x1x3-label', u: 2, v: 1, hUnits: 3, label: 12 },
+  { name: '2x2x3-lowlip', u: 2, v: 2, hUnits: 3, base: 'lowlip' },
+  { name: '2x2x3-low', u: 2, v: 2, hUnits: 3, base: 'low' },
+  { name: '2x1x3-openfront', u: 2, v: 1, hUnits: 3, edges: { f: 0 } },
+  { name: '2x2x2-tray', u: 2, v: 2, hUnits: 2, edges: { f: 0, b: 0, l: 0, r: 0 } },
+  { name: '6x4x5-everything', u: 6, v: 4, hUnits: 5, divX: 2, divY: 1, scoop: 6, label: 10 },
 ];
 
 let bad = 0;
-console.log('case            tris   W x D x H (mm)        zmin   zmax   manifold');
+console.log('case            tris   W x D x H (mm)        zmin   zmax   mesh');
 for (const cs of CASES) {
   let r;
   try {
@@ -48,27 +56,31 @@ for (const cs of CASES) {
     xmin = Math.min(xmin, v[0]); xmax = Math.max(xmax, v[0]);
     ymin = Math.min(ymin, v[1]); ymax = Math.max(ymax, v[1]);
   }
-  // Overlapping closed shells are the deliberate construction here (see bin.js and
-  // ENGINE rule "overlapping shells instead of union"), so a soup-wide manifold
-  // check NEVER reads zero. The shipped baseplate scores 1120/5510 = 20% bad edges.
-  // Judge against that baseline, not against zero.
+  /* Bins ARE watertight and must stay so. An earlier build leaked 218 boundary
+     edges because triangulateRing's ear clipper bailed out silently on a thin ring,
+     and a slicer reported them as non-manifold. Every edge must now be shared by
+     exactly two faces — boundary edges (used once) are holes, and anything used
+     more than twice is two shells meeting on a plane instead of overlapping. */
   const man = G.checkManifold(r.polys);
   const pct = 100 * man.bad / man.edges;
-  const ok = pct < 25;
+  const ok = man.bad === 0;
   const dims = `${(xmax - xmin).toFixed(2)} x ${(ymax - ymin).toFixed(2)} x ${(zmax - zmin).toFixed(2)}`;
 
   // expected footprint straight from the spec, independent of the builder
   const expW = (cs.u - 1) * 42 + 41.5, expD = (cs.v - 1) * 42 + 41.5;
   const wOk = Math.abs((xmax - xmin) - expW) < 0.02 && Math.abs((ymax - ymin) - expD) < 0.02;
+  /* The stacking PITCH is always hUnits*7 — that is what a bin occupies in a stack.
+     The real height can be less: a tray with every wall open is just its floor, so
+     compare zmax against meta.totalH and check the pitch separately. */
   const hOk = Math.abs(zmax - r.meta.totalH) < 0.02 &&
-              Math.abs(r.meta.totalH - (cs.hUnits * 7 + r.meta.lipH)) < 0.001 &&
+              Math.abs(r.meta.H - cs.hUnits * 7) < 0.001 &&
               zmin > -0.001;
 
   console.log(`${cs.name.padEnd(14)} ${String(tris.length).padStart(6)}  ${dims.padEnd(20)} ` +
               `${zmin.toFixed(3).padStart(6)} ${zmax.toFixed(3).padStart(6)}  ` +
-              `${pct.toFixed(0).padStart(3)}%${ok ? '' : ' OVER BASELINE'}` +
+              `${ok ? 'watertight' : man.bad + ' BAD EDGES'}`.padStart(12) +
               `${wOk ? '' : '  FOOTPRINT MISMATCH exp ' + expW + 'x' + expD}` +
-              `${hOk ? '' : '  HEIGHT MISMATCH exp ' + (cs.hUnits * 7 + r.meta.lipH)}`);
+              `${hOk ? '' : '  HEIGHT MISMATCH: zmax ' + zmax.toFixed(2) + ' vs totalH ' + r.meta.totalH.toFixed(2) + ', pitch ' + r.meta.H}`);
   if (!ok || !wOk || !hOk) bad++;
 
   fs.writeFileSync(path.join(outDir, `bin-${cs.name}.stl`),
