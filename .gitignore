@@ -5,6 +5,8 @@ Local Workspace/
 # Build and test output
 node_modules/
 out/
+test-results/
+playwright-report/
 *.stl
 *.3mf
 *.log

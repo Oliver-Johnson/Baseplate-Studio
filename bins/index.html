@@ -3298,7 +3298,10 @@ function drawMap() {
       }
   });
 
-  if (drag) {
+  /* Only a create drag has an anchor to rubber-band from. Drawing this for a resize
+     or a move read x0/y0 off a drag that never set them, so every attribute came out
+     NaN and the browser rejected the rect four times a frame. */
+  if (drag && drag.mode === 'create') {
     const x = Math.min(drag.x0, drag.x1), y = Math.min(drag.y0, drag.y1);
     const u = Math.abs(drag.x1 - drag.x0) + 1, v = Math.abs(drag.y1 - drag.y0) + 1;
     svg.appendChild(el('rect', { class: 'drag' + (canPlace(x, y, u, v, -1) ? '' : ' bad'),
@@ -3334,7 +3337,10 @@ function initMap() {
     const c = cellFromEvent(e);
     const handle = e.target && e.target.dataset ? e.target.dataset.handle : null;
 
-    if (handle && selected >= 0 && B()[selected]) {      // resize from a corner
+    /* Grips sit on the bin's corners, which is exactly where you click to carve an
+       L. While carving they have to yield, or the one cell you most want to remove
+       is the one cell you cannot. */
+    if (handle && !e.altKey && !carving && selected >= 0 && B()[selected]) {
       const b = B()[selected];
       pushUndo();
       drag = { mode: 'resize', idx: selected,
