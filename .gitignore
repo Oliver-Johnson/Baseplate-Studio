@@ -1,27 +1,20 @@
-# Internal handover notes — not for publication
-HANDOVER.md
+# Anything not meant for the repo lives in one place, so this file never has to
+# name it. Put working notes, scratch scripts and experiments in there.
+Local Workspace/
 
-# Node
+# Build and test output
 node_modules/
-npm-debug.log*
-yarn-error.log*
-
-# Test / scratch geometry output
+out/
 *.stl
 *.3mf
-!test/reference-bin.stl
+*.log
 __pycache__/
 *.pyc
 
-# OS cruft
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# Claude Code — local machine settings only; .claude/settings.json stays shareable
-.claude/settings.local.json
-
-# Editors
+# Editor and OS
 .vscode/
 .idea/
 *.swp
+.DS_Store
+Thumbs.db
+desktop.ini

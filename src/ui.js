@@ -28,6 +28,7 @@ function readControls() {
   state.keyMount = $('keyMount').value;
   state.keyInsert = $('keyInsert').value;
   state.baseMode = $('baseMode').value;
+  state.plateStyle = $('plateStyle').value;
   if ($('perCorner').checked) {
     state.cornerRadii = { ll: parseFloat($('rFL').value)||0, lr: parseFloat($('rFR').value)||0,
                           ul: parseFloat($('rBL').value)||0, ur: parseFloat($('rBR').value)||0 };
@@ -111,6 +112,12 @@ function warningsList() {
   if (wallishC &&
       layout.seams.some(s => s.junctions.some(j => Math.abs(j - Math.round(j)) > 0.25)))
     out.push({ t: 'One seam overlaps by a single cell — wall-housed keys need a wall junction, so that seam gets no connector. The neighbouring joints still hold the assembly.' });
+  if (state.plateStyle === 'skeleton') {
+    if (state.magnets || state.screws)
+      out.push({ t: 'Skeleton is off while magnets or screws are on — their pockets and bosses need the material a skeleton removes. Turn them off, or use Solid.' });
+    else if (state.connector !== 'none')
+      out.push({ t: 'Skeleton is applied to the inner cells only. Cells along each piece edge stay solid because that is where the joints cut in — pick "None" for joints to skeletonise the whole plate.' });
+  }
   if (state.noMargin && (remX > 0.5 || remY > 0.5))
     out.push({ t: 'No margin selected: the plate will sit loose by the leftover amount. The drawer walls still contain it.' });
   return out;
@@ -637,7 +644,7 @@ function readmeText() {
 let hashExtras = {};
 const OWNED = new Set(['w','d','mm','ax','ay','ml','mr','mf','mb','bw','bd','bh','sp','km','ki',
   'rc','cc','cn','cl','to','mg','md','mh','ms','sc','sh','sd','se','pi','or','bp','tc','bm','pc',
-  'r1','r2','r3','r4','v','ph']);
+  'r1','r2','r3','r4','v','ph','ps']);
 
 function descriptor() {
   const o = {
@@ -650,7 +657,7 @@ function descriptor() {
     mg: state.magnets ? 1 : 0, md: state.magnetD, mh: state.magnetH, ms: state.magnetSide,
     sc: state.screws ? 1 : 0, sh: state.screwHoleD, sd: state.screwHeadD, se: state.screwHeadDepth,
     pi: state.pitch, or: state.outerRadius, bp: state.bottomPad, tc: state.topCutoff,
-    bm: state.baseMode, pc: $('perCorner').checked ? 1 : 0,
+    bm: state.baseMode, ps: state.plateStyle, pc: $('perCorner').checked ? 1 : 0,
     r1: $('rFL').value, r2: $('rFR').value, r3: $('rBL').value, r4: $('rBR').value,
   };
   return Object.assign({}, hashExtras, o, { v: 2 });
@@ -690,7 +697,7 @@ function loadFromHash() {
   if (q.sc !== undefined) $('screws').checked = q.sc === '1';
   set('screwHoleD', q.sh); set('screwHeadD', q.sd); set('screwHeadDepth', q.se);
   set('pitch', q.pi); set('outerRadius', q.or); set('bottomPad', q.bp); set('topCutoff', q.tc);
-  set('baseMode', q.bm);
+  set('baseMode', q.bm); set('plateStyle', q.ps);
   if (q.pc !== undefined) $('perCorner').checked = q.pc === '1';
   set('rFL', q.r1); set('rFR', q.r2); set('rBL', q.r3); set('rBR', q.r4);
   if (q.sp) {
@@ -717,7 +724,7 @@ $('bedPreset').addEventListener('change', () => {
   recomputeLayout();
 });
 for (const id of [...numIds, 'alignX', 'alignY', 'marginMode', 'connector', 'connClr',
-  'tolerance', 'magnetSide', 'magnets', 'screws', 'baseMode', 'perCorner', 'rFL', 'rFR', 'rBL', 'rBR', 'keyMount', 'keyInsert']) {
+  'tolerance', 'magnetSide', 'magnets', 'screws', 'baseMode', 'perCorner', 'rFL', 'rFR', 'rBL', 'rBR', 'keyMount', 'keyInsert', 'plateStyle']) {
   $(id).addEventListener('input', recomputeLayout);
   $(id).addEventListener('change', recomputeLayout);
 }

@@ -176,6 +176,12 @@ header nav a.on:hover{color:#0c1116}
       <label class="f"><b>Front / Back (mm)</b><div class="row"><input id="mFront" type="number" step="0.5" value="0"><input id="mBack" type="number" step="0.5" value="0"></div></label>
     </div>
     <div class="hint" id="gridSummary"></div>
+    <label class="f"><b>Plate style</b>
+      <select id="plateStyle">
+        <option value="solid">Solid — the sturdy default</option>
+        <option value="skeleton">Skeleton — hollowed underneath, lighter and faster</option>
+      </select></label>
+    <div class="hint" id="plateStyleHint">Skeleton keeps the socket, the rim and the wall band, and leaves out the bulk beneath. Cells carrying a joint stay solid, and it turns off entirely with magnets or screws, which need that material.</div>
   </div>
 </section>
 
@@ -1309,6 +1315,69 @@ function triangulateRing(outer, inner) {
 }
 
 // direct watertight mesh for a cell region (no CSG); supports closed floor (pad>0)
+/* Skeleton cell region — a lighter alternative to directCellRegion.
+ *
+ * CONSTRUCTIVE, never subtractive. Hollowing a solid cell would mean BSP cuts in the
+ * region immediately outside the socket cones, which ENGINE.md names as the confirmed
+ * mesh-destroyer. So this builds less material in the first place.
+ *
+ * Above the socket's vertical section (z 2.5 up) the cell stays exactly as solid as
+ * before: that band carries the rim, the wall pockets connectors live in, and the join
+ * to neighbouring cells. Below it the material becomes a shell of `skin` following the
+ * socket profile, and the bulk between that shell and the cell boundary simply is not
+ * built. One closed shell, so there are no overlapping or coplanar caps to confuse a
+ * slicer.
+ */
+function skeletonCellRegion(clipped, prof, cx, cy, H, arcSegs, skin) {
+  const polys = [];
+  const zs = prof.zs.slice(1, 5), ds = prof.ds.slice(1, 5);
+  const ringAt = (i, off) => {
+    const d = ds[i];
+    const r = prof.rTop - (d - ds[ds.length - 1]);
+    return roundedSquareRing(cx, cy, prof.pitchHalf - d + off, r + off, arcSegs);
+  };
+  const inner = [0, 1, 2, 3].map((i) => ringAt(i, 0));
+  const shell = [0, 1, 2].map((i) => ringAt(i, skin));
+  const n = inner[0].length;
+
+  // socket surface, all the way up — identical winding to directCellRegion
+  for (let i = 0; i < 3; i++)
+    for (let j = 0; j < n; j++) {
+      const k = (j + 1) % n;
+      const a0 = [inner[i][j][0], inner[i][j][1], zs[i]], b0 = [inner[i][k][0], inner[i][k][1], zs[i]];
+      const a1 = [inner[i+1][j][0], inner[i+1][j][1], zs[i+1]], b1 = [inner[i+1][k][0], inner[i+1][k][1], zs[i+1]];
+      let p = makePoly([b0, a0, b1]); if (p) polys.push(p);
+      p = makePoly([b1, a0, a1]); if (p) polys.push(p);
+    }
+  // outer face of the shell, reversed so its normals point away from the material
+  for (let i = 0; i < 2; i++)
+    for (let j = 0; j < n; j++) {
+      const k = (j + 1) % n;
+      const a0 = [shell[i][j][0], shell[i][j][1], zs[i]], b0 = [shell[i][k][0], shell[i][k][1], zs[i]];
+      const a1 = [shell[i+1][j][0], shell[i+1][j][1], zs[i+1]], b1 = [shell[i+1][k][0], shell[i+1][k][1], zs[i+1]];
+      let p = makePoly([a0, b0, b1]); if (p) polys.push(p);
+      p = makePoly([a0, b1, a1]); if (p) polys.push(p);
+    }
+  const annulus = (outerLoop, innerLoop, z, up) => {
+    const R = triangulateRing(outerLoop, innerLoop);
+    for (const t of R.tris) {
+      const vs = t.map((i) => [R.pts[i][0], R.pts[i][1], z]);
+      const p = makePoly(up ? vs : [vs[2], vs[1], vs[0]]);
+      if (p) polys.push(p);
+    }
+  };
+  annulus(shell[0], inner[0], zs[0], false);            // underside of the shell
+  annulus(clipped, shell[2], zs[2], false);             // underside of the solid band
+  for (let i = 0; i < clipped.length; i++) {            // outer wall of the solid band
+    const j = (i + 1) % clipped.length;
+    const p = makePoly([[clipped[i][0], clipped[i][1], zs[2]], [clipped[j][0], clipped[j][1], zs[2]],
+                        [clipped[j][0], clipped[j][1], H], [clipped[i][0], clipped[i][1], H]]);
+    if (p) polys.push(p);
+  }
+  annulus(clipped, inner[3].map((v) => [v[0], v[1]]), H, true);   // the rim
+  return polys;
+}
+
 function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs) {
   const polys = [];
   const { pts: oc } = earTriangulate(clipped);
@@ -1450,7 +1519,29 @@ function buildPiece(cfg, layout, piece, onStatus) {
         continue;
       }
       const cx = gx0 + ci*pitch + half, cy = gy0 + cj*pitch + half;
-      let region = directCellRegion(clipped, prof, cx, cy, H, pad, cfg.arcSegs || 6);
+      /* Skeleton only where there is nothing that needs the material back.
+       *
+       * The shell removes the bulk below z 2.5 — which is exactly the wall band every
+       * connector cuts into. Dovetail notches (depth 2.1, ceiling 2.4), wall-housed
+       * keys and H-clip pockets all live there, so a skeletonised cell carrying one
+       * would have nothing to cut into. Connectors only ever sit on a piece boundary,
+       * so boundary cells stay solid whenever a joint is in use.
+       *
+       * Magnets and screws are excluded outright: their holes and bosses need the
+       * material a skeleton removes, and a floor pad means they are housed in a floor
+       * that skeleton mode does not build.
+       */
+      // cells are built bloated by BLOAT per side, so a whole one measures (pitch+0.1)^2;
+      // anything the piece boundary has cut into measures less than pitch^2
+      const fullCell = Math.abs(polyArea2D(clipped)) >= pitch * pitch - 0.5;
+      const onEdge = ci === 0 || cj === 0 || ci === piece.nx - 1 || cj === piece.ny - 1;
+      const jointed = cfg.connector && cfg.connector !== 'none';
+      const skel = cfg.plateStyle === 'skeleton' && pad <= 0.01 && fullCell
+                   && !cfg.magnets && !cfg.screws && !(jointed && onEdge);
+      let region = skel
+        ? skeletonCellRegion(clipped, prof, cx, cy, H, cfg.arcSegs || 6,
+                             Math.max(0.4, cfg.skin || 0.8))
+        : directCellRegion(clipped, prof, cx, cy, H, pad, cfg.arcSegs || 6);
       // small convex cutters local to this cell
       let small = [];
       const seqCuts = [];
@@ -2009,12 +2100,14 @@ const DEFAULTS = {
   magnets: false, magnetD: 6, magnetH: 2, magnetSide: 'bottom',
   screws: false, screwHoleD: 3, screwHeadD: 6, screwHeadDepth: 2,
   holeOffset: 13, arcSegs: 6,
+  plateStyle: 'solid', skin: 0.8,
 };
 
 if (typeof module !== 'undefined') {
   module.exports = { computeLayout, pieceConnectors, buildPiece, buildTestTile, buildFitSample, bowtieKey, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
     // shared mesh primitives — also used by the bins tool
-    makePoly, triangulateRing, earTriangulate, roundedSquareRing, clampZ, profilePrism };
+    makePoly, triangulateRing, earTriangulate, roundedSquareRing, clampZ, profilePrism,
+    skeletonCellRegion, directCellRegion, polyArea2D };
 }
 
 </script>
@@ -2048,6 +2141,7 @@ function readControls() {
   state.keyMount = $('keyMount').value;
   state.keyInsert = $('keyInsert').value;
   state.baseMode = $('baseMode').value;
+  state.plateStyle = $('plateStyle').value;
   if ($('perCorner').checked) {
     state.cornerRadii = { ll: parseFloat($('rFL').value)||0, lr: parseFloat($('rFR').value)||0,
                           ul: parseFloat($('rBL').value)||0, ur: parseFloat($('rBR').value)||0 };
@@ -2131,6 +2225,12 @@ function warningsList() {
   if (wallishC &&
       layout.seams.some(s => s.junctions.some(j => Math.abs(j - Math.round(j)) > 0.25)))
     out.push({ t: 'One seam overlaps by a single cell — wall-housed keys need a wall junction, so that seam gets no connector. The neighbouring joints still hold the assembly.' });
+  if (state.plateStyle === 'skeleton') {
+    if (state.magnets || state.screws)
+      out.push({ t: 'Skeleton is off while magnets or screws are on — their pockets and bosses need the material a skeleton removes. Turn them off, or use Solid.' });
+    else if (state.connector !== 'none')
+      out.push({ t: 'Skeleton is applied to the inner cells only. Cells along each piece edge stay solid because that is where the joints cut in — pick "None" for joints to skeletonise the whole plate.' });
+  }
   if (state.noMargin && (remX > 0.5 || remY > 0.5))
     out.push({ t: 'No margin selected: the plate will sit loose by the leftover amount. The drawer walls still contain it.' });
   return out;
@@ -2657,7 +2757,7 @@ function readmeText() {
 let hashExtras = {};
 const OWNED = new Set(['w','d','mm','ax','ay','ml','mr','mf','mb','bw','bd','bh','sp','km','ki',
   'rc','cc','cn','cl','to','mg','md','mh','ms','sc','sh','sd','se','pi','or','bp','tc','bm','pc',
-  'r1','r2','r3','r4','v','ph']);
+  'r1','r2','r3','r4','v','ph','ps']);
 
 function descriptor() {
   const o = {
@@ -2670,7 +2770,7 @@ function descriptor() {
     mg: state.magnets ? 1 : 0, md: state.magnetD, mh: state.magnetH, ms: state.magnetSide,
     sc: state.screws ? 1 : 0, sh: state.screwHoleD, sd: state.screwHeadD, se: state.screwHeadDepth,
     pi: state.pitch, or: state.outerRadius, bp: state.bottomPad, tc: state.topCutoff,
-    bm: state.baseMode, pc: $('perCorner').checked ? 1 : 0,
+    bm: state.baseMode, ps: state.plateStyle, pc: $('perCorner').checked ? 1 : 0,
     r1: $('rFL').value, r2: $('rFR').value, r3: $('rBL').value, r4: $('rBR').value,
   };
   return Object.assign({}, hashExtras, o, { v: 2 });
@@ -2710,7 +2810,7 @@ function loadFromHash() {
   if (q.sc !== undefined) $('screws').checked = q.sc === '1';
   set('screwHoleD', q.sh); set('screwHeadD', q.sd); set('screwHeadDepth', q.se);
   set('pitch', q.pi); set('outerRadius', q.or); set('bottomPad', q.bp); set('topCutoff', q.tc);
-  set('baseMode', q.bm);
+  set('baseMode', q.bm); set('plateStyle', q.ps);
   if (q.pc !== undefined) $('perCorner').checked = q.pc === '1';
   set('rFL', q.r1); set('rFR', q.r2); set('rBL', q.r3); set('rBR', q.r4);
   if (q.sp) {
@@ -2737,7 +2837,7 @@ $('bedPreset').addEventListener('change', () => {
   recomputeLayout();
 });
 for (const id of [...numIds, 'alignX', 'alignY', 'marginMode', 'connector', 'connClr',
-  'tolerance', 'magnetSide', 'magnets', 'screws', 'baseMode', 'perCorner', 'rFL', 'rFR', 'rBL', 'rBR', 'keyMount', 'keyInsert']) {
+  'tolerance', 'magnetSide', 'magnets', 'screws', 'baseMode', 'perCorner', 'rFL', 'rFR', 'rBL', 'rBR', 'keyMount', 'keyInsert', 'plateStyle']) {
   $(id).addEventListener('input', recomputeLayout);
   $(id).addEventListener('change', recomputeLayout);
 }
