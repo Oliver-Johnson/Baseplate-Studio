@@ -205,6 +205,9 @@ article.doc .cta{margin-top:34px;padding-top:18px;border-top:1px solid var(--lin
   cursor:pointer;padding:0 2px;margin-left:2px}
 .kofi button:hover{color:var(--ink)}
 @media(max-width:640px){.kofi i{display:none}}
+#fillmap .cellpart{rx:0;stroke:none}
+#fillmap .binedge{stroke:var(--cyan);stroke-width:2;stroke-linecap:round;pointer-events:none}
+#fillmap .bin.sel.cellpart{stroke:none}
 </style>
 </head>
 <body>
@@ -325,9 +328,11 @@ article.doc .cta{margin-top:34px;padding-top:18px;border-top:1px solid var(--lin
       </select></label>
     <button class="act" id="splitFit" style="display:none">Split this bin to fit the bed</button>
     <div class="hint" id="splitHint" style="display:none">Splits it into the fewest pieces that each fit, covering the same cells. They sit side by side on the baseplate, so nothing is lost but the wall between them — and if you want one continuous compartment, set the facing walls of the new bins to Open.</div>
+    <button class="act" id="mergeBins" style="display:none">Merge into one bin</button>
+    <div class="hint" id="mergeHint" style="display:none">Combines the selected bins into a single bin of whatever shape they make together — the other way to build an L or a U. It keeps the first bin's settings, and loses the stacking lip, dividers, scoop and label, which all need a rectangle.</div>
     <div class="row" id="selActions" style="display:none">
       <button class="ghost" id="applyAll">Apply to all bins</button>
-      <button class="ghost" id="delBin">Delete this bin</button>
+      <button class="ghost" id="delBin">Delete selected</button>
     </div>
   </div>
 </section>
@@ -353,7 +358,7 @@ article.doc .cta{margin-top:34px;padding-top:18px;border-top:1px solid var(--lin
   <div class="covbar"><i id="covfill" style="width:0%"></i></div>
   <div class="body">
     <div class="mono" id="coverage">—</div>
-    <div class="hint">Drag across empty cells to place a bin. Click one to select it, drag it to move it, or pull a corner grip to resize. A ⚠ marks a bin that will not sit properly where it is — hover it for the reason. It stays put either way, in case you are about to place the thing that fixes it. Front of the drawer is at the bottom.</div>
+    <div class="hint">Drag across empty cells to place a bin. Click one to select it, drag it to move it, or pull a corner grip to resize. A ⚠ marks a bin that will not sit properly where it is — hover it for the reason. It stays put either way, in case you are about to place the thing that fixes it. <b>Alt-click</b> a cell inside the selected bin to carve it out, or alt-click a gap to put it back — that is how you make an L or a U. Front of the drawer is at the bottom.</div>
     <div class="row">
       <button class="ghost" id="fillRest">Fill the rest with <span id="fillSize">1×1</span></button>
       <button class="ghost" id="clearAll">Clear all</button>
@@ -2514,9 +2519,10 @@ const maskOf = (c) => {
 };
 const isFullRect = (c) => maskOf(c).size === c.u * c.v;
 
-/* One connected region, no holes. A carve that severs the bin is two bins, and one
-   that leaves an island is a donut needing an inner boundary loop — both are real
-   shapes but neither is this builder's job, so they are reported rather than built. */
+/* Advisory, not a gate. Both odd carves turn out to build watertight — the per-cell
+   builder walls a hole just as readily as an outer edge — so they are reported and
+   still made. A severed shape is simply two objects in one file; a hole is a frame,
+   which is a legitimate thing to want. */
 function maskCheck(mask, u, v) {
   if (!mask.size) return { ok: false, why: 'no cells left' };
   const start = [...mask][0].split(',').map(Number);
@@ -2711,24 +2717,44 @@ const SEP = { field: '-', bin: '_', layer: '~' };
 const BASES = ['standard', 'lowlip', 'low'];
 const PACK_EDGES = ['f', 'b', 'l', 'r'];
 
+function maskBits(b) {
+  if (!b.cells || !b.cells.length) return '';
+  const set = new Set(b.cells.map(([x, y]) => cellKey(x, y)));
+  if (set.size === b.u * b.v) return '';
+  let out = '';
+  for (let x = 0; x < b.u; x++) for (let y = 0; y < b.v; y++)
+    out += set.has(cellKey(x, y)) ? '1' : '0';
+  return out;
+}
+function bitsToCells(bits, u, v) {
+  if (!bits) return null;
+  const out = [];
+  let i = 0;
+  for (let x = 0; x < u; x++) for (let y = 0; y < v; y++, i++)
+    if (bits[i] === '1') out.push([x, y]);
+  return out.length ? out : null;
+}
 function packBin(b) {
   const f = [b.x, b.y, b.u, b.v, b.hUnits, b.wall, b.floorT, b.divX, b.divY,
              b.solid ? 1 : 0]
     .concat(PACK_EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1)))
-    .concat([Math.max(0, BASES.indexOf(b.base || 'standard')), b.scoop || 0, b.label || 0]);
+    .concat([Math.max(0, BASES.indexOf(b.base || 'standard')), b.scoop || 0, b.label || 0,
+             maskBits(b) || 0]);
   for (const v of f)
     if (String(v).includes(SEP.field) || String(v).includes(SEP.bin) || String(v).includes(SEP.layer))
       throw new Error(`bin field ${v} contains a separator — packing would corrupt it`);
   return f.join(SEP.field);
 }
 function unpackBin(t) {
-  const p = t.split(SEP.field).map(Number);
+  const raw = t.split(SEP.field);
+  const p = raw.map(Number);
   const edges = {};
   PACK_EDGES.forEach((k, i) => { edges[k] = isFinite(p[10 + i]) ? p[10 + i] : 1; });
   return { x: p[0], y: p[1], u: p[2], v: p[3], hUnits: p[4],
            wall: p[5], floorT: p[6], divX: p[7], divY: p[8], solid: !!p[9],
            edges, base: BASES[p[14]] || 'standard',
-           scoop: isFinite(p[15]) ? p[15] : 0, label: isFinite(p[16]) ? p[16] : 0 };
+           scoop: isFinite(p[15]) ? p[15] : 0, label: isFinite(p[16]) ? p[16] : 0,
+           cells: bitsToCells(raw[17] && raw[17] !== '0' ? raw[17] : '', p[2], p[3]) };
 }
 const packLayers = (layers) =>
   layers.map((L) => L.bins.map(packBin).join(SEP.bin)).join(SEP.layer);
@@ -2738,7 +2764,7 @@ const unpackLayers = (s) => (s || '').split(SEP.layer)
 if (typeof module !== 'undefined') {
   module.exports = { buildBin, roundRect, outlineAt, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
     lipHeight, BASE_STYLES, footProfile, STUB_H, REQUIRED_CORE,
-    maskOf, maskCheck, isFullRect, cellKey,
+    maskOf, maskCheck, isFullRect, cellKey, maskBits, bitsToCells,
     packBin, unpackBin, packLayers, unpackLayers };
 }
 </script>
@@ -2791,7 +2817,8 @@ const EDGES = ['f', 'b', 'l', 'r'];
 const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
                          floorT: b.floorT, divX: b.divX, divY: b.divY,
                          solid: b.solid, edges: b.edges, base: b.base,
-                         scoop: b.scoop, label: b.label, arcSegs: state.arcSegs });
+                         scoop: b.scoop, label: b.label, cells: b.cells,
+                         arcSegs: state.arcSegs });
 const edgeSig = (b) => EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1)).join(',');
 const allFullEdges = (b) => EDGES.every((k) => !b.edges || b.edges[k] === undefined || b.edges[k] >= 1);
 const typeKey = (b) => `${b.u}x${b.v}x${b.hUnits}` +
@@ -2799,17 +2826,17 @@ const typeKey = (b) => `${b.u}x${b.v}x${b.hUnits}` +
    (b.divX || b.divY ? `-d${b.divX}.${b.divY}` : '') +
    (allFullEdges(b) ? '' : `-e${edgeSig(b)}`)) +
   ((b.base && b.base !== 'standard') ? `-${b.base}` : '') +
-  (b.scoop ? `-s${b.scoop}` : '') + (b.label ? `-L${b.label}` : '');
+  (b.scoop ? `-s${b.scoop}` : '') + (b.label ? `-L${b.label}` : '') +
+  (b.cells ? `-c${maskBits(b)}` : '');
 
 function occupancyOf(k) {
   const g = grid();
   const occ = Array.from({ length: g.ny }, () => new Array(g.nx).fill(-1));
   (layers[k] ? layers[k].bins : []).forEach((b, i) => {
-    for (let dy = 0; dy < b.v; dy++)
-      for (let dx = 0; dx < b.u; dx++) {
-        const x = b.x + dx, y = b.y + dy;
-        if (y >= 0 && y < g.ny && x >= 0 && x < g.nx) occ[y][x] = i;
-      }
+    for (const [dx, dy] of binCells(b)) {
+      const x = b.x + dx, y = b.y + dy;
+      if (y >= 0 && y < g.ny && x >= 0 && x < g.nx) occ[y][x] = i;
+    }
   });
   return occ;
 }
@@ -2856,6 +2883,25 @@ function canPlace(x, y, u, v, ignore) {
     }
   return true;
 }
+// same test for a bin that may be carved: only its kept cells need to be free
+function canPlaceBin(b, x, y, ignore) {
+  const g = grid(), occ = occupancy();
+  for (const [dx, dy] of binCells(b)) {
+    const px = x + dx, py = y + dy;
+    if (px < 0 || py < 0 || px >= g.nx || py >= g.ny) return false;
+    const o = occ[py][px];
+    if (o !== -1 && o !== ignore) return false;
+  }
+  return true;
+}
+// occupied offsets within a bin's own bounding box
+function binCells(b) {
+  if (b.cells && b.cells.length) return b.cells;
+  const out = [];
+  for (let x = 0; x < b.u; x++) for (let y = 0; y < b.v; y++) out.push([x, y]);
+  return out;
+}
+const isCarved = (b) => !!(b.cells && b.cells.length && b.cells.length < b.u * b.v);
 const allBins = () => layers.flatMap((L, k) => L.bins.map((b) => ({ b, k })));
 
 /* ---------- geometry + volume --------------------------------------------- */
@@ -2964,7 +3010,13 @@ function readControls() {
   if (sel.length) {
     // size only applies to a single bin; several at once would have to overlap
     const b = B()[selected];
-    if (sel.length > 1 || ((t.u !== b.u || t.v !== b.v) && !canPlace(b.x, b.y, t.u, t.v, selected))) {
+    if (sel.length > 1) {
+      /* Footprint is per bin and must never be bulk-assigned. Writing the primary's
+         size onto the others silently resized every bin in the selection to match it,
+         which quietly destroyed their shapes. */
+      delete t.u; delete t.v;
+      $('u').value = b.u; $('v').value = b.v;
+    } else if ((t.u !== b.u || t.v !== b.v) && !canPlace(b.x, b.y, t.u, t.v, selected)) {
       t.u = b.u; t.v = b.v; $('u').value = b.u; $('v').value = b.v;
     }
     for (const i of sel) Object.assign(B()[i], t, { edges: Object.assign({}, t.edges) });
@@ -2981,6 +3033,8 @@ function readControls() {
   $('presetTray').style.display = t.solid ? 'none' : '';
   $('selActions').style.display = selected >= 0 ? '' : 'none';
   $('sizeRow').style.display = selAll().length > 1 ? 'none' : '';
+  $('mergeBins').style.display = selAll().length > 1 ? '' : 'none';
+  $('mergeHint').style.display = selAll().length > 1 ? '' : 'none';
   const selBin = selected >= 0 ? B()[selected] : null;
   const needsSplit = !!selBin && !fitsBed(selBin.u, selBin.v) && !!splitPlan(selBin.u, selBin.v);
   $('splitFit').style.display = needsSplit ? '' : 'none';
@@ -3091,10 +3145,33 @@ function drawMap() {
 
   B().forEach((b, i) => {
     const issues = binIssues(b, cur);
-    const r = el('rect', { class: 'bin' + (selAll().includes(i) ? ' sel' : '') + (issues.length ? ' clash' : ''),
-      x: b.x * S + 2, y: sy(b.y, b.v) + 2, width: b.u * S - 4, height: b.v * S - 4, rx: 5 });
-    r.dataset.i = i;
-    svg.appendChild(r);
+    const cls = 'bin' + (selAll().includes(i) ? ' sel' : '') + (issues.length ? ' clash' : '');
+    const cells = binCells(b);
+    const held = new Set(cells.map(([dx, dy]) => dx + ',' + dy));
+    let r = null;
+    if (!isCarved(b)) {
+      r = el('rect', { class: cls, x: b.x * S + 2, y: sy(b.y, b.v) + 2,
+                       width: b.u * S - 4, height: b.v * S - 4, rx: 5 });
+      r.dataset.i = i; svg.appendChild(r);
+    } else {
+      /* A carved bin is drawn cell by cell with the border on exposed edges only,
+         so it reads as one shape rather than a row of tiles. */
+      for (const [dx, dy] of cells) {
+        const c = el('rect', { class: cls + ' cellpart',
+          x: (b.x + dx) * S + 1, y: sy(b.y + dy, 1) - 1, width: S - 2, height: S - 2 });
+        c.dataset.i = i; svg.appendChild(c);
+        if (!r) r = c;
+      }
+      for (const [dx, dy] of cells) {
+        const px = (b.x + dx) * S, py = sy(b.y + dy, 1);
+        const line = (x1, y1, x2, y2) => svg.appendChild(
+          el('line', { class: 'binedge', x1, y1, x2, y2 }));
+        if (!held.has((dx - 1) + ',' + dy)) line(px + 1, py - 1, px + 1, py + S - 1);
+        if (!held.has((dx + 1) + ',' + dy)) line(px + S - 1, py - 1, px + S - 1, py + S - 1);
+        if (!held.has(dx + ',' + (dy - 1))) line(px + 1, py + S - 1, px + S - 1, py + S - 1);
+        if (!held.has(dx + ',' + (dy + 1))) line(px + 1, py - 1, px + S - 1, py - 1);
+      }
+    }
     const cx = (b.x + b.u / 2) * S, cy = sy(b.y, b.v) + b.v * S / 2;
     const t1 = el('text', { class: 'blabel', x: cx, y: cy - 2, 'text-anchor': 'middle' });
     t1.textContent = `${b.u}×${b.v}`;
@@ -3176,6 +3253,24 @@ function initMap() {
       return;
     }
 
+    /* Alt-click carves. Inside the selected bin it removes a cell; on a cell the bin
+       once covered it puts one back, so a carve can be undone by the same gesture. */
+    if (e.altKey && selected >= 0 && B()[selected]) {
+      const b = B()[selected];
+      const dx = c.x - b.x, dy = c.y - b.y;
+      if (dx >= 0 && dy >= 0 && dx < b.u && dy < b.v) {
+        const cells = binCells(b).slice();
+        const at = cells.findIndex(([a, o]) => a === dx && o === dy);
+        if (at >= 0) {
+          if (cells.length > 1) { pushUndo(); cells.splice(at, 1); b.cells = cells; }
+        } else if (canPlace(c.x, c.y, 1, 1, selected)) {
+          pushUndo(); cells.push([dx, dy]);
+          b.cells = cells.length === b.u * b.v ? null : cells;
+        }
+        readControls(); drawMap(); refresh();
+      }
+      return;
+    }
     const hit = occupancy()[c.y][c.x];
     if (hit !== -1) {
       if (e.ctrlKey || e.metaKey) {                      // add or remove from the set
@@ -3311,6 +3406,32 @@ $('splitFit').addEventListener('click', () => {
     oy += vv;
   }
   clearSel();
+  readControls(); drawLayerTabs(); drawMap(); refresh();
+});
+/* Merge the selection into one bin. Union the cells they cover, take the bounding box
+   as the new footprint, and keep only the cells that were actually occupied — which is
+   the same mask the carve gesture produces, so the two routes meet in the same place. */
+$('mergeBins').addEventListener('click', () => {
+  const sel = selAll();
+  if (sel.length < 2) return;
+  pushUndo();
+  const bins = sel.map((i) => B()[i]);
+  const abs = new Set();
+  for (const b of bins) for (const [dx, dy] of binCells(b)) abs.add((b.x + dx) + ',' + (b.y + dy));
+  const pts = [...abs].map((k) => k.split(',').map(Number));
+  const x0 = Math.min(...pts.map((p) => p[0])), x1 = Math.max(...pts.map((p) => p[0]));
+  const y0 = Math.min(...pts.map((p) => p[1])), y1 = Math.max(...pts.map((p) => p[1]));
+  const u = x1 - x0 + 1, v = y1 - y0 + 1;
+  const cells = pts.map(([x, y]) => [x - x0, y - y0]);
+  const merged = Object.assign({}, bins[0], {   // the primary's settings carry
+    x: x0, y: y0, u, v,
+    cells: cells.length === u * v ? null : cells,   // a solid rectangle needs no mask
+    edges: Object.assign({}, bins[0].edges),
+  });
+  for (const i of sel.sort((a, b) => b - a)) B().splice(i, 1);
+  B().push(merged);
+  selected = B().length - 1; selExtra.clear();
+  writeControls(merged);
   readControls(); drawLayerTabs(); drawMap(); refresh();
 });
 $('applyAll').addEventListener('click', () => {
@@ -3466,6 +3587,14 @@ function binIssues(b, k) {
   const printH = b.hUnits * SPEC.unitH + lipUp;
   if (printH > state.bedH + 0.001)
     out.push(`stands ${printH.toFixed(1)} mm tall, past your printer's ${state.bedH} mm Z height — a bin prints in one piece, so it needs fewer units rather than splitting (max ${Math.max(1, Math.floor((state.bedH - lipUp) / SPEC.unitH))} here)`);
+
+  if (isCarved(b)) {
+    const m = maskCheck(maskOf({ u: b.u, v: b.v, cells: b.cells }), b.u, b.v);
+    if (!m.ok)
+      out.push(`${m.why} — it still prints, but it is not one solid bin` +
+        (m.why.indexOf('pieces') >= 0 ? ' and will come out as separate parts' : ''));
+    out.push('is a carved shape, so it has no stacking lip, dividers, scoop or label — nothing can stack on it');
+  }
 
   const fw = (b.u - 1) * SPEC.pitch + 2 * SPEC.half, fd = (b.v - 1) * SPEC.pitch + 2 * SPEC.half;
   if (!((fw <= state.bedW && fd <= state.bedD) || (fd <= state.bedW && fw <= state.bedD)))
@@ -3994,7 +4123,17 @@ updateUndoButtons();
      The guide pages hold no state of their own, so following one and coming back
      used to throw away whatever layout you had. Anything marked data-carry passes
      the current hash straight through. */
-  for (const a of document.querySelectorAll('a[data-carry]'))
+  var links = document.querySelectorAll('a[data-carry]');
+  if (document.body.hasAttribute('data-carry-all')) {
+    // every internal link on a prose page carries: hub to spoke, spoke to spoke and
+    // back to the tools. Marking them individually meant one missed link threw the
+    // layout away, which is exactly what happened with the guide cross-links.
+    links = [].filter.call(document.querySelectorAll('a[href]'), function (a) {
+      var h = a.getAttribute('href') || '';
+      return h && !/^(https?:|mailto:|#)/.test(h);
+    });
+  }
+  for (const a of links)
     a.addEventListener('click', function (e) {
       if (!location.hash || location.hash.length < 3) return;
       e.preventDefault();

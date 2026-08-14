@@ -352,9 +352,10 @@ const maskOf = (c) => {
 };
 const isFullRect = (c) => maskOf(c).size === c.u * c.v;
 
-/* One connected region, no holes. A carve that severs the bin is two bins, and one
-   that leaves an island is a donut needing an inner boundary loop — both are real
-   shapes but neither is this builder's job, so they are reported rather than built. */
+/* Advisory, not a gate. Both odd carves turn out to build watertight — the per-cell
+   builder walls a hole just as readily as an outer edge — so they are reported and
+   still made. A severed shape is simply two objects in one file; a hole is a frame,
+   which is a legitimate thing to want. */
 function maskCheck(mask, u, v) {
   if (!mask.size) return { ok: false, why: 'no cells left' };
   const start = [...mask][0].split(',').map(Number);
@@ -549,24 +550,44 @@ const SEP = { field: '-', bin: '_', layer: '~' };
 const BASES = ['standard', 'lowlip', 'low'];
 const PACK_EDGES = ['f', 'b', 'l', 'r'];
 
+function maskBits(b) {
+  if (!b.cells || !b.cells.length) return '';
+  const set = new Set(b.cells.map(([x, y]) => cellKey(x, y)));
+  if (set.size === b.u * b.v) return '';
+  let out = '';
+  for (let x = 0; x < b.u; x++) for (let y = 0; y < b.v; y++)
+    out += set.has(cellKey(x, y)) ? '1' : '0';
+  return out;
+}
+function bitsToCells(bits, u, v) {
+  if (!bits) return null;
+  const out = [];
+  let i = 0;
+  for (let x = 0; x < u; x++) for (let y = 0; y < v; y++, i++)
+    if (bits[i] === '1') out.push([x, y]);
+  return out.length ? out : null;
+}
 function packBin(b) {
   const f = [b.x, b.y, b.u, b.v, b.hUnits, b.wall, b.floorT, b.divX, b.divY,
              b.solid ? 1 : 0]
     .concat(PACK_EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1)))
-    .concat([Math.max(0, BASES.indexOf(b.base || 'standard')), b.scoop || 0, b.label || 0]);
+    .concat([Math.max(0, BASES.indexOf(b.base || 'standard')), b.scoop || 0, b.label || 0,
+             maskBits(b) || 0]);
   for (const v of f)
     if (String(v).includes(SEP.field) || String(v).includes(SEP.bin) || String(v).includes(SEP.layer))
       throw new Error(`bin field ${v} contains a separator — packing would corrupt it`);
   return f.join(SEP.field);
 }
 function unpackBin(t) {
-  const p = t.split(SEP.field).map(Number);
+  const raw = t.split(SEP.field);
+  const p = raw.map(Number);
   const edges = {};
   PACK_EDGES.forEach((k, i) => { edges[k] = isFinite(p[10 + i]) ? p[10 + i] : 1; });
   return { x: p[0], y: p[1], u: p[2], v: p[3], hUnits: p[4],
            wall: p[5], floorT: p[6], divX: p[7], divY: p[8], solid: !!p[9],
            edges, base: BASES[p[14]] || 'standard',
-           scoop: isFinite(p[15]) ? p[15] : 0, label: isFinite(p[16]) ? p[16] : 0 };
+           scoop: isFinite(p[15]) ? p[15] : 0, label: isFinite(p[16]) ? p[16] : 0,
+           cells: bitsToCells(raw[17] && raw[17] !== '0' ? raw[17] : '', p[2], p[3]) };
 }
 const packLayers = (layers) =>
   layers.map((L) => L.bins.map(packBin).join(SEP.bin)).join(SEP.layer);
@@ -576,6 +597,6 @@ const unpackLayers = (s) => (s || '').split(SEP.layer)
 if (typeof module !== 'undefined') {
   module.exports = { buildBin, roundRect, outlineAt, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
     lipHeight, BASE_STYLES, footProfile, STUB_H, REQUIRED_CORE,
-    maskOf, maskCheck, isFullRect, cellKey,
+    maskOf, maskCheck, isFullRect, cellKey, maskBits, bitsToCells,
     packBin, unpackBin, packLayers, unpackLayers };
 }

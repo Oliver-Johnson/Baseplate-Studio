@@ -138,9 +138,11 @@
       </select></label>
     <button class="act" id="splitFit" style="display:none">Split this bin to fit the bed</button>
     <div class="hint" id="splitHint" style="display:none">Splits it into the fewest pieces that each fit, covering the same cells. They sit side by side on the baseplate, so nothing is lost but the wall between them — and if you want one continuous compartment, set the facing walls of the new bins to Open.</div>
+    <button class="act" id="mergeBins" style="display:none">Merge into one bin</button>
+    <div class="hint" id="mergeHint" style="display:none">Combines the selected bins into a single bin of whatever shape they make together — the other way to build an L or a U. It keeps the first bin's settings, and loses the stacking lip, dividers, scoop and label, which all need a rectangle.</div>
     <div class="row" id="selActions" style="display:none">
       <button class="ghost" id="applyAll">Apply to all bins</button>
-      <button class="ghost" id="delBin">Delete this bin</button>
+      <button class="ghost" id="delBin">Delete selected</button>
     </div>
   </div>
 </section>
@@ -166,7 +168,7 @@
   <div class="covbar"><i id="covfill" style="width:0%"></i></div>
   <div class="body">
     <div class="mono" id="coverage">—</div>
-    <div class="hint">Drag across empty cells to place a bin. Click one to select it, drag it to move it, or pull a corner grip to resize. A ⚠ marks a bin that will not sit properly where it is — hover it for the reason. It stays put either way, in case you are about to place the thing that fixes it. Front of the drawer is at the bottom.</div>
+    <div class="hint">Drag across empty cells to place a bin. Click one to select it, drag it to move it, or pull a corner grip to resize. A ⚠ marks a bin that will not sit properly where it is — hover it for the reason. It stays put either way, in case you are about to place the thing that fixes it. <b>Alt-click</b> a cell inside the selected bin to carve it out, or alt-click a gap to put it back — that is how you make an L or a U. Front of the drawer is at the bottom.</div>
     <div class="row">
       <button class="ghost" id="fillRest">Fill the rest with <span id="fillSize">1×1</span></button>
       <button class="ghost" id="clearAll">Clear all</button>

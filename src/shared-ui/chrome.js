@@ -4,7 +4,17 @@
      The guide pages hold no state of their own, so following one and coming back
      used to throw away whatever layout you had. Anything marked data-carry passes
      the current hash straight through. */
-  for (const a of document.querySelectorAll('a[data-carry]'))
+  var links = document.querySelectorAll('a[data-carry]');
+  if (document.body.hasAttribute('data-carry-all')) {
+    // every internal link on a prose page carries: hub to spoke, spoke to spoke and
+    // back to the tools. Marking them individually meant one missed link threw the
+    // layout away, which is exactly what happened with the guide cross-links.
+    links = [].filter.call(document.querySelectorAll('a[href]'), function (a) {
+      var h = a.getAttribute('href') || '';
+      return h && !/^(https?:|mailto:|#)/.test(h);
+    });
+  }
+  for (const a of links)
     a.addEventListener('click', function (e) {
       if (!location.hash || location.hash.length < 3) return;
       e.preventDefault();

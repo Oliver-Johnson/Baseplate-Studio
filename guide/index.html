@@ -205,16 +205,19 @@ article.doc .cta{margin-top:34px;padding-top:18px;border-top:1px solid var(--lin
   cursor:pointer;padding:0 2px;margin-left:2px}
 .kofi button:hover{color:var(--ink)}
 @media(max-width:640px){.kofi i{display:none}}
+#fillmap .cellpart{rx:0;stroke:none}
+#fillmap .binedge{stroke:var(--cyan);stroke-width:2;stroke-linecap:round;pointer-events:none}
+#fillmap .bin.sel.cellpart{stroke:none}
 </style>
 </head>
-<body>
+<body data-carry-all>
 <header>
   <h1>DRAWER<span class="tm">FORGE</span> <span class="tm" style="opacity:.55">· GUIDE</span></h1>
   <p>Fitting Gridfinity to a real drawer — measuring, leftover space, splitting a plate too big for your printer, and which bin heights actually fit.</p>
   <div class="privacy">runs entirely in your browser — nothing is uploaded, no account, no tracking</div>
   <nav>
-    <a data-carry href="../">Baseplates</a>
-    <a data-carry href="../bins/">Bins</a>
+    <a href="../">Baseplates</a>
+    <a href="../bins/">Bins</a>
     <a href="./" class="on">Guide</a>
   </nav>
 </header>
@@ -425,7 +428,17 @@ can come back to it later.</p>
      The guide pages hold no state of their own, so following one and coming back
      used to throw away whatever layout you had. Anything marked data-carry passes
      the current hash straight through. */
-  for (const a of document.querySelectorAll('a[data-carry]'))
+  var links = document.querySelectorAll('a[data-carry]');
+  if (document.body.hasAttribute('data-carry-all')) {
+    // every internal link on a prose page carries: hub to spoke, spoke to spoke and
+    // back to the tools. Marking them individually meant one missed link threw the
+    // layout away, which is exactly what happened with the guide cross-links.
+    links = [].filter.call(document.querySelectorAll('a[href]'), function (a) {
+      var h = a.getAttribute('href') || '';
+      return h && !/^(https?:|mailto:|#)/.test(h);
+    });
+  }
+  for (const a of links)
     a.addEventListener('click', function (e) {
       if (!location.hash || location.hash.length < 3) return;
       e.preventDefault();

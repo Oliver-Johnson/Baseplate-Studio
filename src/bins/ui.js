@@ -47,7 +47,8 @@ const EDGES = ['f', 'b', 'l', 'r'];
 const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
                          floorT: b.floorT, divX: b.divX, divY: b.divY,
                          solid: b.solid, edges: b.edges, base: b.base,
-                         scoop: b.scoop, label: b.label, arcSegs: state.arcSegs });
+                         scoop: b.scoop, label: b.label, cells: b.cells,
+                         arcSegs: state.arcSegs });
 const edgeSig = (b) => EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1)).join(',');
 const allFullEdges = (b) => EDGES.every((k) => !b.edges || b.edges[k] === undefined || b.edges[k] >= 1);
 const typeKey = (b) => `${b.u}x${b.v}x${b.hUnits}` +
@@ -55,17 +56,17 @@ const typeKey = (b) => `${b.u}x${b.v}x${b.hUnits}` +
    (b.divX || b.divY ? `-d${b.divX}.${b.divY}` : '') +
    (allFullEdges(b) ? '' : `-e${edgeSig(b)}`)) +
   ((b.base && b.base !== 'standard') ? `-${b.base}` : '') +
-  (b.scoop ? `-s${b.scoop}` : '') + (b.label ? `-L${b.label}` : '');
+  (b.scoop ? `-s${b.scoop}` : '') + (b.label ? `-L${b.label}` : '') +
+  (b.cells ? `-c${maskBits(b)}` : '');
 
 function occupancyOf(k) {
   const g = grid();
   const occ = Array.from({ length: g.ny }, () => new Array(g.nx).fill(-1));
   (layers[k] ? layers[k].bins : []).forEach((b, i) => {
-    for (let dy = 0; dy < b.v; dy++)
-      for (let dx = 0; dx < b.u; dx++) {
-        const x = b.x + dx, y = b.y + dy;
-        if (y >= 0 && y < g.ny && x >= 0 && x < g.nx) occ[y][x] = i;
-      }
+    for (const [dx, dy] of binCells(b)) {
+      const x = b.x + dx, y = b.y + dy;
+      if (y >= 0 && y < g.ny && x >= 0 && x < g.nx) occ[y][x] = i;
+    }
   });
   return occ;
 }
@@ -112,6 +113,25 @@ function canPlace(x, y, u, v, ignore) {
     }
   return true;
 }
+// same test for a bin that may be carved: only its kept cells need to be free
+function canPlaceBin(b, x, y, ignore) {
+  const g = grid(), occ = occupancy();
+  for (const [dx, dy] of binCells(b)) {
+    const px = x + dx, py = y + dy;
+    if (px < 0 || py < 0 || px >= g.nx || py >= g.ny) return false;
+    const o = occ[py][px];
+    if (o !== -1 && o !== ignore) return false;
+  }
+  return true;
+}
+// occupied offsets within a bin's own bounding box
+function binCells(b) {
+  if (b.cells && b.cells.length) return b.cells;
+  const out = [];
+  for (let x = 0; x < b.u; x++) for (let y = 0; y < b.v; y++) out.push([x, y]);
+  return out;
+}
+const isCarved = (b) => !!(b.cells && b.cells.length && b.cells.length < b.u * b.v);
 const allBins = () => layers.flatMap((L, k) => L.bins.map((b) => ({ b, k })));
 
 /* ---------- geometry + volume --------------------------------------------- */
@@ -220,7 +240,13 @@ function readControls() {
   if (sel.length) {
     // size only applies to a single bin; several at once would have to overlap
     const b = B()[selected];
-    if (sel.length > 1 || ((t.u !== b.u || t.v !== b.v) && !canPlace(b.x, b.y, t.u, t.v, selected))) {
+    if (sel.length > 1) {
+      /* Footprint is per bin and must never be bulk-assigned. Writing the primary's
+         size onto the others silently resized every bin in the selection to match it,
+         which quietly destroyed their shapes. */
+      delete t.u; delete t.v;
+      $('u').value = b.u; $('v').value = b.v;
+    } else if ((t.u !== b.u || t.v !== b.v) && !canPlace(b.x, b.y, t.u, t.v, selected)) {
       t.u = b.u; t.v = b.v; $('u').value = b.u; $('v').value = b.v;
     }
     for (const i of sel) Object.assign(B()[i], t, { edges: Object.assign({}, t.edges) });
@@ -237,6 +263,8 @@ function readControls() {
   $('presetTray').style.display = t.solid ? 'none' : '';
   $('selActions').style.display = selected >= 0 ? '' : 'none';
   $('sizeRow').style.display = selAll().length > 1 ? 'none' : '';
+  $('mergeBins').style.display = selAll().length > 1 ? '' : 'none';
+  $('mergeHint').style.display = selAll().length > 1 ? '' : 'none';
   const selBin = selected >= 0 ? B()[selected] : null;
   const needsSplit = !!selBin && !fitsBed(selBin.u, selBin.v) && !!splitPlan(selBin.u, selBin.v);
   $('splitFit').style.display = needsSplit ? '' : 'none';
@@ -347,10 +375,33 @@ function drawMap() {
 
   B().forEach((b, i) => {
     const issues = binIssues(b, cur);
-    const r = el('rect', { class: 'bin' + (selAll().includes(i) ? ' sel' : '') + (issues.length ? ' clash' : ''),
-      x: b.x * S + 2, y: sy(b.y, b.v) + 2, width: b.u * S - 4, height: b.v * S - 4, rx: 5 });
-    r.dataset.i = i;
-    svg.appendChild(r);
+    const cls = 'bin' + (selAll().includes(i) ? ' sel' : '') + (issues.length ? ' clash' : '');
+    const cells = binCells(b);
+    const held = new Set(cells.map(([dx, dy]) => dx + ',' + dy));
+    let r = null;
+    if (!isCarved(b)) {
+      r = el('rect', { class: cls, x: b.x * S + 2, y: sy(b.y, b.v) + 2,
+                       width: b.u * S - 4, height: b.v * S - 4, rx: 5 });
+      r.dataset.i = i; svg.appendChild(r);
+    } else {
+      /* A carved bin is drawn cell by cell with the border on exposed edges only,
+         so it reads as one shape rather than a row of tiles. */
+      for (const [dx, dy] of cells) {
+        const c = el('rect', { class: cls + ' cellpart',
+          x: (b.x + dx) * S + 1, y: sy(b.y + dy, 1) - 1, width: S - 2, height: S - 2 });
+        c.dataset.i = i; svg.appendChild(c);
+        if (!r) r = c;
+      }
+      for (const [dx, dy] of cells) {
+        const px = (b.x + dx) * S, py = sy(b.y + dy, 1);
+        const line = (x1, y1, x2, y2) => svg.appendChild(
+          el('line', { class: 'binedge', x1, y1, x2, y2 }));
+        if (!held.has((dx - 1) + ',' + dy)) line(px + 1, py - 1, px + 1, py + S - 1);
+        if (!held.has((dx + 1) + ',' + dy)) line(px + S - 1, py - 1, px + S - 1, py + S - 1);
+        if (!held.has(dx + ',' + (dy - 1))) line(px + 1, py + S - 1, px + S - 1, py + S - 1);
+        if (!held.has(dx + ',' + (dy + 1))) line(px + 1, py - 1, px + S - 1, py - 1);
+      }
+    }
     const cx = (b.x + b.u / 2) * S, cy = sy(b.y, b.v) + b.v * S / 2;
     const t1 = el('text', { class: 'blabel', x: cx, y: cy - 2, 'text-anchor': 'middle' });
     t1.textContent = `${b.u}×${b.v}`;
@@ -432,6 +483,24 @@ function initMap() {
       return;
     }
 
+    /* Alt-click carves. Inside the selected bin it removes a cell; on a cell the bin
+       once covered it puts one back, so a carve can be undone by the same gesture. */
+    if (e.altKey && selected >= 0 && B()[selected]) {
+      const b = B()[selected];
+      const dx = c.x - b.x, dy = c.y - b.y;
+      if (dx >= 0 && dy >= 0 && dx < b.u && dy < b.v) {
+        const cells = binCells(b).slice();
+        const at = cells.findIndex(([a, o]) => a === dx && o === dy);
+        if (at >= 0) {
+          if (cells.length > 1) { pushUndo(); cells.splice(at, 1); b.cells = cells; }
+        } else if (canPlace(c.x, c.y, 1, 1, selected)) {
+          pushUndo(); cells.push([dx, dy]);
+          b.cells = cells.length === b.u * b.v ? null : cells;
+        }
+        readControls(); drawMap(); refresh();
+      }
+      return;
+    }
     const hit = occupancy()[c.y][c.x];
     if (hit !== -1) {
       if (e.ctrlKey || e.metaKey) {                      // add or remove from the set
@@ -567,6 +636,32 @@ $('splitFit').addEventListener('click', () => {
     oy += vv;
   }
   clearSel();
+  readControls(); drawLayerTabs(); drawMap(); refresh();
+});
+/* Merge the selection into one bin. Union the cells they cover, take the bounding box
+   as the new footprint, and keep only the cells that were actually occupied — which is
+   the same mask the carve gesture produces, so the two routes meet in the same place. */
+$('mergeBins').addEventListener('click', () => {
+  const sel = selAll();
+  if (sel.length < 2) return;
+  pushUndo();
+  const bins = sel.map((i) => B()[i]);
+  const abs = new Set();
+  for (const b of bins) for (const [dx, dy] of binCells(b)) abs.add((b.x + dx) + ',' + (b.y + dy));
+  const pts = [...abs].map((k) => k.split(',').map(Number));
+  const x0 = Math.min(...pts.map((p) => p[0])), x1 = Math.max(...pts.map((p) => p[0]));
+  const y0 = Math.min(...pts.map((p) => p[1])), y1 = Math.max(...pts.map((p) => p[1]));
+  const u = x1 - x0 + 1, v = y1 - y0 + 1;
+  const cells = pts.map(([x, y]) => [x - x0, y - y0]);
+  const merged = Object.assign({}, bins[0], {   // the primary's settings carry
+    x: x0, y: y0, u, v,
+    cells: cells.length === u * v ? null : cells,   // a solid rectangle needs no mask
+    edges: Object.assign({}, bins[0].edges),
+  });
+  for (const i of sel.sort((a, b) => b - a)) B().splice(i, 1);
+  B().push(merged);
+  selected = B().length - 1; selExtra.clear();
+  writeControls(merged);
   readControls(); drawLayerTabs(); drawMap(); refresh();
 });
 $('applyAll').addEventListener('click', () => {
@@ -722,6 +817,14 @@ function binIssues(b, k) {
   const printH = b.hUnits * SPEC.unitH + lipUp;
   if (printH > state.bedH + 0.001)
     out.push(`stands ${printH.toFixed(1)} mm tall, past your printer's ${state.bedH} mm Z height — a bin prints in one piece, so it needs fewer units rather than splitting (max ${Math.max(1, Math.floor((state.bedH - lipUp) / SPEC.unitH))} here)`);
+
+  if (isCarved(b)) {
+    const m = maskCheck(maskOf({ u: b.u, v: b.v, cells: b.cells }), b.u, b.v);
+    if (!m.ok)
+      out.push(`${m.why} — it still prints, but it is not one solid bin` +
+        (m.why.indexOf('pieces') >= 0 ? ' and will come out as separate parts' : ''));
+    out.push('is a carved shape, so it has no stacking lip, dividers, scoop or label — nothing can stack on it');
+  }
 
   const fw = (b.u - 1) * SPEC.pitch + 2 * SPEC.half, fd = (b.v - 1) * SPEC.pitch + 2 * SPEC.half;
   if (!((fw <= state.bedW && fd <= state.bedD) || (fd <= state.bedW && fw <= state.bedD)))

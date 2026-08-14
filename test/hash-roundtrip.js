@@ -70,8 +70,41 @@ console.log('\nseparators cannot appear inside a value');
   if (!threw) bad++;
   const packed = packBin(bin({}));
   const fieldCount = packed.split('-').length;
-  console.log(`  field count is stable                  ${fieldCount === 17 ? '17, correct' : fieldCount + ' — WRONG'}`);
-  if (fieldCount !== 17) bad++;
+  console.log(`  field count is stable                  ${fieldCount === 18 ? '18, correct' : fieldCount + ' — WRONG'}`);
+  if (fieldCount !== 18) bad++;
+}
+
+/* Carved footprints ride in the last field as an occupancy bitmap. A rectangle
+   must stay a rectangle through the trip — the failure that matters here is a
+   full bin coming back carved, which is what would put phantom holes in a shape
+   the user never touched. */
+console.log('\ncarved footprints');
+{
+  const shapes = [
+    ['L, one corner gone', 3, 3, [[2, 2]]],
+    ['U, two reflex corners', 3, 3, [[1, 2]]],
+    ['staircase', 3, 3, [[1, 2], [2, 2], [2, 1]]],
+    ['single cell left of a 4x4', 4, 4, (() => {
+      const d = []; for (let x = 0; x < 4; x++) for (let y = 0; y < 4; y++)
+        if (x || y) d.push([x, y]); return d;
+    })()],
+  ];
+  for (const [name, u, v, drop] of shapes) {
+    const cells = [];
+    for (let x = 0; x < u; x++) for (let y = 0; y < v; y++)
+      if (!drop.some((d) => d[0] === x && d[1] === y)) cells.push([x, y]);
+    const b = bin({ u, v, cells });
+    const back = unpackBin(packBin(b));
+    const key = (c) => c.map((p) => p.join(',')).sort().join(' ');
+    const ok = back.u === u && back.v === v && back.cells && key(back.cells) === key(cells);
+    console.log(`  ${name.padEnd(36)}${ok ? 'intact' : 'CORRUPTED: ' + JSON.stringify(back.cells)}`);
+    if (!ok) bad++;
+  }
+  // and the inverse: a full rectangle must never come back as a carved shape
+  const plain = unpackBin(packBin(bin({ u: 3, v: 2 })));
+  const plainOk = !plain.cells;
+  console.log(`  ${'a full rectangle stays uncarved'.padEnd(36)}${plainOk ? 'intact' : 'CORRUPTED: gained a mask'}`);
+  if (!plainOk) bad++;
 }
 
 console.log(bad ? `\n${bad} check(s) FAILED` : '\nlayouts survive the hash intact');
