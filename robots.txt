@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://drawerforge.co.uk/sitemap.xml
