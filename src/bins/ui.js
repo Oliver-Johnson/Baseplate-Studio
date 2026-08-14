@@ -196,6 +196,7 @@ function readControls() {
   state.infill = num('infill', 15);
   state.bedW = num('bedW', 256);
   state.bedD = num('bedD', 256);
+  state.bedH = num('bedH', 256);
   state.gap = num('gap', 3);
 
   const t = {
@@ -287,11 +288,19 @@ function drawMap() {
   const W = g.nx * S, H = g.ny * S;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  /* Pair the map with the 3D view only when the grid is portrait or square. A wide
+     drawer's map wants the full stage width, and halving it to sit beside the preview
+     would make the thing you actually work in smaller — the opposite of the point.
+     Toggled before measuring, since reading clientWidth below forces the reflow. */
+  const top = document.querySelector('.stagetop');
+  if (top) top.classList.toggle('wide', g.nx / g.ny > 1.15);
+
   // Size the element to the drawing rather than letting CSS stretch it: a box wider
   // than its viewBox aspect gets letterboxed, and that dead margin is unclickable
   // space the pointer maths then has to compensate for. Fit it here and there is none.
+  // The map is the thing you actually work in, so let it take the space it now has.
   const availW = Math.max(140, ($('fillwrap').clientWidth || 620) - 28);
-  const availH = Math.min(560, (window.innerHeight || 900) * 0.62);
+  const availH = Math.min(820, (window.innerHeight || 900) * 0.72);
   const sc = Math.min(availW / W, availH / H);
   svg.setAttribute('width', Math.round(W * sc));
   svg.setAttribute('height', Math.round(H * sc));
@@ -669,6 +678,14 @@ function binIssues(b, k) {
       }
     }
   }
+  /* Bins print upright, so height is a bed constraint too — and an easy one to miss,
+     because a deep drawer will let you ask for a bin far taller than the printer's Z.
+     Splitting cannot help here: a bin is one piece, so the only fix is fewer units. */
+  const lipUp = (!b.solid && allFullEdges(b)) ? LIP_H : 0;
+  const printH = b.hUnits * SPEC.unitH + lipUp;
+  if (printH > state.bedH + 0.001)
+    out.push(`stands ${printH.toFixed(1)} mm tall, past your printer's ${state.bedH} mm Z height — a bin prints in one piece, so it needs fewer units rather than splitting (max ${Math.max(1, Math.floor((state.bedH - lipUp) / SPEC.unitH))} here)`);
+
   const fw = (b.u - 1) * SPEC.pitch + 2 * SPEC.half, fd = (b.v - 1) * SPEC.pitch + 2 * SPEC.half;
   if (!((fw <= state.bedW && fd <= state.bedD) || (fd <= state.bedW && fw <= state.bedD)))
   {
@@ -734,8 +751,13 @@ function types() {
 }
 function refresh() {
   const g = grid();
+  // the tallest bin is capped by the drawer OR the printer's Z, whichever bites first
+  const zUnits = Math.max(1, Math.floor((state.bedH - LIP_H) / SPEC.unitH));
+  const capUnits = Math.min(g.maxUnits, zUnits);
+  const capBy = zUnits < g.maxUnits ? 'your printer' : 'the drawer';
   $('gridSummary').textContent =
-    `Grid: ${g.nx} × ${g.ny} cells · ${g.avail.toFixed(1)} mm above the baseplate · tallest single bin ${g.maxUnits} units (${g.maxUnits * SPEC.unitH} mm + lip)`;
+    `Grid: ${g.nx} × ${g.ny} cells · ${g.avail.toFixed(1)} mm above the baseplate · ` +
+    `tallest single bin ${capUnits} units (${capUnits * SPEC.unitH} mm + lip), limited by ${capBy}`;
   const src = selected >= 0 && B()[selected] ? B()[selected] : state;
   $('binSizeHint').textContent =
     `${(src.u * SPEC.pitch - 0.5).toFixed(1)} × ${(src.v * SPEC.pitch - 0.5).toFixed(1)} × ${(src.hUnits * SPEC.unitH).toFixed(1)} mm (+${LIP_H.toFixed(2)} lip)`;
@@ -994,8 +1016,8 @@ $('dlPlates').addEventListener('click', async () => {
 $('bedPreset').addEventListener('change', () => {
   const v = $('bedPreset').value;
   if (v === 'custom') return;
-  const [w, d] = v.split(',');
-  $('bedW').value = w; $('bedD').value = d;
+  const [w, d, h] = v.split(',');
+  $('bedW').value = w; $('bedD').value = d; if (h) $('bedH').value = h;
   schedule();
 });
 $('dlAll').addEventListener('click', async () => {
@@ -1079,7 +1101,7 @@ for (const id of ['toPlates', 'navPlates'])
 let timer = null;
 const schedule = () => { clearTimeout(timer); timer = setTimeout(() => {
   readControls(); geoCache.clear(); drawLayerTabs(); drawMap(); refresh(); }, 180); };
-for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'bedW', 'bedD', 'gap',
+for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'bedW', 'bedD', 'bedH', 'gap',
                   'u', 'v', 'hUnits',
                   'wall', 'floorT', 'divX', 'divY', 'solid', 'arcSegs',
                   'edgeF', 'edgeB', 'edgeL', 'edgeR', 'baseStyle', 'scoop', 'label', 'note'])
