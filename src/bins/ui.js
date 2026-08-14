@@ -290,20 +290,29 @@ function drawMap() {
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
   /* Pair the map with the 3D view only when the grid is portrait or square. A wide
      drawer's map wants the full stage width, and halving it to sit beside the preview
-     would make the thing you actually work in smaller — the opposite of the point.
-     Toggled before measuring, since reading clientWidth below forces the reflow. */
+     would make the thing you actually work in smaller — the opposite of the point. */
   const top = document.querySelector('.stagetop');
-  if (top) top.classList.toggle('wide', g.nx / g.ny > 1.15);
+  const wide = g.nx / g.ny > 1.15;
+  if (top) top.classList.toggle('wide', wide);
 
-  // Size the element to the drawing rather than letting CSS stretch it: a box wider
-  // than its viewBox aspect gets letterboxed, and that dead margin is unclickable
-  // space the pointer maths then has to compensate for. Fit it here and there is none.
-  // The map is the thing you actually work in, so let it take the space it now has.
-  const availW = Math.max(140, ($('fillwrap').clientWidth || 620) - 28);
-  const availH = Math.min(820, (window.innerHeight || 900) * 0.72);
-  const sc = Math.min(availW / W, availH / H);
+  /* Size from the STAGE, never from the map's own container. The column width is set
+     from the map below, so measuring the container here would make each depend on the
+     other — which froze a square grid at its previous size and collapsed a wide one.
+     The stage does not depend on the map, so it breaks the loop.
+
+     Cells get a comfortable fixed size rather than filling whatever room exists;
+     available space is a ceiling, not a target. */
+  const CELL_PX = 52, PREVIEW_MIN = 320;
+  const stage = document.querySelector('.stage');
+  const stageW = (stage ? stage.clientWidth : 900) - 44;
+  const availW = Math.max(180, wide ? stageW : stageW - PREVIEW_MIN - 44);
+  const availH = Math.min(720, (window.innerHeight || 900) * 0.66);
+  const sc = Math.min(availW / W, availH / H, CELL_PX / S);
   svg.setAttribute('width', Math.round(W * sc));
   svg.setAttribute('height', Math.round(H * sc));
+  if (top) top.style.gridTemplateColumns = wide
+    ? '' : `${Math.round(W * sc) + 30}px minmax(${PREVIEW_MIN}px, 1fr)`;
+
   while (svg.firstChild) svg.removeChild(svg.firstChild);
   const el = (n, a) => { const e = document.createElementNS(SVGNS, n);
     for (const k in a) e.setAttribute(k, a[k]); return e; };
