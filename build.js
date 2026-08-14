@@ -29,15 +29,16 @@ const TOOLS = [
     name: 'baseplates',
     template: 'src/template.html',
     out: 'index.html',
-    parts: { CSS: 'src/shared-ui/style.css', CORE: 'src/core.js', UI: 'src/ui.js' },
+    parts: { CSS: 'src/shared-ui/style.css', CHROME: 'src/shared-ui/chrome.js',
+             CORE: 'src/core.js', UI: 'src/ui.js' },
     uiPart: 'UI',
   },
   {
     name: 'bins',
     template: 'src/bins/template.html',
     out: 'bins/index.html',
-    parts: { CSS: 'src/shared-ui/style.css', CORE: 'src/core.js',
-             BIN: 'src/bins/bin.js', UI: 'src/bins/ui.js' },
+    parts: { CSS: 'src/shared-ui/style.css', CHROME: 'src/shared-ui/chrome.js',
+             CORE: 'src/core.js', BIN: 'src/bins/bin.js', UI: 'src/bins/ui.js' },
     uiPart: 'UI',
   },
   {
@@ -46,12 +47,14 @@ const TOOLS = [
     name: 'guide',
     template: 'src/guide/template.html',
     out: 'guide/index.html',
-    parts: { CSS: 'src/shared-ui/style.css' },
+    parts: { CSS: 'src/shared-ui/style.css', CHROME: 'src/shared-ui/chrome.js' },
   },
   { name: 'guide-split', template: 'src/guide/split.html',
-    out: 'guide/split/index.html', parts: { CSS: 'src/shared-ui/style.css' } },
+    out: 'guide/split/index.html',
+    parts: { CSS: 'src/shared-ui/style.css', CHROME: 'src/shared-ui/chrome.js' } },
   { name: 'guide-sizes', template: 'src/guide/drawer-sizes.html',
-    out: 'guide/drawer-sizes/index.html', parts: { CSS: 'src/shared-ui/style.css' } },
+    out: 'guide/drawer-sizes/index.html',
+    parts: { CSS: 'src/shared-ui/style.css', CHROME: 'src/shared-ui/chrome.js' } },
 ];
 
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');

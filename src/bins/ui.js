@@ -1139,6 +1139,11 @@ function loadFromHash() {
     if ($(id)) $(id).value = val;
   }
 }
+// the guide holds no state, so hand it ours and it can hand it back
+$('navGuide').addEventListener('click', (e) => {
+  e.preventDefault();
+  location.href = '../guide/#' + encodeDesc(descriptor());
+});
 $('shareBtn').addEventListener('click', () => {
   const link = shareLink();
   navigator.clipboard.writeText(link).then(
