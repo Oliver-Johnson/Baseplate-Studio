@@ -17,6 +17,13 @@ const { buildBin, SPEC, REQUIRED_CORE } = require('../src/bins/bin.js');
   }
 }
 
+const cellsExcept = (u, v, drop) => {
+  const out = [];
+  for (let x = 0; x < u; x++) for (let y = 0; y < v; y++)
+    if (!drop.some((d) => d[0] === x && d[1] === y)) out.push([x, y]);
+  return out;
+};
+
 const outDir = process.argv[2] || path.join(__dirname, '..', 'out');
 fs.mkdirSync(outDir, { recursive: true });
 
@@ -37,6 +44,12 @@ const CASES = [
   { name: '2x1x3-openfront', u: 2, v: 1, hUnits: 3, edges: { f: 0 } },
   { name: '2x2x2-tray', u: 2, v: 2, hUnits: 2, edges: { f: 0, b: 0, l: 0, r: 0 } },
   { name: '6x4x5-everything', u: 6, v: 4, hUnits: 5, divX: 2, divY: 1, scoop: 6, label: 10 },
+  // carved footprints — the concave outlines the per-cell builder exists for
+  { name: 'L-3x3', u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[2, 2]]) },
+  { name: 'U-3x3', u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[1, 2]]) },
+  { name: 'T-3x3', u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[0, 0], [2, 0]]) },
+  { name: 'staircase-3x3', u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[1, 2], [2, 2], [2, 1]]) },
+  { name: 'bigL-5x4', u: 5, v: 4, hUnits: 4, cells: cellsExcept(5, 4, [[3, 3], [4, 3], [4, 2]]) },
 ];
 
 let bad = 0;
@@ -68,7 +81,9 @@ for (const cs of CASES) {
 
   // expected footprint straight from the spec, independent of the builder
   const expW = (cs.u - 1) * 42 + 41.5, expD = (cs.v - 1) * 42 + 41.5;
-  const wOk = Math.abs((xmax - xmin) - expW) < 0.02 && Math.abs((ymax - ymin) - expD) < 0.02;
+  // a carved shape spans its bounding box, and its cell slabs sit a BLOAT proud
+  const tol = cs.cells ? 0.2 : 0.02;
+  const wOk = Math.abs((xmax - xmin) - expW) < tol && Math.abs((ymax - ymin) - expD) < tol;
   /* The stacking PITCH is always hUnits*7 — that is what a bin occupies in a stack.
      The real height can be less: a tray with every wall open is just its floor, so
      compare zmax against meta.totalH and check the pitch separately. */

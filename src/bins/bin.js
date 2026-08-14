@@ -50,6 +50,7 @@ const BIN_DEFAULTS = {
   edges: null,          // {f,b,l,r} wall heights as a fraction; 0 = open, 1 = full
   base: 'standard',     // 'standard' | 'lowlip' | 'low' — see BASE_STYLES
   lipMin: 0.55,         // flat width of the lip's top rim
+  cells: null,          // occupied [x,y] offsets; null means the whole u x v rectangle
   scoop: 0,             // radius of the front scoop fillet, 0 = none
   label: 0,             // depth of the label shelf at the back, 0 = none
   labelT: 1.2,          // thickness of the label shelf
@@ -329,6 +330,95 @@ function lipRing(G, c, hwO, hdO, H, n) {
   return polys;
 }
 
+/* ---------- carved footprints ----------------------------------------------
+ * A bin may occupy any subset of its u x v bounding box, so L, U, T and notched
+ * shapes are possible. The mask is a Set of "x,y" keys.
+ *
+ * These shapes are built cell by cell rather than by extruding their outline.
+ * Extruding a concave outline is what docs/ENGINE.md names as the confirmed
+ * mesh-destroyer, and the inset an outline would need for the walls does not
+ * correspond to it vertex for vertex — which is precisely the condition ringStrip
+ * relies on, and precisely how the non-manifold bins happened. Per-cell boxes that
+ * overlap and fuse sidestep both.
+ */
+const cellKey = (x, y) => x + ',' + y;
+const maskOf = (c) => {
+  if (!c.cells || !c.cells.length) {
+    const all = new Set();
+    for (let x = 0; x < c.u; x++) for (let y = 0; y < c.v; y++) all.add(cellKey(x, y));
+    return all;
+  }
+  return new Set(c.cells.map(([x, y]) => cellKey(x, y)));
+};
+const isFullRect = (c) => maskOf(c).size === c.u * c.v;
+
+/* One connected region, no holes. A carve that severs the bin is two bins, and one
+   that leaves an island is a donut needing an inner boundary loop — both are real
+   shapes but neither is this builder's job, so they are reported rather than built. */
+function maskCheck(mask, u, v) {
+  if (!mask.size) return { ok: false, why: 'no cells left' };
+  const start = [...mask][0].split(',').map(Number);
+  const seen = new Set([cellKey(start[0], start[1])]), queue = [start];
+  while (queue.length) {
+    const [x, y] = queue.pop();
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const k = cellKey(x + dx, y + dy);
+      if (mask.has(k) && !seen.has(k)) { seen.add(k); queue.push([x + dx, y + dy]); }
+    }
+  }
+  if (seen.size !== mask.size) return { ok: false, why: 'the shape is in separate pieces' };
+  // flood the empty cells from outside the bounding box; anything unreached is a hole
+  const out = new Set(), q2 = [];
+  for (let x = -1; x <= u; x++) for (const y of [-1, v]) q2.push([x, y]);
+  for (let y = -1; y <= v; y++) for (const x of [-1, u]) q2.push([x, y]);
+  for (const [x, y] of q2) out.add(cellKey(x, y));
+  while (q2.length) {
+    const [x, y] = q2.pop();
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy, k = cellKey(nx, ny);
+      if (nx < -1 || ny < -1 || nx > u || ny > v) continue;
+      if (mask.has(k) || out.has(k)) continue;
+      out.add(k); q2.push([nx, ny]);
+    }
+  }
+  let holes = 0;
+  for (let x = 0; x < u; x++) for (let y = 0; y < v; y++)
+    if (!mask.has(cellKey(x, y)) && !out.has(cellKey(x, y))) holes++;
+  if (holes) return { ok: false, why: 'the shape encloses a hole' };
+  return { ok: true };
+}
+
+/* Carved body: a slab per cell and a wall panel per exposed edge, all overlapping.
+   A cell's slab reaches the bin's outer face where an edge is exposed and past the
+   cell boundary where it is not, so neighbours fuse. */
+function carvedBody(G, c, mask, H, floorZ, zTop) {
+  const polys = [], P = SPEC.pitch, half = SPEC.half;
+  const ox = (c.u - 1) * P / 2, oy = (c.v - 1) * P / 2;   // mask cell -> bin coords
+  const has = (x, y) => mask.has(cellKey(x, y));
+  const wall = c.wall;
+
+  for (const key of mask) {
+    const [x, y] = key.split(',').map(Number);
+    const cx = x * P - ox, cy = y * P - oy;
+    const e = { l: !has(x - 1, y), r: !has(x + 1, y), f: !has(x, y - 1), b: !has(x, y + 1) };
+    // slab: outer face on exposed sides, over the boundary on shared ones
+    const x0 = cx - (e.l ? half : P / 2 + BLOAT), x1 = cx + (e.r ? half : P / 2 + BLOAT);
+    const y0 = cy - (e.f ? half : P / 2 + BLOAT), y1 = cy + (e.b ? half : P / 2 + BLOAT);
+    polys.push(...G.extrudePoly([[x0, y0], [x1, y0], [x1, y1], [x0, y1]],
+                                SPEC.footH - BLOAT, floorZ + BLOAT));
+    if (zTop <= floorZ + 0.01) continue;
+    // one wall panel per exposed edge, run long so panels meet at the corners
+    const L = x0 - BLOAT, R = x1 + BLOAT, F = y0 - BLOAT, B = y1 + BLOAT;
+    const panel = (a, b, cc, d) =>
+      polys.push(...G.extrudePoly([[a, b], [cc, b], [cc, d], [a, d]], floorZ - BLOAT, zTop));
+    if (e.l) panel(x0, F, x0 + wall, B);
+    if (e.r) panel(x1 - wall, F, x1, B);
+    if (e.f) panel(L, y0, R, y0 + wall);
+    if (e.b) panel(L, y1 - wall, R, y1);
+  }
+  return polys;
+}
+
 /* ---------- the bin ------------------------------------------------------- */
 
 function buildBin(G, cfg) {
@@ -339,13 +429,15 @@ function buildBin(G, cfg) {
     throw new Error(`hUnits ${c.hUnits} gives ${H} mm, which is not taller than the ${SPEC.footH} mm base`);
 
   const polys = [];
+  const mask = maskOf(c), full = isFullRect(c);
 
-  /* feet — one closed shell per grid cell, overlapping the body above */
+  /* feet — one closed shell per occupied cell, overlapping the body above */
   const st = baseStyle(c);
   const prof = footProfile(st.footH);
   const zs = prof.map((p) => p[0]).concat([st.footH + BLOAT]);
   for (let i = 0; i < c.u; i++)
     for (let j = 0; j < c.v; j++) {
+      if (!mask.has(cellKey(i, j))) continue;
       const cx = (i - (c.u - 1) / 2) * SPEC.pitch;
       const cy = (j - (c.v - 1) / 2) * SPEC.pitch;
       const rings = prof.map(([, half]) => {
@@ -362,7 +454,13 @@ function buildBin(G, cfg) {
   const outer = outlineAt(c.u, c.v, SPEC.half, c.shrink, n);
   const floorZ = st.footH + c.floorT;
 
-  if (c.solid || floorZ >= H - 0.2) {
+  if (!full) {
+    /* Carved shapes are built cell by cell. Dividers, scoop, label and the lip all
+       assume a rectangle, so they are left off rather than guessed at — the UI says
+       so instead of silently dropping them. */
+    const zTop = (c.solid || floorZ >= H - 0.2) ? H : H;
+    polys.push(...carvedBody(G, c, mask, H, c.solid ? H - 0.01 : floorZ, zTop));
+  } else if (c.solid || floorZ >= H - 0.2) {
     polys.push(...G.extrudePoly(outer, st.footH - BLOAT, H));
   } else {
     // solid slab from the top of the feet to the cavity floor
@@ -415,7 +513,7 @@ function buildBin(G, cfg) {
   const hdO = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
   const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) =>
     c.edges[k] === undefined || c.edges[k] >= 1);
-  const hasLip = c.lip && allFull && !c.solid;
+  const hasLip = c.lip && allFull && !c.solid && full;
   const lipH = hasLip ? (st.lipH !== null ? st.lipH : lipHeight(c.lipMin)) : 0;
   if (hasLip) polys.push(...lipRing(G, c, hwO, hdO, H, n));
 
@@ -428,10 +526,11 @@ function buildBin(G, cfg) {
 
   const meta = {
     u: c.u, v: c.v, hUnits: c.hUnits, H, hasLip, openEdges: !allFull,
+    carved: !full,
     lipH, totalH: topZ + lipH,       // H is the stacking pitch; totalH is what it occupies
     W: (c.u - 1) * SPEC.pitch + 2 * (SPEC.half - c.shrink),
     D: (c.v - 1) * SPEC.pitch + 2 * (SPEC.half - c.shrink),
-    footH: st.footH, base: c.base || 'standard', floorZ, cells: c.u * c.v,
+    footH: st.footH, base: c.base || 'standard', floorZ, cells: mask.size,
     cavity: Math.max(0, H - floorZ),
   };
   return { polys: G.clampZ(polys, 0), meta };
@@ -477,5 +576,6 @@ const unpackLayers = (s) => (s || '').split(SEP.layer)
 if (typeof module !== 'undefined') {
   module.exports = { buildBin, roundRect, outlineAt, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
     lipHeight, BASE_STYLES, footProfile, STUB_H, REQUIRED_CORE,
+    maskOf, maskCheck, isFullRect, cellKey,
     packBin, unpackBin, packLayers, unpackLayers };
 }
