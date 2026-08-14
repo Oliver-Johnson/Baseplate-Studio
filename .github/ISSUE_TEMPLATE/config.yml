@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: How many cells fit my drawer?
+    url: https://drawerforge.co.uk/guide/drawer-sizes/
+    about: Reference tables for metric and inch drawers, and what to do with the leftover millimetres.
+  - name: My baseplate is too big to print
+    url: https://drawerforge.co.uk/guide/split/
+    about: Working out how many cells your bed takes, where the cuts go, and joining the pieces.
+  - name: General Gridfinity questions
+    url: https://drawerforge.co.uk/guide/
+    about: Measuring, bin heights, stacking, magnets, and whether these fit baseplates you already own.
