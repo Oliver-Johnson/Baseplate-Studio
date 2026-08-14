@@ -1,0 +1,49 @@
+name: Feature request
+description: Suggest something the tools should be able to do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to organise?
+      description: >
+        The real drawer usually matters more than the feature. Describing what you are
+        storing and why the current tools fall short often leads somewhere better than
+        the feature as first imagined.
+      placeholder: |
+        A drawer of sockets where the sizes step up, so equal-width bins waste space.
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you have in mind
+    validations:
+      required: false
+
+  - type: dropdown
+    id: where
+    attributes:
+      label: Which part
+      options:
+        - Bins
+        - Baseplates
+        - Guide pages
+        - Something new
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Worth knowing before suggesting
+      options:
+        - label: >
+            I understand output must stay compatible with the published Gridfinity spec,
+            so anything that changes the 42 mm pitch or the foot profile is out of scope.
+          required: true
+        - label: >
+            I understand everything runs in the browser with no server, so features
+            needing accounts, storage or uploads are out of scope.
+          required: true

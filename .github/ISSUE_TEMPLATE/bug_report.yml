@@ -1,0 +1,85 @@
+name: Bug report
+description: Something produced the wrong shape, refused to work, or looked wrong
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. The single most useful thing you can give is the
+        **layout link** — the whole design travels in the URL, so with it the exact
+        drawer you were looking at can be reopened rather than guessed at.
+
+  - type: input
+    id: layout
+    attributes:
+      label: Layout link
+      description: >
+        Press "Copy layout link" on the tool and paste it here. Nothing about you is
+        in it — it is only the dimensions and the bins.
+      placeholder: https://drawerforge.co.uk/bins/#...
+    validations:
+      required: false
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected instead
+      placeholder: |
+        I carved a cell out of a 3x3 and the preview still showed the full square.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Drag across three cells by three
+        2. Press Carve, click the top-right cell
+        3. ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: where
+    attributes:
+      label: Which part
+      options:
+        - Bins
+        - Baseplates
+        - Guide pages
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and operating system
+      placeholder: Firefox 130 on Windows 11
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ### If it is about a print rather than the page
+
+  - type: input
+    id: slicer
+    attributes:
+      label: Slicer and printer
+      description: >
+        Only needed if the model failed to slice, printed wrong, or would not fit a
+        baseplate. If a slicer reported an error, please quote it exactly.
+      placeholder: OrcaSlicer 2.1, Bambu A1 mini
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Screenshots help. Drag images straight into this box.
+    validations:
+      required: false
