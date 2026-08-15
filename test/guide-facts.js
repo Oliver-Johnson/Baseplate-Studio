@@ -13,10 +13,13 @@
 const fs = require('fs');
 const path = require('path');
 const G = require('../src/core.js');
-const { SPEC } = require('../src/bins/bin.js');
+const { SPEC, BIN_DEFAULTS, lipHeight } = require('../src/bins/bin.js');
 
 const ROOT = path.join(__dirname, '..');
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8').replace(/&nbsp;/g, ' ');
+/* Prose as a reader sees it: no markup, no line wrapping. A sentence that runs across
+   two source lines is one sentence to a person, so it has to be one string here too. */
+const text = (p) => read(p).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ');
 const PAGES = ['guide/index.html', 'guide/split/index.html', 'guide/drawer-sizes/index.html'];
 const prose = PAGES.map((p) => [p, read(p)]);
 
@@ -110,6 +113,110 @@ console.log('\nworked examples');
           Math.floor(+bed[1] / SPEC.pitch), words[bed[2]] ?? -1);
     check(`and ${bed[3]} cells would need ${bed[4]} mm`,
           (words[bed[3]] ?? -1) * SPEC.pitch, +bed[4]);
+  }
+}
+
+/* Claims the prose makes outright, each of which was wrong once and shipped that way.
+   A sentence that states its own rule has to produce its own number: an example that
+   contradicts the rule beside it is worse than no example, because the reader trusts
+   the specific half. */
+console.log('\nclaims the prose states outright');
+{
+  // "A 306 × 380 mm drawer wants a 294 × 378 mm plate — 1.75 times the area a 256 mm bed
+  // can take in one piece."  Said "more than twice" for a while; it is 1.75.
+  const s = text('guide/split/index.html');
+  const m = s.match(/A (\d+) × (\d+) mm drawer wants a (\d+) × (\d+) mm plate — ([\d.]+) times the area a (\d+) mm bed can take/);
+  if (!m) {
+    console.log('  the "drawer wants a plate N times the area" comparison is gone or ' +
+                'reworded — reword this check with it, do not delete it');
+    bad++;
+  } else {
+    const [dw, dd, pw, pd, ratio, bed] = m.slice(1).map(Number);
+    const grid = (mm) => Math.floor(mm / SPEC.pitch) * SPEC.pitch;
+    check(`a ${dw} mm drawer grids to ${grid(dw)} mm`, grid(dw), pw);
+    check(`a ${dd} mm drawer grids to ${grid(dd)} mm`, grid(dd), pd);
+    check(`that is ${((pw * pd) / grid(bed) ** 2).toFixed(2)}× a ${bed} mm bed`,
+          Math.round((pw * pd) / grid(bed) ** 2 * 100) / 100,
+          Math.round(ratio * 100) / 100);
+  }
+
+  /* "a 200 mm drawer leaves 32 mm, a 500 mm drawer leaves 38 mm" — the examples that
+     stop a reader believing a large remainder means they measured wrong. */
+  {
+    const said = [...text('guide/index.html')
+      .matchAll(/a (\d+) mm drawer leaves (\d+) mm/g)];
+    if (!said.length) {
+      console.log('  the "a NNN mm drawer leaves NN mm" examples are gone or reworded — ' +
+                  'reword this check with them, do not delete it');
+      bad++;
+    }
+    for (const d of said)
+      check(`a ${d[1]} mm drawer leaves ${+d[1] % SPEC.pitch} mm over`,
+            +d[1] % SPEC.pitch, +d[2]);
+  }
+
+  /* The bin footprint rule. n × 42 − 0.5, not n × 41.5 — the two agree only at n = 1,
+     and the page used to state the second rule and then quote a number from the first. */
+  const g = text('guide/index.html');
+  const f = g.match(/A bin is ([\d.]+) mm smaller than the cells it sits in, however many it spans: n × (\d+) − ([\d.]+), so ([\d.]+) mm for one cell and ([\d.]+) mm for six/);
+  if (!f) {
+    console.log('  the bin-footprint rule is gone or reworded — reword this check with ' +
+                'it, do not delete it');
+    bad++;
+  } else {
+    const [gap, pitch, gap2, one, six] = f.slice(1).map(Number);
+    const want = (n) => n * SPEC.pitch - (SPEC.pitch - SPEC.half * 2);
+    check('the stated gap is the spec gap', SPEC.pitch - SPEC.half * 2, gap);
+    check('the rule quotes the same gap twice', gap, gap2);
+    check('the stated pitch is the spec pitch', SPEC.pitch, pitch);
+    check(`the rule gives ${want(1)} mm for one cell`, want(1), one);
+    check(`the rule gives ${want(6)} mm for six`, want(6), six);
+  }
+}
+
+/* The bin height table, and the worked example that sends a reader to look a row up.
+   It listed 1, 2, 3, 4, 6 while the example told you to read off 5. */
+console.log('\nthe bin height table');
+{
+  const html = read('guide/index.html');
+  const base = SPEC.footH + BIN_DEFAULTS.floorT;   // foot plus floor, before anything fits
+  const rows = new Map();
+  for (const m of html.matchAll(/<tr><td>(\d+)<\/td><td>([\d.]+) mm<\/td><td>([\d.]+) mm<\/td><\/tr>/g)) {
+    const units = +m[1], total = +m[2], usable = +m[3];
+    rows.set(units, total);
+    const wantTotal = units * SPEC.unitH;
+    const wantUsable = Math.round((wantTotal - base) * 100) / 100;
+    if (total !== wantTotal || Math.abs(usable - wantUsable) > 0.005) {
+      console.log(`  ${units} units: says ${total} mm / ${usable} usable — ` +
+                  `should be ${wantTotal} / ${wantUsable}`);
+      bad++;
+    }
+  }
+  console.log(`  ${rows.size} rows checked`);
+  if (rows.size < 6) { console.log('  TOO FEW ROWS MATCHED — the parser has drifted'); bad++; }
+
+  const words = { four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+  const g = text('guide/index.html');
+  const ex = g.match(/An (\d+) mm drawer gives ([\d.]+) mm above the plate, which works out at (\w+) units in total — ([\d + ]+?) across two layers, or ([\d + ]+?) across three/);
+  if (!ex) {
+    console.log('  the "NN mm drawer works out at N units" example is gone or reworded — ' +
+                'reword this check with it, do not delete it');
+    bad++;
+  } else {
+    const drawer = +ex[1], above = +ex[2], total = words[ex[3]] ?? -1;
+    const lip = lipHeight(BIN_DEFAULTS.lipMin);
+    check(`${drawer} mm leaves ${drawer - G.DEFAULTS.plateHeight} mm above the plate`,
+          drawer - G.DEFAULTS.plateHeight, above);
+    check(`which is ${Math.floor((above - lip) / SPEC.unitH)} units of ${SPEC.unitH} mm`,
+          Math.floor((above - lip) / SPEC.unitH), total);
+    /* Every layer split has to add up, and every number in one has to be a row of the
+       table above it — that is the whole point of quoting a split here. */
+    for (const split of [ex[4], ex[5]]) {
+      const parts = split.split('+').map((n) => +n.trim());
+      check(`${parts.join(' + ')} is ${total} units`, total, parts.reduce((a, b) => a + b, 0));
+      const missing = parts.filter((n) => !rows.has(n));
+      check(`${parts.join(' + ')} are all rows of the table`, 0, missing.length);
+    }
   }
 }
 

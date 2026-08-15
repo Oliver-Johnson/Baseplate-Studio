@@ -9,7 +9,7 @@ exporting STL and 3MF, including pre-arranged print plates that open straight in
 
 Everything runs in your browser. Nothing is uploaded, there's no account, and there's no tracking.
 
-**[▶ Baseplates — drawerforge.co.uk](https://drawerforge.co.uk/)** · **[▶ Bins — drawerforge.co.uk/bins](https://drawerforge.co.uk/bins/)**
+**[▶ Baseplates — drawerforge.co.uk](https://drawerforge.co.uk/)** · **[▶ Bins — drawerforge.co.uk/bins](https://drawerforge.co.uk/bins/)** · **[Guide](https://drawerforge.co.uk/guide/)**
 
 Your drawer dimensions carry between the two, in both directions, without losing your work.
 
@@ -37,6 +37,18 @@ Your drawer dimensions carry between the two, in both directions, without losing
 - **Honest material estimates** — computed analytically at your slicer's infill, not from raw mesh volume
 - **Print plan and export** — packs bins onto your bed, exports pre-arranged 3MF plates, or a ZIP with one STL per bin type and a README carrying the layout
 
+## Guide
+
+Written for the questions people actually arrive with, and readable without opening either
+tool:
+
+- **[Gridfinity for drawers](https://drawerforge.co.uk/guide/)** — measuring and what to
+  subtract, what to do with leftover space, choosing a joint, and which bin heights fit
+- **[Drawer size to grid](https://drawerforge.co.uk/guide/drawer-sizes/)** — reference
+  tables in millimetres and inches, and where to put the remainder
+- **[Baseplate too big for your printer?](https://drawerforge.co.uk/guide/split/)** — how
+  many cells each bed takes, why rotating diagonally never helps, and how to split and rejoin
+
 ## How to use it
 
 1. **Measure your drawer** internally at its tightest point and subtract 1–2 mm so the finished assembly slides in. Enter width × depth in Baseplates.
@@ -49,19 +61,21 @@ Your drawer dimensions carry between the two, in both directions, without losing
 
 ## Self-hosting
 
-The shipped app is two self-contained HTML files with no runtime build step.
+The shipped app is a handful of static HTML files with no runtime build step.
 
 1. Fork or clone this repository.
 2. Enable **GitHub Pages** (deploy from branch, root).
-3. Done — Baseplates at the root, Bins at `/bins/`.
+3. Done — Baseplates at the root, Bins at `/bins/`, the guide at `/guide/`.
 
-The only external dependencies are three.js and JSZip, loaded from cdnjs at runtime. To run
-fully offline, download those and change the `<script src>` tags.
+three.js and JSZip are vendored in [`vendor/`](vendor/) and served from your own origin, so
+a page makes no third-party request at all and works offline once loaded. Copy that
+directory along with the HTML. The build refuses to emit a page that references an external
+script or stylesheet, so a CDN URL cannot creep back in.
 
 ## Building
 
-`index.html` and `bins/index.html` are **generated**. Edit the sources in `src/`, never the
-built files:
+`index.html`, `bins/index.html` and every page under `guide/` are **generated**. Edit the
+sources in `src/`, never the built files:
 
 | file | contents |
 |---|---|
@@ -70,13 +84,16 @@ built files:
 | `src/template.html`, `src/ui.js` | the Baseplates tool |
 | `src/bins/bin.js` | bin geometry, no CSG at all |
 | `src/bins/template.html`, `src/bins/ui.js` | the Bins tool |
+| `src/guide/*.html` | the guide pages, one file each |
 
 ```bash
 node build.js
 ```
 
-No dependencies, no toolchain. `node build.js --check` verifies the outputs are in sync
-without writing, and runs in CI.
+The build itself needs nothing but Node — it splices text. `node build.js --check` verifies
+the outputs are in sync without writing, and runs in CI. The full test suite does have
+dependencies, because the browser tests drive a real browser; see
+[CONTRIBUTING.md](CONTRIBUTING.md) for how to run it.
 
 The build refuses to emit output unless three checks pass, each of which has caught a
 shipped bug: `node --check` on every source; an **id audit** (every `$('id')` must exist in
