@@ -164,6 +164,40 @@ The web has no floor, so the jars sit on the drawer bottom and the plate costs n
 10.8 mm of headroom. It only has to stop jars **sliding** — packed shoulder to shoulder at
 83.7 mm tall, they cannot tip.
 
+## Outcome: seven rows, not eight
+
+**The drawer is 352.62 mm deep**, measured floor to floor with the printed strip and 2of3
+seated (they span 228.62 and left a 124 mm gap). Rigid parts, no jar diameter in the
+arithmetic. Every earlier depth figure was wrong, including the one this plate was built to.
+
+The **11.6 mm excess was the bad datum**. A hand-compressed array of 32 jars is not a nest;
+it implied a 363.97 mm drawer and the truth is 11 mm less. Two prints were committed before
+that showed up. The jar-line method that caught it was itself only good to a few mm, because
+loose jars in a wide drawer both gap (reads long) and stagger (reads short) and two readings
+cannot separate the two effects.
+
+What the numbers then say:
+
+| | mm |
+|---|---|
+| 32 jars loose, at the tightest the width allows | 352.37 |
+| drawer | **352.62** |
+| 8-row plate, rows 1–5 as printed | 358.50 |
+| 8-row plate, clean sheet at zero clearance | 352.42 |
+| 7-row plate | **316.85** |
+
+So the drawer was already **99.93 % full** with 32 loose jars. Any baseplate at all costs a
+jar row, because a plate cannot nest tighter than bare jars: its rows sit 0.26 mm further
+apart even at zero clearance, and seven gaps of that outweigh the 0.85 mm it saves at the
+ends by having a bore narrower than a lid. A clean-sheet 8-row plate clears by 0.19 mm,
+which is not a margin.
+
+Seven rows is therefore the answer: **28 jars, 35.77 mm to spare**, and the last four live
+outside the drawer. `spice-plate-3of3-28jar` finishes the plate from the strip and 2of3 that
+are already printed. It is generated from a 7-row lattice, not by truncating the 8-row one,
+so the back row is closed by the plate outline rather than cut short by the bisector with an
+eighth row that does not exist.
+
 ## Open
 
 - **Unprinted.** The fit strip exists to be printed first: it is full drawer width, so it

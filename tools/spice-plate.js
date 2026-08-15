@@ -29,8 +29,13 @@ const JAR = {
   height:83.70,
 };
 const DRAWER = {
-  width:  217.90, // = 4 x lid + the 22.5 mm gap left by 4 jars pushed to one side
-  excess:  11.60, // depth left over with all 32 jars compressed to a nest
+  width:  217.90, // = 4 x lid + the 22.5 mm gap left by 4 jars pushed to one side.
+                  // Later capped at "no more than 218" by eye against the printed strip.
+  depth:  352.62, // MEASURED, floor to floor: the printed strip + 2of3 span 228.62 and
+                  // left a 124 mm gap. Rigid parts, no jar diameter in it — trust this one.
+  excess:  11.60, // WRONG. Depth left over with 32 jars hand-compressed; it implied a
+                  // 363.97 drawer and the truth is 352.62. Kept as a warning: a
+                  // hand-compressed array is not a nest, and this error cost two prints.
   head:    10.80, // above the jar tops
 };
 
@@ -349,6 +354,26 @@ function main() {
   ok &= emit(outDir, 'spice-plate-3of3',
     buildPiece(all, rowsIn(2 + third, CFG.rows - 1), rect, { frozen: stripJars }),
     `rows ${2 + third + 1}-${CFG.rows}`);
+
+  /* ---- OR finish at seven rows, which is what the drawer actually takes.
+     At 352.62 mm the eighth row was never available: rows 1-5 as printed already commit
+     358.50, and even a clean-sheet 8-row plate needs 352.42 in a drawer that is 352.62 —
+     no margin at all. Built from a 7-row lattice so the back row is closed by the plate
+     outline rather than cut short by the bisector with an eighth row that is not there. */
+  console.log('\nOR, finishing at 7 rows — what the 352.62 mm drawer actually takes —');
+  const all7 = centresFor(CFG.rows - 1, CFG.cols);
+  const xs7 = all7.map(c => c.x), ys7 = all7.map(c => c.y);
+  const rect7 = {
+    x0: Math.min(...xs7) - R - CFG.skinW, x1: Math.max(...xs7) + R + CFG.skinW,
+    y0: Math.min(...ys7) - R - CFG.skinD, y1: Math.max(...ys7) + R + CFG.skinD,
+  };
+  const tail = buildPiece(all7,
+    all7.map((c, i) => [c, i]).filter(([c]) => c.row >= CFG.rows - 3).map(([, i]) => i),
+    rect7, { frozen: stripJars });
+  ok &= emit(outDir, 'spice-plate-3of3-28jar', tail, 'rows 6-7, closes the plate');
+  const plateEnd = rect7.y1 - rect.y0;
+  console.log(`     assembled ${plateEnd.toFixed(2)} mm in a ${DRAWER.depth} drawer` +
+              `  —  ${(DRAWER.depth - plateEnd).toFixed(2)} mm to spare, 28 jars`);
 
   console.log(`\n  ${outDir}\n`);
   if (!ok) { console.error('FAILED: see above\n'); process.exit(1); }
