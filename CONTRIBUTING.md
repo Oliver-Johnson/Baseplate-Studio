@@ -37,7 +37,9 @@ That covers:
 |---|---|
 | `build.js --check` | pages match `src/`, scripts parse, every `$('id')` exists, no unreachable `display:none` element |
 | `test/bin-audit.js` | bin geometry against the published spec, and **every mesh watertight** |
+| `test/plate-audit.js` | the same, for baseplates: every piece of every representative plate configuration, plus the minimum CSG cases and the rim cap tiling |
 | `test/fit-check.js` | a spec bin fits the socket the baseplate ships |
+| `test/stack-check.js` | which base styles stack on which, measured up the lip rather than asserted in a comment — a short foot must not perch on a full lip |
 | `test/hash-roundtrip.js` | a layout survives the URL round trip byte for byte |
 | `test/seo-check.js` | structured data parses and matches the visible prose |
 | `test/ui/` | Playwright: place, carve, merge, resize, share |
