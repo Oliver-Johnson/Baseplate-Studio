@@ -121,6 +121,33 @@ sockets, and the two halves interlock.
 
 The pieces butt together with no connector. They are captive in the drawer and cannot separate.
 
+### Reusing the fit strip as piece 1
+
+The strip is a whole two rows of the real plate, so it can stay in the drawer and only
+rows 3–8 need printing — 60 g instead of 80. One catch, and it is not obvious.
+
+The strip was generated as its **own** 2-row lattice, so its rows were bounded by its own
+outline rather than by the bisector with row 3. Its collars therefore reach `0.98 mm`
+further than the same rows would in a one-piece plate:
+
+| | mm from the strip's jar centres |
+|---|---|
+| bisector with row 3, where a one-piece plate would stop | 24.625 |
+| collar as printed (`bore/2 + collar`, ÷cos(π/48) for the tangent-clipped polygon) | 25.605 |
+
+So rows 3–8 must be cut back off it. The clip plane goes at `collar + seamGap` from each
+strip jar, which is nearer than the bisector and shaves **0.105 mm** off the bottom of the
+four row-3 bores. They carry 0.30 mm of radial clearance, so 0.195 mm survives — snug at four
+points, and nowhere near tight enough to stop a jar going in. `buildPiece` reports the worst
+bite and refuses outright if a bore is ever cut to within 0.10 mm of the real glass.
+
+Note the collar clip **circumscribes** its circle rather than inscribing it, which is where
+0.055 of that 0.105 comes from. Left as-is deliberately: correcting it now would make the
+generator disagree with a part already on the drawer floor, for 55 microns.
+
+Assembled extent is unchanged at 217.15 × 361.50 — the strip's extra material fills space
+that would otherwise be a lightening hole.
+
 ## Numbers as built
 
 | | |

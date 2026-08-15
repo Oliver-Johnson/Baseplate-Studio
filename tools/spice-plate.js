@@ -164,7 +164,14 @@ function boreCircle(cx, cy) {
   members  – indices belonging to this piece
   rect     – plate outline {x0,y0,x1,y1}
 */
-function buildPiece(all, members, rect) {
+function buildPiece(all, members, rect, opts) {
+  opts = opts || {};
+  /* Jars belonging to a piece that is ALREADY PRINTED. Its cells were bounded by its
+     own outline, not by the bisector with these rows, so it reaches ~0.98 mm further
+     than a one-piece plate would and this piece has to be cut back off it. */
+  const frozen = opts.frozen || [];
+  const seamGap = opts.seamGap != null ? opts.seamGap : 0.05;
+  let worstBite = 0;
   const topTris = [];
   for (const idx of members) {
     const c = all[idx];
@@ -183,18 +190,31 @@ function buildPiece(all, members, rect) {
       const a = 2 * Math.PI * k / CFG.collarSeg, nx = Math.cos(a), ny = Math.sin(a);
       cell = clipHalf(cell, nx, ny, nx * c.x + ny * c.y + Rc);
     }
+    /* Cut back off anything already on the drawer floor. The clip plane sits at
+       (that piece's true outer radius + seamGap) from its jar, which is nearer than
+       the bisector, so it bites into this bore — by 0.055 mm of collar faceting plus
+       the gap. The bore carries 0.30 mm of radial clearance, so it can afford it. */
+    for (const f of frozen) {
+      const dx = f.x - c.x, dy = f.y - c.y, L = Math.hypot(dx, dy);
+      if (L < 1e-9 || L > 2 * CFG.p) continue;
+      const reach = L - (f.maxR + seamGap);
+      cell = clipHalf(cell, dx / L, dy / L, (dx / L) * c.x + (dy / L) * c.y + reach);
+    }
     if (cell.length < 3) throw new Error(`cell ${idx} collapsed`);
     cell = cell.map(pt => [sn(pt[0]), sn(pt[1])]);
     if (area2(cell) < 0) cell.reverse();
 
-    // the bore must sit strictly inside its cell or the ring is not a ring
-    const R = CFG.bore / 2;
+    // the bore must sit inside its cell or the ring is not a ring; a seam may shave it,
+    // but never past the point where a real jar stops going in
+    const R = CFG.bore / 2, jarR = JAR.body / 2;
     for (let i = 0; i < cell.length; i++) {
       const A = cell[i], B = cell[(i + 1) % cell.length];
       const ex = B[0] - A[0], ey = B[1] - A[1], L = Math.hypot(ex, ey);
       if (L < 1e-9) continue;
       const dist = (ex * (c.y - A[1]) - ey * (c.x - A[0])) / L;   // +ve = left = inside, cell is CCW
-      if (dist < R + 1e-6) throw new Error(`bore ${idx} breaks its cell (${dist.toFixed(3)} < ${R})`);
+      if (dist < R) worstBite = Math.max(worstBite, R - dist);
+      if (dist < jarR + 0.10)
+        throw new Error(`bore ${idx} cut to ${dist.toFixed(3)} — a ${JAR.body} jar will not go in`);
     }
     for (const t of ringStrip(cell, boreCircle(c.x, c.y), c.x, c.y)) topTris.push(t);
   }
@@ -218,8 +238,14 @@ function buildPiece(all, members, rect) {
   for (const [a, b] of boundary)                                             // wall, outward
     polys.push({ verts: [[a[0], a[1], H], [a[0], a[1], 0], [b[0], b[1], 0], [b[0], b[1], H]] });
 
+  polys.worstBite = worstBite;
   return polys;
 }
+
+// the collar is clipped by tangent half-planes, so the polygon circumscribes its
+// circle — the corners stand this far proud of the nominal radius
+const collarMaxR = () =>
+  (CFG.bore / 2 + CFG.collar) / Math.cos(Math.PI / CFG.collarSeg);
 
 function bbox(polys) {
   const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
@@ -259,6 +285,7 @@ function emit(outDir, name, polys, note) {
     `  ${name.padEnd(22)} ${b.size[0].toFixed(2)} x ${b.size[1].toFixed(2)} x ${b.size[2].toFixed(2)} mm` +
     `  ${String(man.tris).padStart(6)} tris  ${grams.toFixed(0).padStart(3)} g  ` +
     (man.bad === 0 && vol > 0 ? 'watertight' : `NON-MANIFOLD (${man.bad} bad edges)`) +
+    (polys.worstBite > 0 ? `  seam shaves ${polys.worstBite.toFixed(3)} of bore` : '') +
     (fits ? '' : '  *** EXCEEDS BED ***') + (note ? `  — ${note}` : '')
   );
   return man.bad === 0 && vol > 0 && fits;
@@ -298,16 +325,30 @@ function main() {
     y0: Math.min(...sys) - R - CFG.skinD, y1: Math.max(...sys) + R + CFG.skinD,
   }), 'full drawer width, 8 jars');
 
-  console.log('\nthen —');
-  // ---- the plate, split by whole cells so the seam zigzags between sockets.
-  // A straight cut cannot miss them: rows are 44.64 apart but the bore is 47.40.
+  const rowsIn = (lo, hi) =>
+    all.map((c, i) => [c, i]).filter(([c]) => c.row >= lo && c.row <= hi).map(([, i]) => i);
+
+  console.log('\nthen, EITHER a fresh pair —');
+  // Split by whole cells so the seam zigzags between sockets. A straight cut cannot
+  // miss them: rows are 44.64 apart but the bore is 47.40 across, so consecutive rows
+  // always overlap in y.
   const half = Math.floor(CFG.rows / 2);
-  ok &= emit(outDir, 'spice-plate-1of2',
-    buildPiece(all, all.map((c, i) => [c, i]).filter(([c]) => c.row < half).map(([, i]) => i), rect),
-    `rows 1-${half}`);
-  ok &= emit(outDir, 'spice-plate-2of2',
-    buildPiece(all, all.map((c, i) => [c, i]).filter(([c]) => c.row >= half).map(([, i]) => i), rect),
+  ok &= emit(outDir, 'spice-plate-1of2', buildPiece(all, rowsIn(0, half - 1), rect), `rows 1-${half}`);
+  ok &= emit(outDir, 'spice-plate-2of2', buildPiece(all, rowsIn(half, CFG.rows - 1), rect),
     `rows ${half + 1}-${CFG.rows}`);
+
+  /* ---- OR keep the printed fit strip as piece 1 and print only what is missing.
+     The strip was generated as its own 2-row lattice, so its rows were bounded by its
+     own outline rather than by the bisector with row 3. It therefore reaches about
+     0.98 mm further than a one-piece plate would, and rows 3-8 must be cut back off it. */
+  console.log('\nOR, reusing the strip already printed —');
+  const stripJars = strip.map(c => ({ x: c.x, y: c.y, maxR: collarMaxR() }));
+  const third = Math.ceil((CFG.rows - 2) / 2);
+  ok &= emit(outDir, 'spice-plate-2of3',
+    buildPiece(all, rowsIn(2, 1 + third), rect, { frozen: stripJars }), `rows 3-${1 + third + 1}`);
+  ok &= emit(outDir, 'spice-plate-3of3',
+    buildPiece(all, rowsIn(2 + third, CFG.rows - 1), rect, { frozen: stripJars }),
+    `rows ${2 + third + 1}-${CFG.rows}`);
 
   console.log(`\n  ${outDir}\n`);
   if (!ok) { console.error('FAILED: see above\n'); process.exit(1); }
