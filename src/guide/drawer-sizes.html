@@ -21,6 +21,7 @@
 </style>
 </head>
 <body data-carry-all>
+<a class="skip" href="#doc">Skip to the guide</a>
 <header>
   <h1>DRAWER<span class="tm">FORGE</span> <span class="tm" style="opacity:.55">· GUIDE</span></h1>
   <p>How many Gridfinity cells fit your drawer — reference tables in millimetres and inches, and what to do with what's left over.</p>
@@ -32,7 +33,7 @@
   </nav>
 </header>
 
-<article class="doc">
+<main id="doc" tabindex="-1"><article class="doc">
 
 <p class="lede">The arithmetic is simple — divide by 42 and round down — but the interesting
 part is what happens to the remainder, because that's what decides whether the result
@@ -143,14 +144,17 @@ items, is a perfectly good design and uses far less filament.</p>
 &nbsp;·&nbsp; <a href="../">Back to the guide</a>
 &nbsp;·&nbsp; <a href="../split/">Baseplate too big to print? →</a></p>
 
-</article>
+</article></main>
 
 <footer>
   <div><b>Drawerforge</b> is free and open. Gridfinity was created by <a href="https://www.youtube.com/c/ZackFreedman" rel="noopener">Zack Freedman</a> (Voidstar Lab) as an open standard — these tools implement the published profiles.</div>
   <div style="margin-top:10px">Issues and feature requests <a href="https://github.com/Oliver-Johnson/Baseplate-Studio/issues" rel="noopener">on GitHub</a>. If it saved you time you can <a href="https://ko-fi.com/oliver_johnson" rel="noopener">buy me a coffee</a>.</div>
   <div class="mono" style="margin-top:8px">All geometry is computed locally in your browser — nothing is uploaded. STL and 3MF output is mm scale.</div>
 </footer>
-<a id="kofi" class="kofi" href="https://ko-fi.com/oliver_johnson" target="_blank" rel="noopener"><span class="cup">☕</span><span><b>Buy me a coffee</b><i>free and open, no ads, no accounts</i></span><button id="kofiX" title="Hide this" aria-label="Hide">×</button></a>
+<!-- The dismiss control is a sibling of the link, not a child of it: a <button> inside
+     an <a> is interactive content inside a link, which is invalid. It also starts
+     hidden; chrome.js decides when showing it stops being an interruption. -->
+<div id="kofi" class="kofi" hidden><a href="https://ko-fi.com/oliver_johnson" target="_blank" rel="noopener"><span class="cup">☕</span><span><b>Buy me a coffee</b><i>free and open, no ads, no accounts</i></span></a><button type="button" id="kofiX" title="Hide this" aria-label="Hide the tip jar">×</button></div>
 <script>
 /*__CHROME__*/
 </script>

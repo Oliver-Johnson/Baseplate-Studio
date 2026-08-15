@@ -502,6 +502,23 @@ function drawMap() {
     svg.appendChild(el('rect', { class: 'drag' + (canPlace(x, y, u, v, -1) ? '' : ' bad'),
       x: x * S + 1, y: sy(y, v) + 1, width: u * S - 2, height: v * S - 2, rx: 5 }));
   }
+
+  /* To anything that cannot see it, the map is one image with no alt text — the whole
+     working surface of the tool, unreadable. The label is rebuilt here, on every draw,
+     rather than written once in the markup: a fixed string would describe an empty
+     drawer forever, which is worse than silence because it is confidently wrong.
+     Long layouts are summarised rather than enumerated. Reading out seventy bins is
+     not useful, and the piece table below already lists every one of them as real
+     text a screen reader can navigate. */
+  const listed = B().slice(0, 12).map((b) =>
+    `${b.u} by ${b.v}${isCarved(b) ? ' carved' : ''} at column ${b.x + 1}, row ${b.y + 1}`);
+  const more = B().length - listed.length;
+  svg.setAttribute('aria-label',
+    `Drawer layout map. Layer ${cur + 1} of ${layers.length}, grid ${g.nx} by ${g.ny} cells. ` +
+    (B().length
+      ? `${B().length} bin${B().length === 1 ? '' : 's'} on this layer: ` +
+        listed.join('; ') + (more > 0 ? `; and ${more} more` : '') + '.'
+      : 'No bins on this layer.'));
 }
 /* Screen point -> grid cell.
    Goes through the SVG's own screen matrix rather than measuring the element box.
@@ -1302,6 +1319,15 @@ function showScene() {
     }
   });
   syncDrawer();
+  /* Same reasoning as the map's label: a <canvas> is a blank rectangle to anything
+     that cannot see it, and this one carries the answer to "did that do what I meant".
+     A summary, not a scene description — the shape of a bin is in the piece table. */
+  const n = allBins().length;
+  $('three').setAttribute('aria-label', n
+    ? `3D preview: ${n} bin${n === 1 ? '' : 's'} over ${layers.length} ` +
+      `layer${layers.length === 1 ? '' : 's'} on a ${g.nx} by ${g.ny} cell baseplate, ` +
+      `tallest stack ${stackHeight().toFixed(1)} millimetres.`
+    : `3D preview: an empty ${g.nx} by ${g.ny} cell baseplate.`);
   render();
 }
 function render() {
@@ -1656,8 +1682,19 @@ for (const id of ['showDrawer', 'drawerFrontH']) {
   $(id).addEventListener('input', drawerViewChanged);
   $(id).addEventListener('change', drawerViewChanged);
 }
-for (const s of document.querySelectorAll('section.p h2'))
-  s.addEventListener('click', () => s.parentElement.classList.toggle('closed'));
+/* The handler is on the <button> inside the header, not on the <h2>.
+   A bare heading with a click listener is only a control for a mouse, and because a
+   closed panel's body is display:none there was nothing focusable inside it either —
+   so panels 01 and 02, which load closed, put the drawer size and the printer bed
+   beyond a keyboard entirely. There was no route to them at all, not a slow one.
+   aria-expanded is written from the class rather than kept alongside it, so the two
+   cannot drift: the class is what actually shows the panel. */
+for (const btn of document.querySelectorAll('section.p>h2>button')) {
+  const sec = btn.closest('section.p');
+  btn.addEventListener('click', () => {
+    btn.setAttribute('aria-expanded', String(!sec.classList.toggle('closed')));
+  });
+}
 
 $('undoBtn').addEventListener('click', undo);
 $('redoBtn').addEventListener('click', redo);

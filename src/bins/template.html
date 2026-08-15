@@ -31,6 +31,10 @@
 </style>
 </head>
 <body>
+<!-- The skip link goes to the stage rather than to <main>, because <main> starts at
+     the settings rail and landing there skips nothing — the rail is the forty controls
+     the link exists to get past. The landmark and the shortcut have different jobs. -->
+<a class="skip" href="#stage">Skip to the drawer layout</a>
 <header>
   <h1>DRAWER<span class="tm">FORGE</span> <span class="tm" style="opacity:.55">· BINS</span></h1>
   <p>Lay bins out across the whole drawer, then print exactly what you planned. Built to the published Gridfinity spec, so they fit any spec baseplate.</p>
@@ -41,12 +45,12 @@
     <a id="navGuide" href="../guide/">Guide</a>
   </nav>
 </header>
-<div class="app">
+<main class="app">
 <div class="rail">
 
 <section class="p closed" id="s-drawer">
-  <h2><span class="n">01</span> Drawer &amp; grid <span class="caret">▾</span></h2>
-  <div class="body">
+  <h2 class="ph"><button type="button" aria-expanded="false" aria-controls="b-drawer"><span class="n">01</span> Drawer &amp; grid <span class="caret">▾</span></button></h2>
+  <div class="body" id="b-drawer">
     <div class="row">
       <label class="f"><b>Drawer width (mm)</b><input id="drawerW" type="number" step="0.5" value="306"></label>
       <label class="f"><b>Drawer depth (mm)</b><input id="drawerD" type="number" step="0.5" value="380"></label>
@@ -67,8 +71,8 @@
 </section>
 
 <section class="p closed" id="s-printer">
-  <h2><span class="n">02</span> Printer <span class="caret">▾</span></h2>
-  <div class="body">
+  <h2 class="ph"><button type="button" aria-expanded="false" aria-controls="b-printer"><span class="n">02</span> Printer <span class="caret">▾</span></button></h2>
+  <div class="body" id="b-printer">
     <label class="f"><b>Preset</b>
       <select id="bedPreset">
         <option value="256,256,256">256 × 256 × 256 (Elegoo CC/CC2, Bambu X1/P1)</option>
@@ -90,8 +94,8 @@
 
 
 <section class="p" id="s-bin">
-  <h2><span class="n">03</span> <span id="binPanelTitle">New bins</span> <span class="caret">▾</span></h2>
-  <div class="body">
+  <h2 class="ph"><button type="button" aria-expanded="true" aria-controls="b-bin"><span class="n">03</span> <span id="binPanelTitle">New bins</span> <span class="caret">▾</span></button></h2>
+  <div class="body" id="b-bin">
     <div class="row" id="sizeRow">
       <label class="f"><b>Width (cells)</b><input id="u" type="number" step="1" min="1" value="1"></label>
       <label class="f"><b>Depth (cells)</b><input id="v" type="number" step="1" min="1" value="1"></label>
@@ -156,12 +160,12 @@
 </section>
 
 <section class="p" id="s-warn">
-  <h2><span class="n">04</span> Checks <span class="caret">▾</span></h2>
-  <div class="body"><div id="warnings"></div></div>
+  <h2 class="ph"><button type="button" aria-expanded="true" aria-controls="b-warn"><span class="n">04</span> Checks <span class="caret">▾</span></button></h2>
+  <div class="body" id="b-warn"><div id="warnings"></div></div>
 </section>
 
 </div>
-<div class="stage">
+<div class="stage" id="stage" tabindex="-1">
 
 <div class="stagetop">
 
@@ -172,7 +176,10 @@
     <button class="ghost" id="addLayer">Add a layer on top</button>
     <button class="ghost" id="delLayer">Remove this layer</button>
   </div>
-  <div id="fillwrap"><svg id="fillmap"></svg></div>
+  <!-- The map and the preview both start with a label describing an empty drawer;
+       drawMap and showScene rewrite it from the real state on every draw, so it says
+       what is actually there rather than what the markup guessed. -->
+  <div id="fillwrap"><svg id="fillmap" role="img" aria-label="Drawer layout map, loading"></svg></div>
   <div class="covbar"><i id="covfill" style="width:0%"></i></div>
   <div class="body">
     <div class="mono" id="coverage">—</div>
@@ -192,7 +199,7 @@
 
 <div class="stagecard">
   <h3>Preview</h3>
-  <div id="threewrap"><canvas id="three"></canvas><div id="status"></div><div id="threehint">drag rotate · wheel zoom</div></div>
+  <div id="threewrap"><canvas id="three" role="img" aria-label="3D preview of the bins, loading"></canvas><div id="status"></div><div id="threehint">drag rotate · wheel zoom</div></div>
 </div>
 
 </div>
@@ -224,7 +231,7 @@
 </div>
 
 </div>
-</div>
+</main>
 <footer>
   <div><b>Drawerforge</b> is free and open. Gridfinity was created by <a href="https://www.youtube.com/c/ZackFreedman" rel="noopener">Zack Freedman</a> (Voidstar Lab) as an open standard — these bins follow the published spec, so they fit any spec baseplate.</div>
   <div style="margin-top:10px">Issues and feature requests <a href="https://github.com/Oliver-Johnson/Baseplate-Studio/issues" rel="noopener">on GitHub</a>. If it saved you time you can <a href="https://ko-fi.com/oliver_johnson" rel="noopener">buy me a coffee</a>.</div>
@@ -262,7 +269,11 @@
 /*__UI__*/
 </script>
 <div id="tip"></div>
-<a id="kofi" class="kofi" href="https://ko-fi.com/oliver_johnson" target="_blank" rel="noopener"><span class="cup">☕</span><span><b>Buy me a coffee</b><i>free and open, no ads, no accounts</i></span><button id="kofiX" title="Hide this" aria-label="Hide">×</button></a>
+<!-- The dismiss control is a sibling of the link, not a child of it: a <button> inside
+     an <a> is interactive content inside a link, which is invalid — Chrome does the
+     useful thing with it anyway, but nothing says the next engine has to. It also
+     starts hidden; chrome.js decides when showing it stops being an interruption. -->
+<div id="kofi" class="kofi" hidden><a href="https://ko-fi.com/oliver_johnson" target="_blank" rel="noopener"><span class="cup">☕</span><span><b>Buy me a coffee</b><i>free and open, no ads, no accounts</i></span></a><button type="button" id="kofiX" title="Hide this" aria-label="Hide the tip jar">×</button></div>
 <script>
 /*__CHROME__*/
 </script>
