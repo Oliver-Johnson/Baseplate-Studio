@@ -509,8 +509,25 @@ function clipConvexPrismTop(polys, cv, z0) {
   return keep.concat(below);
 }
 
-// convex decomposition of a keyed half-shape footprint (grown), piece-local coords
+/* Convex decomposition of a keyed half-shape footprint (grown), piece-local coords.
+ *
+ * Every part comes back CCW, because that is what clipConvexPrismTop's contract asks
+ * for and this is the only thing that builds one. It did not, and the winding fell out
+ * of the world mapping rather than being decided: the depth-and-lateral profile is
+ * built once and then mapped into world by a swap for the y-edges and a sign flip for
+ * the far side, each of which turns the loop over. So bowtie came back clockwise on
+ * '+x' and '-y', the snap and H-clip rects on both y-edges, and the puzzle key's lobe
+ * on all four while its waist rect stayed counter-clockwise.
+ *
+ * A clockwise cv makes clipConvexPrismTop's outward edge normals point inward, so it
+ * peels off the material it was told to keep and keeps the material it was told to
+ * remove — which is not a subtle defect. A top-inserted key's cup was left sealed under
+ * solid plate: every H-clip and snap junction on a HORIZONTAL seam, one side of every
+ * bowtie junction on either, and the lobe end of every puzzle key. The cup was built,
+ * the plate looked right, and there was no opening to drop the key through.
+ */
 function keyHalfConvexParts(type, edge, e, s, prm, grow) {
+  const ccw = (parts) => parts.map(p => polyArea2D(p) < 0 ? p.slice().reverse() : p);
   const g = (edge === '+x' || edge === '+y') ? -1 : 1;
   const J = 0.0017, ss = s + J;
   const rect = (d0, d1, w) => {
@@ -524,11 +541,8 @@ function keyHalfConvexParts(type, edge, e, s, prm, grow) {
     const lo = Math.min(ya, yb), hi = Math.max(ya, yb);
     return [[ss - w, lo], [ss - w, hi], [ss + w, hi], [ss + w, lo]];
   };
-  if (type === 'bowtie') {
-    // one trapezoid (convex): approximate with its bounding rect segments? use exact trapezoid
-    const pts = keyHalf('bowtie', edge, e, s, prm, grow);
-    return [pts];   // bowtie half is convex already
-  }
+  if (type === 'bowtie')     // the bowtie half is one trapezoid, convex already
+    return ccw([keyHalf('bowtie', edge, e, s, prm, grow)]);
   if (type === 'puzzlekey') {
     // waist rect + the lobe itself (a convex 16-gon)
     const r = prm.lobeR + grow, cd = prm.len/2 - prm.lobeR;
@@ -539,15 +553,14 @@ function keyHalfConvexParts(type, edge, e, s, prm, grow) {
       if (edge === '+x' || edge === '-x') lobe.push([e + g*dp, ss + lt]);
       else lobe.push([ss + lt, e + g*dp]);
     }
-    if (g > 0) lobe.reverse();   // keep CCW after mirroring
-    return [rect(-0.5, cd, prm.waistW/2 + grow), lobe];
+    return ccw([rect(-0.5, cd, prm.waistW/2 + grow), lobe]);
   }
   // snap/hclip dogbone: waist rect + end section (convex part)
   const endStart = prm.len/2 - prm.endLen;
-  return [
+  return ccw([
     rect(-0.5, endStart + 0.1, prm.wMid/2 + grow),
     rect(endStart, prm.len/2 + grow, prm.wEnd/2 + grow),
-  ];
+  ]);
 }
 
 // clamp a poly soup to the half-space z >= z0 (drops sub-floor cutter leakage)
@@ -1100,7 +1113,16 @@ function profilePrism(profile, v0, v1, mapUV) {
 /* Top-snap (click-lock) system, adapted from the Gridfinity Layout Tool sample.
    Per piece: leg slot with barb undercut + bridge rebate, built from box shells.
    prm: { legT:1.0, legLen:1.35(along), legC:1.35(center from seam), barb:0.18,
-          bridgeW:1.7, bridgeD:0.85, wall:0.6, clr } */
+          bridgeW:1.7, bridgeD:0.85, wall:0.6, clr }
+
+   The numbers are here and only here. They were written out four times — the plate's
+   pocket, the coupon's pocket, the coupon's clip and the download's clip — and the
+   pocket and the part they take are the two halves of one interference fit, so a barb
+   changed in three places out of four prints a clip that will not click. */
+function snapTopPrm(clr) {
+  return { legT: 1.0, legLen: 1.35, legC: 1.4, barb: 0.18,
+           bridgeW: 1.7, bridgeD: 0.85, wall: 0.6, clr };
+}
 function snapTopParts(edge, e, s, prm, H) {
   const c = prm.clr;
   const zf = H - 2.35, zLip0 = H - 1.1, zLip1 = H - 0.85, zReb = H - 0.85;
@@ -1245,11 +1267,67 @@ function topPocketCup(type, edge, e, s, prm, clr, zf, zTop) {
   return polys;
 }
 
+/* One keyed junction, built the one way — the ONLY answer to "what does a key site do
+   to the solid it sits in".
+ *
+ * There are three housings and they are not variants of each other: a bottom-inserted
+ * key needs a recess cut up from the underside, a top-inserted one needs a cup built
+ * down from above with the material over it clipped away, and a top-inserted snap needs
+ * the leg slot and bridge rebate instead. buildPiece cuts them into a cell region and
+ * buildFitSample cuts them into a coupon tile, and until now those were two
+ * transcriptions of the same three constructions. The coupon's copy had never learned
+ * about the last two: it answered every top-inserted configuration with the bottom
+ * recess, so the coupon you printed to check your clearance tested a joint you were not
+ * building — a pocket open at the wrong face, at the wrong depth, taking a key 0.3 mm
+ * taller than the one in the download.
+ *
+ * `kind` is decided once, by the caller that can see the configuration (src/ui.js
+ * activeJoint), for the same reason connectorPart and keysNeeded are: three answers to
+ * one question is two too many, and the third is always the one nobody updates.
+ *
+ * Returns the operations for one site: `cut` polygons to subtract, `add` shells to push
+ * in alongside, and `clip` convex prisms to strip from above.
+ */
+function keySiteOps(kind, shape, prm, clr, edge, e, s, H) {
+  if (kind === 'snaptop') {
+    const p = snapTopPrm(clr);
+    const { env } = snapTopParts(edge, e, s, p, H);
+    const g2 = (edge === '+x' || edge === '+y') ? -1 : 1;
+    const ss2 = s + 0.0017;
+    const rect = (edge === '+x' || edge === '-x')
+      ? [[e + g2*env[0], ss2 + env[2]], [e + g2*env[1], ss2 + env[2]],
+         [e + g2*env[1], ss2 + env[3]], [e + g2*env[0], ss2 + env[3]]]
+      : [[ss2 + env[2], e + g2*env[0]], [ss2 + env[3], e + g2*env[0]],
+         [ss2 + env[3], e + g2*env[1]], [ss2 + env[2], e + g2*env[1]]];
+    // ensure CCW for the clipper
+    const ar = rect.reduce((a, p2, i) => { const q = rect[(i+1)%4]; return a + p2[0]*q[1] - q[0]*p2[1]; }, 0);
+    return { cut: [], add: snapTopPocket(edge, e, s, p, H),
+             clip: [{ cv: ar > 0 ? rect : rect.slice().reverse(), z: env[4] }] };
+  }
+  if (kind === 'cup') {
+    const zf = Math.max(1.2, H - 2.25), zTop = H - 0.85;
+    return { cut: [], add: topPocketCup(shape, edge, e, s, prm, clr, zf, zTop),
+             clip: keyHalfConvexParts(shape, edge, e, s, prm, clr + 0.55)
+                     .map(cv => ({ cv, z: zf - 0.55 })) };
+  }
+  /* Bottom-inserted recess. The depth is prm.depth capped clear of the plate top, which
+     is what every configuration was already cutting: 2.3 for the H-clip, 2.0 for both
+     key housings (the floor mount's pad is forced to key.depth + 0.8, so its old
+     `pad - 0.6` cap never bound). The key that goes in is prm.depth - 0.15 tall; that
+     pairing is the whole reason the depth travels on the dimensions. */
+  return { cut: extrudePoly(keyHalf(shape, edge, e, s, prm, clr), -0.5,
+                            Math.min(prm.depth, H - 0.8)),
+           add: [], clip: [] };
+}
+
 // H-clip proportions expressed as a snap (dogbone) profile — proven-clean cut path
 function hclipPrm(hc) {
   const endLen = hc.flangeT + 0.25;
+  // depth is the recess this is cut to, as on every other key's dimensions — the clip
+  // itself comes out 0.15 shorter. It used to read 2.15, the clip's height, while
+  // buildPiece cut 2.3 from a literal and ui.js patched the 2.3 back on to size the part.
   return { len: hc.waistL + 2*endLen, wMid: hc.waistW, wEnd: hc.flangeW,
-           endLen, taper: 0.25, depth: 2.15, clr: hc.clr };
+           endLen, taper: 0.25, depth: 2.3, clr: hc.clr };
 }
 // (legacy two-rect version, unused)
 function hclipHalfRects(edge, e, s, hc, grow) {
@@ -1571,6 +1649,17 @@ function buildPiece(cfg, layout, piece, onStatus) {
   const keyedConn = ['bowtie', 'snap', 'puzzlekey'].includes(cfg.connector);
   const wallKeys = (keyedConn && cfg.keyMount === 'wall');
   const keyDims = wallKeys ? cfg.keySlim : cfg.key;
+  /* Which of keySiteOps' three housings this configuration builds. src/ui.js
+     activeJoint answers the same question for the loose part and the fit coupon, and
+     hands the answer to buildFitSample rather than working it out again.
+     The snap's clip is one part at one size whatever the housing, so its fit comes from
+     the full key's clearance; a flat key takes its own housing's. */
+  const keyShape = isHclip ? 'snap' : cfg.keyType;
+  const keyPrm = isHclip ? hclipPrm(cfg.hclip) : keyDims;
+  const keyKind = (cfg.connector === 'snap' && topInsert) ? 'snaptop'
+                : ((isHclip || wallKeys) && topInsert) ? 'cup' : 'recess';
+  const keyClr = keyKind === 'snaptop' ? cfg.key.clr
+               : isHclip ? cfg.hclip.clr : keyDims.clr;
   if (keyedConn && !wallKeys) pad = Math.max(pad, cfg.key.depth + 0.8);
   if (cfg.connector === 'puzzle') pad = Math.max(pad, 2.6);
   const H = pad + cfg.plateHeight;
@@ -1723,19 +1812,15 @@ function buildPiece(cfg, layout, piece, onStatus) {
           : (bo.s > x0 - halfW && bo.s < x1 + halfW &&
              (bo.edge === '+y' ? Math.abs(y1 - D) : Math.abs(y0)) < reach);
         if (!near) continue;
-        if ((isHclip || wallKeys) && topInsert) {
-          continue;   // handled as a post-pass (clip + cup)
-        }
-        if (isHclip) {
-          // bottom-insert H pocket via the snap profile (ceiling below rim geometry)
-          cuts.key.push(...extrudePoly(
-            keyHalf('snap', bo.edge, bo.e, bo.s, hclipPrm(cfg.hclip), cfg.hclip.clr),
-            -0.5, Math.min(2.3, H - 0.8)));
-        } else {
-          cuts.key.push(
-            ...extrudePoly(keyHalf(cfg.keyType, bo.edge, bo.e, bo.s, keyDims, keyDims.clr),
-                           -0.5, wallKeys ? 2.0 : Math.min(cfg.key.depth, pad - 0.6)));
-        }
+        /* Anything not inserted from underneath is a post-pass (clip + cup). The test
+           used to be `(isHclip || wallKeys) && topInsert`, which is not the same
+           question the post-pass below asks — so a top-inserted snap housed in the
+           FLOOR fell through here and had a bottom recess cut for it as well as the
+           clip pocket built over it, for a key that configuration never ships. One
+           predicate now, computed once, above. */
+        if (keyKind !== 'recess') continue;
+        cuts.key.push(...keySiteOps(keyKind, keyShape, keyPrm, keyClr,
+                                    bo.edge, bo.e, bo.s, H).cut);
       }
       for (const pn of pnotches) {
         const reach = cfg.puzzle.neckL + cfg.puzzle.lobeR * 1.6 + 1;
@@ -1803,45 +1888,17 @@ function buildPiece(cfg, layout, piece, onStatus) {
     const fp = tabFootprint(tb.edge, tb.e, tb.s, t.wr, t.wt, t.dp, 0.8);
     for (const p of extrudePoly(fp, 0, t.h)) allPolys.push(p);
   }
-  // top-insert keyed pockets: BSP-free clip + direct pocket cups
-  if (cfg.connector === 'snap' && topInsert) {
-    const prm = Object.assign({ legT: 1.0, legLen: 1.35, legC: 1.4, barb: 0.18,
-                                bridgeW: 1.7, bridgeD: 0.85, wall: 0.6 },
-                              { clr: cfg.key.clr });
+  // top-insert keyed pockets: BSP-free clip + direct pocket cups, both from keySiteOps
+  if (keyKind !== 'recess') {
     let ps = allPolys;
     for (const bo of keyed) {
       if (Math.abs(bo.s / pitch - Math.round(bo.s / pitch)) > 0.25 &&
           Math.abs((bo.s - (bo.edge === '+x' || bo.edge === '-x' ? gy0 : gx0)) / pitch -
                    Math.round((bo.s - (bo.edge === '+x' || bo.edge === '-x' ? gy0 : gx0)) / pitch)) > 0.25)
         continue;
-      const { env } = snapTopParts(bo.edge, bo.e, bo.s, prm, H);
-      const g2 = (bo.edge === '+x' || bo.edge === '+y') ? -1 : 1;
-      const ss2 = bo.s + 0.0017;
-      const rect = (bo.edge === '+x' || bo.edge === '-x')
-        ? [[bo.e + g2*env[0], ss2 + env[2]], [bo.e + g2*env[1], ss2 + env[2]],
-           [bo.e + g2*env[1], ss2 + env[3]], [bo.e + g2*env[0], ss2 + env[3]]]
-        : [[ss2 + env[2], bo.e + g2*env[0]], [ss2 + env[3], bo.e + g2*env[0]],
-           [ss2 + env[3], bo.e + g2*env[1]], [ss2 + env[2], bo.e + g2*env[1]]];
-      // ensure CCW for the clipper
-      const area = rect.reduce((a, p, i) => { const q = rect[(i+1)%4]; return a + p[0]*q[1] - q[0]*p[1]; }, 0);
-      ps = clipConvexPrismTop(ps, area > 0 ? rect : rect.slice().reverse(), env[4]);
-      for (const p of snapTopPocket(bo.edge, bo.e, bo.s, prm, H)) ps.push(p);
-    }
-    allPolys = ps;
-  } else if ((isHclip || wallKeys) && topInsert) {
-    const type = isHclip ? 'snap' : cfg.keyType;
-    const prm = isHclip ? hclipPrm(cfg.hclip) : keyDims;
-    const clr = isHclip ? cfg.hclip.clr : keyDims.clr;
-    const zf = Math.max(1.2, H - 2.25), zTop = H - 0.85;
-    let ps = allPolys;
-    for (const bo of keyed) {
-      if (Math.abs(bo.s / pitch - Math.round(bo.s / pitch)) > 0.25 &&
-          Math.abs((bo.s - (bo.edge === '+x' || bo.edge === '-x' ? gy0 : gx0)) / pitch -
-                   Math.round((bo.s - (bo.edge === '+x' || bo.edge === '-x' ? gy0 : gx0)) / pitch)) > 0.25)
-        continue;
-      for (const cv of keyHalfConvexParts(type, bo.edge, bo.e, bo.s, prm, clr + 0.55))
-        ps = clipConvexPrismTop(ps, cv, zf - 0.55);
-      for (const p of topPocketCup(type, bo.edge, bo.e, bo.s, prm, clr, zf, zTop)) ps.push(p);
+      const op = keySiteOps(keyKind, keyShape, keyPrm, keyClr, bo.edge, bo.e, bo.s, H);
+      for (const c of op.clip) ps = clipConvexPrismTop(ps, c.cv, c.z);
+      for (const p of op.add) ps.push(p);
     }
     allPolys = ps;
   }
@@ -1913,16 +1970,25 @@ function checkManifold(polys) {
 
 // ---------- connector fit sample ----------
 /* Small test strip: N tile pairs with graduated clearance + one key (keyed types).
-   Tiles are plain rounded slabs (fast print) with the joint on the mating edges. */
-function buildFitSample(cfg, H) {
+   Tiles are plain rounded slabs (fast print) with the joint on the mating edges.
+ *
+ * The whole value of this file is that you print it, press the joint together and
+ * believe the answer, so it has to present the joint the design actually builds — the
+ * same housing, the same clearance, the same loose part. `joint` carries that decision
+ * in from src/ui.js activeJoint; it is not re-derived here, because re-deriving it is
+ * exactly what went wrong. This function used to answer every top-inserted
+ * configuration with the bottom recess: for an H-clip, and for a wall-housed bowtie or
+ * puzzle key, the coupon offered a pocket open at the underside 2.3 mm deep taking a
+ * 2.15 mm key, while the plate has a cup open at the top 1.4 mm deep taking a 1.85 mm
+ * one. Nothing on the page said so, and the joint it tested was one you were not
+ * building.
+ *
+ * `joint.kind` names the housing for every connector, `joint.part` is present only for
+ * the ones that ship a loose part.
+ */
+function buildFitSample(cfg, H, joint) {
   H = H || 4.25;
-  const clrs = [-0.05, 0, 0.05, 0.1].map(d => {
-    const base = cfg.connector === 'hclip' ? cfg.hclip.clr :
-      ['bowtie','puzzlekey','snap'].includes(cfg.connector)
-        ? (cfg.keyMount === 'wall' ? cfg.keySlim.clr : cfg.key.clr)
-      : cfg.connector === 'puzzle' ? cfg.puzzle.clr : cfg.tab.clr;
-    return Math.max(0.02, base + d);
-  });
+  const clrs = [-0.05, 0, 0.05, 0.1].map(d => Math.max(0.02, joint.clr + d));
   const tileW = 18, tileD = 8, gapX = 7, seamGap = 1.2;
   const polys = [];
   const rounded = (x0, y0, w, d) => {
@@ -1945,34 +2011,21 @@ function buildFitSample(cfg, H) {
       const e = side < 0 ? -seamGap/2 : seamGap/2;
       const s = x0 + tileW/2;
       let cuts = [];
-      if (cfg.connector === 'snap' && cfg.keyInsert === 'top') {
-        const prm = Object.assign({ legT: 1.0, legLen: 1.35, legC: 1.4, barb: 0.18,
-                                    bridgeW: 1.7, bridgeD: 0.85, wall: 0.6 }, { clr });
-        const { env } = snapTopParts(edge, e, s, prm, H);
-        const g2 = (edge === '+x' || edge === '+y') ? -1 : 1;
-        const ss2 = s + 0.0017;
-        let rect = (edge === '+x' || edge === '-x')
-          ? [[e + g2*env[0], ss2 + env[2]], [e + g2*env[1], ss2 + env[2]],
-             [e + g2*env[1], ss2 + env[3]], [e + g2*env[0], ss2 + env[3]]]
-          : [[ss2 + env[2], e + g2*env[0]], [ss2 + env[3], e + g2*env[0]],
-             [ss2 + env[3], e + g2*env[1]], [ss2 + env[2], e + g2*env[1]]];
-        const ar = rect.reduce((a2, p, i) => { const q = rect[(i+1)%4]; return a2 + p[0]*q[1] - q[0]*p[1]; }, 0);
-        tile = clipConvexPrismTop(tile, ar > 0 ? rect : rect.slice().reverse(), env[4]);
-        for (const p of snapTopPocket(edge, e, s, prm, H)) tile.push(p);
-        cuts = [];
-      } else if (cfg.connector === 'hclip') {
-        cuts = cuts.concat(extrudePoly(
-          keyHalf('snap', edge, e, s, hclipPrm(cfg.hclip), clr), -0.5, Math.min(2.3, H - 0.8)));
-      } else if (['bowtie','puzzlekey','snap'].includes(cfg.connector)) {
-        const kd = cfg.keyMount === 'wall' ? cfg.keySlim : cfg.key;
-        cuts = cuts.concat(extrudePoly(
-          keyHalf(cfg.connector, edge, e, s, kd, clr), -0.5, Math.min(kd.depth, H - 1.2)));
-      } else if (cfg.connector === 'puzzle') {
+      if (joint.part) {
+        const op = keySiteOps(joint.kind, joint.shape, joint.prm, clr, edge, e, s, H);
+        for (const c of op.clip) tile = clipConvexPrismTop(tile, c.cv, c.z);
+        for (const p of op.add) tile.push(p);
+        cuts = op.cut;
+      } else if (joint.kind === 'puzzle') {
+        /* Against the floor pad the plate actually built, not against the tile height.
+           The cavity was cut to H - 1.2 and the tab raised to min(2.0, H - 1.4), which
+           on a 6.85 mm plate is a 5.65 mm cavity over a 2.0 mm tab — a joint engaging
+           over 1.95 mm on the plate and over whatever the tile happened to be here. */
         if (side > 0) cuts = cuts.concat(extrudePoly(
-          puzzleShape(edge, e, s, cfg.puzzle, clr, true), -0.5, H - 1.2));
-        else for (const p of extrudePoly(
-          puzzleShape(edge, e, s, cfg.puzzle, 0, false), 0, Math.min(2.0, H - 1.4))) tile.push(p);
-      } else {   // dovetail
+          puzzleShape(edge, e, s, cfg.puzzle, clr, true), -0.5, Math.max(1.2, joint.pad - 0.4)));
+        else for (const p of extrudePoly(puzzleShape(edge, e, s, cfg.puzzle, 0, false),
+                                         0, Math.max(1.2, joint.pad - 0.65))) tile.push(p);
+      } else if (joint.kind === 'dovetail') {
         const t = cfg.tab;
         if (side > 0) {
           const nWr = t.wr + 2*clr, nWt = t.wt + 2*clr, nDp = t.dp + clr;
@@ -1981,6 +2034,11 @@ function buildFitSample(cfg, H) {
             [[s - nWr/2, e - 1], [s - nWt/2, e + nDp], [s + nWt/2, e + nDp], [s + nWr/2, e - 1]],
             -0.5, Math.min(t.h + 0.2, H - 0.8)));
         } else {
+          /* The 0.6 mm root here is 0.8 on the plate's tabs. Left alone deliberately:
+             the root runs backwards from the seam into the tile's own body, 8 mm of
+             solid either way, so the two produce the same printed part and no
+             measurement can tell them apart. Changing it would be an edit nothing can
+             check. */
           for (const p of extrudePoly(tabFootprint('+y', e, s, t.wr, t.wt, t.dp, 0.6), 0, t.h))
             tile.push(p);
         }
@@ -1989,22 +2047,13 @@ function buildFitSample(cfg, H) {
       for (const p of clampZ(tile, 0)) polys.push(p);
     }
   });
-  // one key alongside (keyed + hclip types)
-  if (cfg.connector === 'snap' && cfg.keyInsert === 'top') {
-    const prm = Object.assign({ legT: 1.0, legLen: 1.35, legC: 1.4, barb: 0.18,
-                                bridgeW: 1.7, bridgeD: 0.85, wall: 0.6 }, { clr: cfg.key.clr });
-    const clip = snapTopClip(prm, H);
+  /* One loose part alongside — the very part the download ships, not a second
+     construction of it. It used to be built here from the key parameters, and for a
+     top-inserted H-clip that came out 2.15 mm tall against the download's 1.85. */
+  if (joint.part) {
     const kx = clrs.length * (tileW + gapX) + 4;
-    for (const p of clip) polys.push({ verts: p.verts.map(v => [v[0] + kx, v[1], v[2]]), plane: p.plane });
-    return { polys, clrs };
-  }
-  if (cfg.connector === 'hclip' || ['bowtie','puzzlekey','snap'].includes(cfg.connector)) {
-    const kd = cfg.connector === 'hclip' ? hclipPrm(cfg.hclip) :
-      (cfg.keyMount === 'wall' ? cfg.keySlim : cfg.key);
-    const kh = cfg.connector === 'hclip' ? 2.15 : kd.depth - 0.15;
-    const key = buildKey(cfg.connector === 'hclip' ? 'snap' : cfg.connector, kd, kh);
-    const kx = clrs.length * (tileW + gapX) + 4;
-    for (const p of key) polys.push({ verts: p.verts.map(v => [v[0] + kx, v[1], v[2]]), plane: p.plane });
+    for (const p of joint.part)
+      polys.push({ verts: p.verts.map(v => [v[0] + kx, v[1], v[2]]), plane: p.plane });
   }
   return { polys, clrs };
 }
@@ -2225,7 +2274,7 @@ const DEFAULTS = {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { computeLayout, pieceConnectors, buildPiece, buildTestTile, buildFitSample, bowtieKey, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
+  module.exports = { computeLayout, pieceConnectors, buildPiece, buildTestTile, buildFitSample, bowtieKey, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, keyHalfConvexParts, topPocketCup, snapTopPocket, clipConvexPrismTop, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
     // shared mesh primitives — also used by the bins tool
     makePoly, triangulateRing, earTriangulate, roundedSquareRing, clampZ, profilePrism,
     skeletonCellRegion, directCellRegion, polyArea2D };

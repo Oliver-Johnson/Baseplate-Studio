@@ -10,6 +10,20 @@ const state = Object.assign({}, DEFAULTS, {
 let layout = null;
 let builds = {};            // pieceId -> {polys, meta}
 let buildToken = 0;
+/* The connector families, named once each. KEY_CONN is the three that take a flat key
+   and offer the housing choice; KEYED adds the H-clip, whose clip is a loose part too —
+   see keysStl for what the ZIP did while it kept its own shorter copy of that list.
+   The membership tests were written out inline in six places between them. */
+const KEY_CONN = ['bowtie', 'puzzlekey', 'snap'];
+const KEYED = [...KEY_CONN, 'hclip'];
+/* Where the key lives, and therefore which way it goes in. The insert control only
+   exists for a wall-housed key: a floor-housed one is laid into a recess in the solid
+   base and has nowhere to come down from. Both predicates are asked by the control
+   visibility, the seam warning, the key dimensions, the README's assembly order and the
+   joint the fit coupon is built to — five readers, and they have to be one answer. */
+const keyInWall = () => state.connector === 'hclip' ||
+  (KEY_CONN.includes(state.connector) && state.keyMount === 'wall');
+const keyFromTop = () => keyInWall() && state.keyInsert === 'top';
 const PIECE_COLORS = ['#4fc3e8','#e8b34f','#7fd8a5','#e88a8a','#b18ae8','#7fb5e8','#e8d47f','#8ae8d4'];
 
 // ---------- read/write controls ----------
@@ -24,7 +38,7 @@ function readControls() {
   state.noMargin = mm === 'none';
   if (state.noMargin) { state.marginMode = 'custom'; state.mLeft = state.mRight = state.mFront = state.mBack = 0; }
   state.connector = $('connector').value;
-  state.keyType = ['bowtie','puzzlekey','snap'].includes(state.connector) ? state.connector : 'bowtie';
+  state.keyType = KEY_CONN.includes(state.connector) ? state.connector : 'bowtie';
   state.keyMount = $('keyMount').value;
   state.keyInsert = $('keyInsert').value;
   state.baseMode = $('baseMode').value;
@@ -52,13 +66,12 @@ function readControls() {
   $('connHintBow').style.display = (state.connector === 'bowtie' || state.connector === 'puzzlekey') ? '' : 'none';
   $('connHintSnap').style.display = state.connector === 'snap' ? '' : 'none';
   $('connHintHclip').style.display = state.connector === 'hclip' ? '' : 'none';
-  const hasKeys = ['bowtie','puzzlekey','snap'].includes(state.connector);
+  const hasKeys = KEY_CONN.includes(state.connector);
   $('keyMountRow').style.display = hasKeys ? '' : 'none';
   $('keyMountHint').style.display = hasKeys ? '' : 'none';
-  // top-insert applies exactly where the key lives in the wall (see activeKeyDims)
-  const wallish = (hasKeys && state.keyMount === 'wall') || state.connector === 'hclip';
-  $('keyInsertRow').style.display = wallish ? '' : 'none';
-  $('keyInsertHint').style.display = wallish ? '' : 'none';
+  // top-insert applies exactly where the key lives in the wall (see keyInWall)
+  $('keyInsertRow').style.display = keyInWall() ? '' : 'none';
+  $('keyInsertHint').style.display = keyInWall() ? '' : 'none';
   $('baseModeRow').style.display = (state.magnets || state.screws) ? '' : 'none';
   $('cornerRow').style.display = $('perCorner').checked ? '' : 'none';
   $('cornerHint').style.display = $('perCorner').checked ? '' : 'none';
@@ -104,15 +117,14 @@ function warningsList() {
   const remX = state.drawerW - layout.nx*state.pitch, remY = state.drawerD - layout.ny*state.pitch;
   if (remX > state.pitch * 0.75 || remY > state.pitch * 0.75)
     out.push({ t: `Leftover space is large (${remX.toFixed(0)} × ${remY.toFixed(0)} mm) — nearly another cell. Double-check the drawer measurement.` });
-  const keyedC = ['bowtie','puzzlekey','snap'].includes(state.connector);
-  const wallishC = (keyedC && state.keyMount === 'wall') || state.connector === 'hclip';
+  const keyedC = KEY_CONN.includes(state.connector);
   if ((keyedC && state.keyMount === 'floor' || state.connector === 'puzzle') && layout.pieces.length > 1) {
     const padV = state.connector === 'puzzle' ? 2.6 : state.key.depth + 0.8;
     const what = state.connector === 'puzzle' ? 'the jigsaw lobes' :
       state.connector === 'snap' ? 'the snap clips' : 'the keys';
     out.push({ t: `This joint adds a ${Math.max(state.bottomPad, padV).toFixed(1)} mm solid floor to house ${what}. Prefer no floor? Pick a keyed joint and set Key housing to "Inside the walls".` });
   }
-  if (wallishC &&
+  if (keyInWall() &&
       layout.seams.some(s => s.junctions.some(j => Math.abs(j - Math.round(j)) > 0.25)))
     out.push({ t: 'One seam overlaps by a single cell — wall-housed keys need a wall junction, so that seam gets no connector. The neighbouring joints still hold the assembly.' });
   if (state.plateStyle === 'skeleton') {
@@ -554,11 +566,13 @@ function testTilePolys() {
   return buildTestTile(Object.assign({}, state, { drawerW: state.pitch, drawerD: state.pitch,
     marginMode: 'custom', mLeft: 0, mRight: 0, mFront: 0, mBack: 0 })).polys;
 }
+/* The dimensions the housing is cut to. `depth` is the recess depth — the printed key
+   comes out 0.15 mm shorter — which is why the H-clip's arrives on hclipPrm rather than
+   being patched on here from a literal that buildPiece kept its own copy of. */
 function activeKeyDims() {
-  const d = state.connector === 'hclip' ? Object.assign(hclipPrm(state.hclip), { depth: 2.3 })
+  const d = state.connector === 'hclip' ? hclipPrm(state.hclip)
     : state.keyMount === 'wall' ? Object.assign({}, DEFAULTS.keySlim) : Object.assign({}, state.key);
-  if (state.keyInsert === 'top' &&
-      (state.connector === 'hclip' || state.keyMount === 'wall')) d.depth = 2.0;
+  if (keyFromTop()) d.depth = 2.0;   // a top-inserted key drops into a cup, not through
   return d;
 }
 function activeKeyShape() {
@@ -583,14 +597,42 @@ function builtH() {
    from the key's parameters whichever part it was.
    test/ui/connector-part.spec.js exports both routes and compares the geometry. */
 function connectorPart() {
-  if (topClips()) {
-    const prm = Object.assign({ legT: 1.0, legLen: 1.35, legC: 1.4, barb: 0.18,
-                                bridgeW: 1.7, bridgeD: 0.85, wall: 0.6 }, { clr: state.key.clr });
-    return { polys: snapTopClip(prm, builtH()), mesh: 'snap-clips', stem: 'snap-clips' };
-  }
+  if (topClips())
+    return { polys: snapTopClip(snapTopPrm(state.key.clr), builtH()),
+             mesh: 'snap-clips', stem: 'snap-clips' };
   const kd = activeKeyDims();
   return { polys: buildKey(activeKeyShape(), kd, kd.depth - 0.15),
            mesh: 'connector-keys', stem: `${state.connector}-keys` };
+}
+/* Which joint this design actually builds, in the terms the geometry needs to build it:
+   the housing, the shape, the dimensions, the clearance and the part that goes in.
+ *
+ * Same reason as connectorPart above and keysNeeded below. buildFitSample worked all of
+ * this out for itself from cfg, and got it wrong for every top-inserted configuration
+ * except the snap — the coupon presented a bottom recess where the plate has a top cup,
+ * so the fit you printed the coupon to check was a fit you were not building. It could
+ * not have got it right on its own: the depth a top-inserted key is cut to and the
+ * decision to use DEFAULTS.keySlim rather than a clearance the user can move both live
+ * here, in activeKeyDims, where cfg cannot see them.
+ *
+ * The kinds and their order match buildPiece's: a top-inserted snap takes the clip
+ * whatever its housing says, so it is tested first.
+ *
+ * `pad` is read back off the height the build actually came out at rather than worked
+ * out again from bottomPad and the joint's own minimum — the puzzle cavity is cut
+ * relative to it, and the coupon has no other way to know. */
+function activeJoint() {
+  const pad = builtH() - state.plateHeight;
+  if (!KEYED.includes(state.connector))
+    return { kind: state.connector === 'none' ? 'none' : state.connector, pad,
+             clr: state.connector === 'puzzle' ? state.puzzle.clr : state.tab.clr };
+  const prm = activeKeyDims();
+  const kind = topClips() ? 'snaptop' : keyFromTop() ? 'cup' : 'recess';
+  return { kind, shape: activeKeyShape(), prm, pad,
+           // the clip is one part at one size in either housing, so it is fitted to the
+           // full key's clearance — buildPiece says the same
+           clr: kind === 'snaptop' ? state.key.clr : prm.clr,
+           part: connectorPart().polys };
 }
 // bounding box of a part, for laying copies out and for reserving bed space
 function partExtent(polys) {
@@ -601,16 +643,21 @@ function partExtent(polys) {
   }
   return { w: hi[0] - lo[0], d: hi[1] - lo[1], h: hi[2] - lo[2] };
 }
+// the coupon, built the one way — the button saves this and test/ui/fit-sample.spec.js
+// measures it, so there is no route to a coupon the tests have not seen
+function fitSample() {
+  return buildFitSample(state, builtH(), activeJoint());
+}
 function downloadFitSample() {
-  const fsam = buildFitSample(state, builtH());
+  const fsam = fitSample();
   saveBlob(stlBinary(fsam.polys, 'fit-sample'),
     `${state.connector}-fit-sample-clr-${fsam.clrs.map(c=>c.toFixed(2)).join('-')}.stl`);
 }
-/* Every connector that needs loose parts, in one list. The ZIP used to carry its own
-   shorter copy of it that left out H-clips, so an hclip download arrived with a
-   README telling the reader to press a clip into each junction and no clip in the
-   file. One list, and one function that decides what is in the STL. */
-const KEYED = ['bowtie', 'puzzlekey', 'snap', 'hclip'];
+/* Every connector that needs loose parts is in KEYED, declared at the top with
+   KEY_CONN. The ZIP used to carry its own shorter copy of that list that left out
+   H-clips, so an hclip download arrived with a README telling the reader to press a
+   clip into each junction and no clip in the file. One list, and one function that
+   decides what is in the STL. */
 function keysStl() {
   const part = connectorPart();
   const ext = partExtent(part.polys);
@@ -689,21 +736,24 @@ function readmeText() {
   lines.push('');
   if (printPlan) lines.push(`PRINT PLATES: ${printPlan.plates.length} — pre-arranged 3MF files in print-plates/ open directly in your slicer.`);
   lines.push('');
+  /* Which assembly the reader is walked through is the same question the geometry
+     answered, so it is asked with the same predicates. It was asked here with its own
+     copy — connector and keyMount spelled out again — and that copy disagreed with the
+     tool for a top-inserted snap housed in the floor: topClips ships U-clips for that,
+     and the reader was being told to press a flat key into a pair of recesses. */
   if (state.connector === 'puzzle') {
     lines.push('ASSEMBLY: lower the pieces together on a flat surface so each jigsaw lobe');
     lines.push('drops into its cavity, then lift the assembled plate into the drawer.');
-  } else if (state.connector === 'hclip' || ((state.connector === 'puzzlekey' || state.connector === 'snap' || state.connector === 'bowtie') && state.keyMount === 'wall')) {
-    if (state.keyInsert === 'top' && state.connector === 'snap') {
-      lines.push('ASSEMBLY: lay the pieces in the drawer edge to edge, then press a U-clip');
-      lines.push('into each junction from above until it clicks. The bridge sits flush.');
-      lines.push('Print clips flat as oriented with a 0.4 mm nozzle and 2+ walls.');
-    } else if (state.keyInsert === 'top') {
-      lines.push('ASSEMBLY: lay the pieces in the drawer edge to edge, then drop a key into');
-      lines.push('each junction opening from above and press flush.');
-    } else {
-      lines.push('ASSEMBLY: place pieces face-down edge to edge, press a key into each pair');
-      lines.push('of wall pockets, then flip and lower into the drawer.');
-    }
+  } else if (topClips()) {
+    lines.push('ASSEMBLY: lay the pieces in the drawer edge to edge, then press a U-clip');
+    lines.push('into each junction from above until it clicks. The bridge sits flush.');
+    lines.push('Print clips flat as oriented with a 0.4 mm nozzle and 2+ walls.');
+  } else if (keyFromTop()) {
+    lines.push('ASSEMBLY: lay the pieces in the drawer edge to edge, then drop a key into');
+    lines.push('each junction opening from above and press flush.');
+  } else if (keyInWall()) {
+    lines.push('ASSEMBLY: place pieces face-down edge to edge, press a key into each pair');
+    lines.push('of wall pockets, then flip and lower into the drawer.');
   } else if (state.connector === 'puzzlekey' || state.connector === 'snap') {
     lines.push('ASSEMBLY: place pieces face-down edge to edge, press a key into each pair');
     lines.push('of recesses' + (state.connector === 'snap' ? ' until it clicks' : '') + ', then flip and lower into the drawer.');
