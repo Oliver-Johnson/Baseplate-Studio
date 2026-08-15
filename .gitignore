@@ -13,6 +13,10 @@ playwright-report/
 __pycache__/
 *.pyc
 
+# Agent worktrees. These are checkouts of this same repo, so committing them
+# nests a git repository inside itself and publishes work in progress.
+.claude/
+
 # Editor and OS
 .vscode/
 .idea/
