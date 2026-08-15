@@ -664,7 +664,11 @@ function buildBin(G, cfg) {
   /* feet — one closed shell per occupied cell, overlapping the body above */
   const st = baseStyle(c);
   const prof = footProfile(st.footH);
-  const zs = prof.map((p) => p[0]).concat([st.footH + BLOAT]);
+  /* The BLOAT extension goes above the TOP OF THE PROFILE, not above footH. On a
+     truncated foot the profile now carries a 45 degree taper past footH, so anchoring
+     the extension to footH made the sweep fold back on itself — 0, 0.8, 2.0, 4.15,
+     2.05 — and the taper never appeared in the mesh at all. */
+  const zs = prof.map((p) => p[0]).concat([prof[prof.length - 1][0] + BLOAT]);
   for (let i = 0; i < c.u; i++)
     for (let j = 0; j < c.v; j++) {
       if (!mask.has(cellKey(i, j))) continue;
@@ -677,12 +681,37 @@ function buildBin(G, cfg) {
       rings.push(rings[rings.length - 1]);      // BLOAT extension into the body
       polys.push(...sweep(G.makePoly, rings, zs));
       polys.push(...fanCap(G.makePoly, rings[0], zs[0], false, cx, cy));
-      polys.push(...fanCap(G.makePoly, rings[rings.length - 1], st.footH + BLOAT, true, cx, cy));
+      // the same height the sweep ends at, not footH: a truncated foot's taper carries
+      // the profile past footH, and capping at the old height left the shell open at
+      // the top and a stray lid floating inside it
+      polys.push(...fanCap(G.makePoly, rings[rings.length - 1], zs[zs.length - 1], true, cx, cy));
     }
 
   /* body */
   const outer = outlineAt(c.u, c.v, SPEC.half, c.shrink, n);
-  const floorZ = st.footH + c.floorT;
+  /* Where the foot finishes reaching full width. A spec foot gets there at 4.75 on
+     its own; a truncated one carries a 45 degree taper on top of itself, and the body
+     must not start until that taper has finished. The first attempt at this left the
+     body extruded at full width from footH, so the taper was buried inside it: the
+     exterior still stepped 2.15 mm sideways in mid-air, and the buried cone grazing
+     the slab is what put a shimmering band across the underside in a slicer.
+
+     The floor follows it up. A cavity cannot start while the outside is still
+     tapering, or the wall between them thins to nothing — at 3.0 mm on a low bin the
+     taper is at 19.60 and the cavity wall wants 19.55, which is 0.05 mm of plastic. */
+  const footTop = footProfile(st.footH);
+  const bodyBase = footTop[footTop.length - 1][0];
+  /* The cavity cannot start while the outside is still tapering: at 3.2 mm on a low
+     bin the exterior is at 19.85 and the cavity wall wants 19.55, which is 0.3 mm of
+     plastic — under one extrusion. So the floor sits at whichever is higher, the
+     nominal floor above the foot or the top of the taper.
+
+     It does NOT get floorT stacked on top of the taper. The taper is solid material
+     already — 2.15 mm of it on a low bin, thicker than the nominal floor — and
+     charging for a floor above it would cost a low bin 1.1 mm of the depth it exists
+     to provide. The two BLOAT is so the slab encloses the foot's overlap extension
+     rather than ending exactly on it, which leaves 128 boundary edges. */
+  const floorZ = Math.max(st.footH + c.floorT, bodyBase + 2 * BLOAT);
 
   /* Whether there is a lip has to be known before the body: a carved bin's wall
      panels carry their own lip, so the decision cannot wait until after. A lip over
@@ -702,10 +731,10 @@ function buildBin(G, cfg) {
     polys.push(...carvedBody(G, c, mask, H, c.solid ? H - 0.01 : floorZ, zTop,
                              c.solid ? null : lipSteps));
   } else if (c.solid || floorZ >= H - 0.2) {
-    polys.push(...G.extrudePoly(outer, st.footH - BLOAT, H));
+    polys.push(...G.extrudePoly(outer, bodyBase - BLOAT, H));
   } else {
     // solid slab from the top of the feet to the cavity floor
-    polys.push(...G.extrudePoly(outer, st.footH - BLOAT, floorZ + BLOAT));
+    polys.push(...G.extrudePoly(outer, bodyBase - BLOAT, floorZ + BLOAT));
     // wall ring above it
     const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
     const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
@@ -714,7 +743,17 @@ function buildBin(G, cfg) {
     // Start the ring below the cavity floor, buried in the slab. An "open" edge
     // then has its top at floorZ and the ring is still a real volume there rather
     // than a zero-height sliver — the degenerate case simply hides inside the slab.
-    const zBase = floorZ - Math.min(1.0, Math.max(0.2, c.floorT));
+    /* ...but never below where the outside is still tapering. The ring is full width,
+       so a start buried under the taper punches straight through it — on a low bin it
+       reappeared at 20.75 from z 3.30, cutting the 45 degree run off two thirds of the
+       way up and putting back most of the overhang the taper exists to remove.
+
+       The 1.4 BLOAT is to miss the planes the foot already occupies. Landing exactly
+       on the foot's top ring (bodyBase) or its overlap cap (bodyBase + BLOAT) puts two
+       shells face to face, which costs 64 edges used four times apiece. A spec foot is
+       unaffected either way: its own term wins. */
+    const zBase = Math.max(bodyBase + 1.4 * BLOAT,
+                           floorZ - Math.min(1.0, Math.max(0.2, c.floorT)));
     const zTop = edgeHeights(outer, hw, hd, SPEC.r, c.edges, floorZ, H);
     polys.push(...wallRing(G, outer, inner, zBase, zTop));
 

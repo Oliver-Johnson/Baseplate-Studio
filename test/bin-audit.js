@@ -185,5 +185,45 @@ for (const [z, half] of SPEC.prof) {
   console.log(`  z ${z.toFixed(2).padStart(5)}  half ${half.toFixed(2)}  r ${r.toFixed(2)}  centre ${(half - r).toFixed(2)}`);
 }
 
+/* Nothing was checking the OUTSIDE for overhangs, which is why a low-profile bin
+   shipped with a 2.15 mm ledge starting in mid-air, and why the taper meant to fix it
+   sat buried inside the body doing nothing across two commits. Walk the outer
+   silhouette and demand no sideways step wider than the height it rises over — that is
+   45 degrees, the angle a printer holds without support. */
+console.log('\nouter silhouette: no overhang steeper than 45 degrees');
+{
+  const STEP = 0.05;
+  for (const base of ['standard', 'lowlip', 'low'])
+    for (const hUnits of [1, 3]) {
+      const r = buildBin(G, { u: 2, v: 1, hUnits, base });
+      const tris = G.polysToTriangles(r.polys);
+      const at = (z) => {
+        let m = 0;
+        for (const t of tris) {
+          const lo = Math.min(t[0][2], t[1][2], t[2][2]);
+          const hi = Math.max(t[0][2], t[1][2], t[2][2]);
+          if (z < lo - 1e-9 || z > hi + 1e-9) continue;
+          for (let i = 0; i < 3; i++) {
+            const a = t[i], b = t[(i + 1) % 3];
+            if ((a[2] - z) * (b[2] - z) > 0) continue;
+            const s = Math.abs(b[2] - a[2]) < 1e-12 ? 0 : (z - a[2]) / (b[2] - a[2]);
+            m = Math.max(m, Math.abs(a[1] + s * (b[1] - a[1])));
+          }
+        }
+        return m;
+      };
+      let prev = null, worst = 0, where = 0;
+      for (let z = STEP; z <= hUnits * 7; z += STEP) {
+        const v = at(z);
+        if (prev !== null && v - prev > worst) { worst = v - prev; where = z; }
+        prev = v;
+      }
+      const ok = worst <= STEP + 1e-6;
+      console.log(`  ${(base + ' ' + hUnits + 'u').padEnd(13)} widest step ${worst.toFixed(3)} mm ` +
+                  `per ${STEP} mm of height, at z ${where.toFixed(2)}   ${ok ? 'ok' : 'OVERHANG'}`);
+      if (!ok) bad++;
+    }
+}
+
 console.log(bad ? `\n${bad} case(s) FAILED` : '\nall cases clean');
 process.exit(bad ? 1 : 0);
