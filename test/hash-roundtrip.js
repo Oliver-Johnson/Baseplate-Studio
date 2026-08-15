@@ -12,7 +12,7 @@ const { packBin, unpackBin, packLayers, unpackLayers, BIN_DEFAULTS } = require('
 
 const bin = (o) => Object.assign({
   x: 0, y: 0, u: 1, v: 1, hUnits: 3, wall: 1.2, floorT: 1.2, divX: 0, divY: 0,
-  solid: false, edges: { f: 1, b: 1, l: 1, r: 1 }, base: 'standard', scoop: 0, label: 0,
+  solid: false, edges: { f: 1, b: 1, l: 1, r: 1 }, scoop: 0, label: 0,
 }, o);
 
 const CASES = [
@@ -21,15 +21,14 @@ const CASES = [
   ['dividers that are real', bin({ divX: 2, divY: 1 })],
   ['fractional edges', bin({ edges: { f: 0.66, b: 0.5, l: 0.25, r: 1 } })],
   ['open front tray', bin({ edges: { f: 0, b: 0, l: 0, r: 0 } })],
-  ['low profile with scoop and label', bin({ base: 'low', scoop: 8, label: 12 })],
-  ['low lip', bin({ base: 'lowlip' })],
+  ['scoop and label', bin({ scoop: 8, label: 12 })],
   ['solid block', bin({ solid: true })],
   ['awkward decimals', bin({ wall: 0.85, floorT: 2.35, scoop: 6.5, label: 10.5 })],
   ['placed away from the origin', bin({ x: 5, y: 7, u: 3, v: 2, hUnits: 12 })],
 ];
 
 const KEYS = ['x', 'y', 'u', 'v', 'hUnits', 'wall', 'floorT', 'divX', 'divY',
-              'solid', 'base', 'scoop', 'label'];
+              'solid', 'scoop', 'label'];
 let bad = 0;
 
 console.log('single bins');
@@ -47,7 +46,7 @@ console.log('\nmulti-bin, multi-layer');
 {
   const layers = [
     { bins: [bin({ x: 0, y: 0, u: 2, v: 2 }), bin({ x: 3, y: 0, u: 1, v: 4, divY: 2 })] },
-    { bins: [bin({ x: 0, y: 0, u: 2, v: 2, base: 'low', scoop: 8 })] },
+    { bins: [bin({ x: 0, y: 0, u: 2, v: 2, scoop: 8 })] },
     { bins: [] },
   ];
   const back = unpackLayers(packLayers(layers));
@@ -68,10 +67,54 @@ console.log('\nseparators cannot appear inside a value');
   try { packBin(bin({ wall: -1 })); } catch (e) { threw = true; }
   console.log(`  a negative field is rejected           ${threw ? 'guarded' : 'NOT GUARDED'}`);
   if (!threw) bad++;
+  /* 17 since the base-style field went with the base styles: position IS the format,
+     so this number is deliberate and changing it changes what every link means. It
+     was safe to change once, before the site had been advertised and while no link
+     existed to break. Update it on purpose or not at all. */
   const packed = packBin(bin({}));
   const fieldCount = packed.split('-').length;
-  console.log(`  field count is stable                  ${fieldCount === 18 ? '18, correct' : fieldCount + ' — WRONG'}`);
-  if (fieldCount !== 18) bad++;
+  console.log(`  field count is stable                  ${fieldCount === 17 ? '17, correct' : fieldCount + ' — WRONG'}`);
+  if (fieldCount !== 17) bad++;
+}
+
+/* A hash is in the address bar, so it gets hand-edited, truncated by a chat client and
+   pasted back short. None of that may throw, and none of it may produce a bin the
+   geometry cannot build — a white screen over a typo loses the whole layout, while a
+   bin that falls back to its defaults loses one field. */
+console.log('\nmalformed hashes fall back instead of throwing');
+{
+  const G = require('../src/core.js');
+  const { buildBin } = require('../src/bins/bin.js');
+  const JUNK = [
+    ['empty string', ''],
+    ['not a bin at all', 'hello world'],
+    ['truncated after three fields', '0-0-2'],
+    ['a field that is not a number', '0-0-two-2-3-1.2-1.2-0-0-0-1-1-1-1-0-0-0'],
+    ['more fields than the format has', '0-0-2-2-3-1.2-1.2-0-0-0-1-1-1-1-2-8-12-0'],
+    ['negative footprint', '0-0--2--2-3-1.2-1.2-0-0-0-1-1-1-1-0-0-0'],
+    ['a mask that does not fit its footprint', '0-0-2-2-3-1.2-1.2-0-0-0-1-1-1-1-0-0-111111111'],
+  ];
+  for (const [name, s] of JUNK) {
+    let why = '';
+    try {
+      const b = unpackBin(s);
+      if (!(b.u >= 1 && b.v >= 1 && b.hUnits >= 1)) why = `footprint ${b.u}x${b.v}x${b.hUnits}`;
+      else if (!isFinite(b.wall) || !isFinite(b.floorT)) why = 'wall or floor is NaN';
+      else {
+        const r = buildBin(G, { u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
+                                floorT: b.floorT, divX: b.divX, divY: b.divY,
+                                solid: b.solid, edges: b.edges, scoop: b.scoop,
+                                label: b.label, cells: b.cells });
+        if (!r.polys.length) why = 'built an empty mesh';
+      }
+    } catch (e) { why = 'THREW: ' + e.message; }
+    console.log(`  ${name.padEnd(42)}${why ? 'FAILED — ' + why : 'loads'}`);
+    if (why) bad++;
+  }
+  let threw = false;
+  try { unpackLayers('~~junk_more junk~'); } catch (e) { threw = true; }
+  console.log(`  ${'a hash of nothing but separators'.padEnd(42)}${threw ? 'FAILED — threw' : 'loads'}`);
+  if (threw) bad++;
 }
 
 /* Carved footprints ride in the last field as an occupancy bitmap. A rectangle
