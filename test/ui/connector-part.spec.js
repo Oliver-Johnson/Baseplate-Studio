@@ -56,7 +56,15 @@ async function configure(page, cn, km, ki) {
 /* Everything below runs in the page, over bytes the download buttons would have saved:
    stlBinary's output parsed back as binary STL, and build3mfXML's output parsed back as
    XML. Nothing is read off the polygon arrays the two routes were handed. */
-const facts = (page) => page.evaluate(() => {
+/* Wait for the plan before reading it. The baseplate build is asynchronous and
+   yields between pieces, so on a slow or busy machine printPlan is still null when
+   the test asks — which is how this failed in CI, on two workers, while passing
+   locally where the build finished first. A race in the test, not the page. */
+const facts = async (page) => {
+  await page.waitForFunction(
+    () => typeof printPlan !== 'undefined' && printPlan && printPlan.plates,
+    null, { timeout: 60_000 });
+  return page.evaluate(() => {
   const measure = (T) => {
     if (!T.length) return null;
     let vol = 0;
@@ -112,7 +120,8 @@ const facts = (page) => page.evaluate(() => {
     stl: stl ? measure(fromStl(stlBinary(stl.polys, stl.mesh))) : null,
     plateKeys,
   };
-});
+  });
+};
 
 /* 3MF writes vertices at three decimal places, so a coordinate can move by 5e-4 on the
    way through the file and the two meshes can never be byte-identical. The window is
