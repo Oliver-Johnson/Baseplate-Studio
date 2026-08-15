@@ -28,7 +28,15 @@ const checkOnly = process.argv.includes('--check');
 const TOOLS = require('./tools/manifest.js');
 
 const seo = require('./tools/seo.js');
-const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
+/* Everything the build reads is LF, so everything it writes is LF, so the bytes
+   written are the bytes git stores are the bytes a checkout produces — on every
+   platform. .gitattributes pins the checkout, which normally makes this a no-op; it
+   earns its keep when a file arrives in the working tree some other way, from an
+   editor that saves CRLF or a paste into a new source file. Without it the built page
+   inherits its line endings from whatever produced its inputs, and `--check` reports a
+   page as stale over bytes that carry no content. The comparison below is deliberately
+   NOT normalised: the committed artifact has to be exactly these bytes. */
+const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8').replace(/\r\n/g, '\n');
 const fail = (msg, detail) => {
   console.error('\n  BUILD FAILED: ' + msg);
   if (detail) for (const d of detail) console.error('    - ' + d);

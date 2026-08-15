@@ -1,5 +1,10 @@
 /* Simulate CI: splice the COMMITTED sources and compare to the COMMITTED outputs.
-   Uses git's stored bytes, so working-tree line endings can't mask a real failure. */
+   Reading git's stored bytes answers the question `build.js --check` cannot — whether
+   what you are about to push holds together, rather than what happens to be on disk.
+   A page rebuilt but never staged passes there and fails here, which is the case CI
+   sees. (This used to warn that working-tree line endings could hide a stale file on
+   Windows; .gitattributes checks every text file out as LF now, so the working tree
+   and git's bytes no longer disagree.) */
 const { execSync } = require('child_process');
 const seo = require('../tools/seo.js');
 const g = (p) => execSync(`git show HEAD:${p}`, { encoding: 'utf8', maxBuffer: 1e8 });

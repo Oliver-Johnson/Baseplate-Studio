@@ -43,7 +43,23 @@ That covers:
 | `test/hash-roundtrip.js` | a layout survives the URL round trip byte for byte |
 | `test/seo-check.js` | structured data parses and matches the visible prose |
 | `test/ui/` | Playwright: place, carve, merge, resize, share |
-| `test/ci-sim.js` | what CI will see, from git's bytes rather than your working tree — useful on Windows, where line endings can hide a stale file |
+| `test/ci-sim.js` | what CI will see, spliced from git's stored bytes rather than your working tree — so a page you rebuilt but never staged fails here, as it would on CI |
+
+## Line endings
+
+Every text file is checked out **LF, on every platform**, Windows included. That is
+`.gitattributes` doing it deliberately, not an accident of someone's editor. `--check`
+compares the generated pages byte for byte, and parts of them (the FAQ markup, the
+sitemap rows) are generated rather than copied from a source file, so the moment a
+checkout is CRLF those generated fragments are the only LF left in the file and three
+untouched pages report as stale. Let your editor keep LF; there is nothing to
+configure, and setting `core.autocrlf` to fight it will bring the false failures back.
+
+A clone made before this landed still has CRLF pages sitting in it, and `--check` will
+fail once on them. Run `node build.js`, which is what the failure tells you to do
+anyway, then `git add --renormalize .` to settle git's view of the files. Neither
+changes a byte of content — the stored bytes have been LF all along, and only the
+checkout was ever platform-dependent.
 
 ## Geometry, before you change any of it
 

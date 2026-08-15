@@ -75,6 +75,12 @@ function inject(html) {
   if (/"@type"\s*:\s*"FAQPage"/.test(html)) return html;
   const ld = faqJsonLd(html);
   if (!ld) return html;
+  /* LF, not os.EOL. These newlines are generated rather than copied out of a source
+     file, so they are the one part of the page whose line endings do not follow the
+     checkout — which is exactly how they once made three untouched guide pages look
+     stale on Windows. The fix was to pin the checkout to LF (see .gitattributes), so
+     matching the platform here is the wrong instinct: it would reintroduce the same
+     mismatch on Linux instead. */
   const tag = `<script type="application/ld+json">\n${ld}\n</script>\n`;
   return html.replace(/<\/head>/i, tag + '</head>');
 }
@@ -97,7 +103,7 @@ function sitemap(pages) {
       '<changefreq>' + p.changefreq + '</changefreq>' +
       '<priority>' + p.priority + '</priority></url>';
   });
-  const NL = '\n';
+  const NL = '\n';   // LF on every platform, for the reason given in inject()
   return '<?xml version="1.0" encoding="UTF-8"?>' + NL +
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + NL +
     rows.join(NL) + NL + '</urlset>' + NL;
