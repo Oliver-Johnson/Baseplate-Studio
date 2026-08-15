@@ -461,10 +461,14 @@ function computePrintPlan() {
      means asking keysNeeded rather than counting junctions again here. It used to
      count them here, unfiltered, and a wall-housed key skips any seam that overlaps
      by a single cell — so the plan laid out clips the STL does not contain, and the
-     3MF plate carried them too. Two counts of the same thing is one too many. */
+     3MF plate carried them too. Two counts of the same thing is one too many.
+
+     Same for the size: measured off the mesh connectorPart returns, not off the
+     parameters that made it. The two are the same rectangle for a flat key and are
+     nothing like each other for the U-clip, whose prm describes a cross-section. */
   if (KEYED.includes(state.connector)) {
-    const kd = activeKeyDims();
-    items.push({ id: 'key', w: kd.len, d: kd.wEnd, h: kd.depth - 0.15,
+    const ext = partExtent(connectorPart().polys);
+    items.push({ id: 'key', w: ext.w, d: ext.d, h: ext.h,
                  qty: keysNeeded(), stackable: false });
   }
   printPlan = { plates: packPlates(items, state.bedW, state.bedD, gap,
@@ -495,9 +499,11 @@ function renderPrintPlan() {
 function platePolysAndItems(idx) {
   const pl = printPlan.plates[idx];
   const objs = [];
+  // built once: every key unit on the plate is the same part, and buildKey runs CSG
+  let part = null;
   for (const p of pl.placed) {
     let polys;
-    if (p.id === 'key') { const kd = activeKeyDims(); polys = buildKey(activeKeyShape(), kd, kd.depth - 0.15); }
+    if (p.id === 'key') { part = part || connectorPart(); polys = part.polys; }
     else {
       const b = builds[p.id];
       if (!b) continue;
@@ -558,21 +564,45 @@ function activeKeyDims() {
 function activeKeyShape() {
   return state.connector === 'hclip' ? 'snap' : state.keyType;
 }
-function keysArray() {
-  const kd = activeKeyDims();
-  const nKeys = keysNeeded();
-  let polys = [];
-  const cols = Math.ceil(Math.sqrt(nKeys));
-  for (let k = 0; k < nKeys; k++) {
-    const key = buildKey(activeKeyShape(), kd, kd.depth - 0.15);
-    const dx = (k % cols) * (kd.len + 6), dy = Math.floor(k / cols) * (kd.wEnd + 6);
-    for (const p of key) polys.push({ verts: p.verts.map(v => [v[0]+dx, v[1]+dy, v[2]]), plane: p.plane });
+// the plate height the first built piece came out at — the top clip is sized to it
+function builtH() {
+  return layout && builds[layout.pieces[0].id] ? builds[layout.pieces[0].id].meta.H : 4.25;
+}
+/* The one loose part this configuration needs, built once.
+
+   A top-inserted snap takes the U-clip you press in from above; everything else keyed
+   takes a flat key laid into a pocket. They are not variants of one shape — the clip is
+   a sprung cross-section 4.2 mm across, the key is a 13-14 mm slab — so getting this
+   wrong does not print a slightly wrong part, it prints a part that will not go in.
+
+   connectorPart is the ONLY answer to "which part", the way keysNeeded below is the only
+   answer to "how many". It was two answers: keysStl branched on top-insert and
+   platePolysAndItems did not, so a top-insert snap put the U-clip in the loose STL and
+   the bottom-insert key on the 3MF print plate, under the same name, with nothing on the
+   page to say the two files disagreed. The print plan made it three, reserving bed space
+   from the key's parameters whichever part it was.
+   test/ui/connector-part.spec.js exports both routes and compares the geometry. */
+function connectorPart() {
+  if (topClips()) {
+    const prm = Object.assign({ legT: 1.0, legLen: 1.35, legC: 1.4, barb: 0.18,
+                                bridgeW: 1.7, bridgeD: 0.85, wall: 0.6 }, { clr: state.key.clr });
+    return { polys: snapTopClip(prm, builtH()), mesh: 'snap-clips', stem: 'snap-clips' };
   }
-  return { polys, nKeys, kd };
+  const kd = activeKeyDims();
+  return { polys: buildKey(activeKeyShape(), kd, kd.depth - 0.15),
+           mesh: 'connector-keys', stem: `${state.connector}-keys` };
+}
+// bounding box of a part, for laying copies out and for reserving bed space
+function partExtent(polys) {
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (const p of polys) for (const v of p.verts) for (let k = 0; k < 3; k++) {
+    if (v[k] < lo[k]) lo[k] = v[k];
+    if (v[k] > hi[k]) hi[k] = v[k];
+  }
+  return { w: hi[0] - lo[0], d: hi[1] - lo[1], h: hi[2] - lo[2] };
 }
 function downloadFitSample() {
-  const H = layout && builds[layout.pieces[0].id] ? builds[layout.pieces[0].id].meta.H : 4.25;
-  const fsam = buildFitSample(state, H);
+  const fsam = buildFitSample(state, builtH());
   saveBlob(stlBinary(fsam.polys, 'fit-sample'),
     `${state.connector}-fit-sample-clr-${fsam.clrs.map(c=>c.toFixed(2)).join('-')}.stl`);
 }
@@ -582,22 +612,19 @@ function downloadFitSample() {
    file. One list, and one function that decides what is in the STL. */
 const KEYED = ['bowtie', 'puzzlekey', 'snap', 'hclip'];
 function keysStl() {
-  if (state.connector === 'snap' && state.keyInsert === 'top') {
-    const prm = Object.assign({ legT: 1.0, legLen: 1.35, legC: 1.4, barb: 0.18,
-                                bridgeW: 1.7, bridgeD: 0.85, wall: 0.6 }, { clr: state.key.clr });
-    const H = layout && builds[layout.pieces[0].id] ? builds[layout.pieces[0].id].meta.H : 4.25;
-    const one = snapTopClip(prm, H);
-    const nKeys = keysNeeded();
-    let polys = [];
-    const cols = Math.ceil(Math.sqrt(nKeys));
-    for (let k = 0; k < nKeys; k++) {
-      const dx = (k % cols) * 7, dy = Math.floor(k / cols) * 4;
-      for (const p of one) polys.push({ verts: p.verts.map(v => [v[0]+dx, v[1]+dy, v[2]]), plane: p.plane });
-    }
-    return { polys, mesh: 'snap-clips', name: `snap-clips-x${nKeys}.stl` };
+  const part = connectorPart();
+  const ext = partExtent(part.polys);
+  const nKeys = keysNeeded();
+  const cols = Math.ceil(Math.sqrt(nKeys));
+  const polys = [];
+  for (let k = 0; k < nKeys; k++) {
+    // spaced off the part's own extent: the grid used to be spaced off key parameters,
+    // and a puzzlekey's lobes reach past wEnd, so its copies overlapped on the plate
+    const dx = (k % cols) * (ext.w + 6), dy = Math.floor(k / cols) * (ext.d + 6);
+    for (const p of part.polys)
+      polys.push({ verts: p.verts.map(v => [v[0]+dx, v[1]+dy, v[2]]), plane: p.plane });
   }
-  const { polys, nKeys } = keysArray();
-  return { polys, mesh: 'connector-keys', name: `${state.connector}-keys-x${nKeys}.stl` };
+  return { polys, mesh: part.mesh, name: `${part.stem}-x${nKeys}.stl` };
 }
 function downloadKeys() {
   const k = keysStl();
