@@ -247,6 +247,8 @@ function readControls() {
   state.drawerD = num('drawerD', 380);
   state.drawerH = num('drawerH', 84);
   state.plateH = num('plateH', 4.25);
+  state.showDrawer = $('showDrawer').checked;
+  state.drawerFrontH = num('drawerFrontH', 0);
   state.arcSegs = int('arcSegs', 12);
   state.infill = num('infill', 15);
   state.bedW = num('bedW', 256);
@@ -287,6 +289,9 @@ function readControls() {
   } else {
     Object.assign(state, t);
   }
+  // the front measurement is only worth asking for once the drawer is being drawn
+  $('drawerFrontRow').style.display = state.showDrawer ? '' : 'none';
+  $('drawerViewHint').style.display = state.showDrawer ? '' : 'none';
   $('thickRow').style.display = t.solid ? 'none' : '';
   $('divRow').style.display = t.solid ? 'none' : '';
   $('edgeRowA').style.display = t.solid ? 'none' : '';
@@ -1072,7 +1077,7 @@ function drawPlan() {
 }
 
 /* ---------- three.js preview ---------------------------------------------- */
-let scene, camera, renderer, group;
+let scene, camera, renderer, group, drawerGroup;
 let theta = -0.9, phi = 0.95, dist = 600, dragging = null;
 function initThree() {
   const canvas = $('three');
@@ -1083,6 +1088,12 @@ function initThree() {
   const d1 = new THREE.DirectionalLight(0xffffff, 0.85); d1.position.set(1, 1.4, 1); scene.add(d1);
   const d2 = new THREE.DirectionalLight(0x88bbff, 0.35); d2.position.set(-1, -0.6, 0.4); scene.add(d2);
   group = new THREE.Group(); scene.add(group);
+  /* The drawer shell is a sibling of the bins, not a child, and that placement is
+     load-bearing twice over. The hover raycast walks group.children, so a wall in
+     there would be a hit to filter out on every mouse move — and a tooltip to lose
+     the day somebody forgets the filter. And showScene() empties group on every
+     edit, so a wall in there would be torn down and rebuilt because a bin moved. */
+  drawerGroup = new THREE.Group(); scene.add(drawerGroup);
   /* Two-finger pinch to zoom. A touch screen has no wheel, and the expanded preview
      takes touch-action away from the canvas so a drag rotates instead of scrolling —
      which left no way to zoom at all on a phone. One finger rotates as before. */
@@ -1159,6 +1170,102 @@ function geoOf(b) {
 }
 const MATS = [0x6fd0e0, 0x8fdc9a, 0xe0c46f, 0xd08fd0, 0xe08f8f];
 let matCache = [];
+
+/* ---------- the drawer around the bins ------------------------------------
+   An open-topped box drawn around the design so you can judge whether the bins
+   suit the drawer you actually own. It is a view and nothing else: no export, no
+   print plan and no fit check reads any of it.
+
+   Two decisions worth stating.
+
+   The sides stand at `drawerH`, the usable height already on the page, rather than
+   at a side measurement of their own. That number is measured from the same datum
+   — the drawer floor — and it is what the "tallest stack vs available" check
+   compares against, so drawing the walls anywhere else would let the picture and
+   the check disagree: bins over the rim while Checks says it fits, or the reverse.
+   The front is genuinely a second measurement, because a drawer front is routinely
+   taller or lower than the sides it is screwed to, and that is the panel you reach
+   over. Nothing else here is a new number.
+
+   The walls sit at the drawer's inside dimensions, not the grid's. grid() floors
+   the drawer to whole 42 mm cells, and the remainder it throws away is exactly the
+   thing this feature exists to show — draw the walls on the grid and the margin
+   vanishes, which is the one measurement you cannot get from the map. */
+const DRAWER_T = 8;        // drawn wall thickness, mm — a drawer, not a sheet of foil
+const DRAWER_FLOOR_T = 3;
+/* The floor is dropped a hair below the baseplate rather than left touching it.
+   Physically the plate sits on the drawer bottom, so the two faces are coincident,
+   and coincident faces are the one thing that reliably flickers. Nobody can see
+   0.4 mm at this scale; everybody can see z-fighting. */
+const DRAWER_FLOOR_GAP = 0.4;
+let drawerMat = null, drawerEdgeMat = null, drawerKey = '';
+
+function drawerBox() {
+  const g = grid();
+  /* grid() forces at least one cell even in a drawer too small to hold one, so on
+     that input the grid is bigger than the drawer. Clamp, or the walls close inside
+     the bins and the picture is a lie in the other direction. */
+  const W = Math.max(state.drawerW, g.nx * SPEC.pitch);
+  const D = Math.max(state.drawerD, g.ny * SPEC.pitch);
+  const side = Math.max(0, state.drawerH);
+  return { W, D, side,
+           // 0 means "same as the sides" — one fewer number to keep in step
+           front: state.drawerFrontH > 0 ? state.drawerFrontH : side,
+           floor: -state.plateH };   // y = 0 is the top of the baseplate
+}
+
+function syncDrawer() {
+  const b = drawerBox();
+  const key = state.showDrawer ? [b.W, b.D, b.side, b.front, b.floor].join('/') : '';
+  // Built when its inputs change and never otherwise: render() runs on every drag
+  // frame and every pinch, and showScene() runs on every edit to a bin.
+  if (key === drawerKey) return;
+  drawerKey = key;
+  while (drawerGroup.children.length) drawerGroup.children.pop().geometry.dispose();
+  if (!key) return;
+
+  if (!drawerMat) {
+    /* depthWrite off is what keeps this a window rather than a lid. The shell is
+       drawn after the opaque bins and still depth-TESTED against them, so a wall
+       behind a bin is hidden and a wall in front of one tints it instead of
+       replacing it. It also settles the case where the drawer is an exact multiple
+       of 42 mm: the wall's inner face then lands on the baseplate's edge, and two
+       surfaces at the same depth only fight when both are writing. */
+    drawerMat = new THREE.MeshLambertMaterial({
+      color: 0x9fb4c6, transparent: true, opacity: 0.16,
+      side: THREE.DoubleSide, depthWrite: false });
+    drawerEdgeMat = new THREE.LineBasicMaterial({
+      color: 0xcfe2f0, transparent: true, opacity: 0.45, depthWrite: false });
+  }
+
+  /* A box plus its own outline. At 16% opacity four flat panels read as haze; the
+     edges are what make them read as a drawer. */
+  const panel = (w, h, d, x, yBase, z) => {
+    if (h <= 0) return;
+    const geo = new THREE.BoxGeometry(w, h, d);
+    const m = new THREE.Mesh(geo, drawerMat);
+    m.position.set(x, yBase + h / 2, z);
+    drawerGroup.add(m);
+    const e = new THREE.LineSegments(new THREE.EdgesGeometry(geo), drawerEdgeMat);
+    e.position.copy(m.position);
+    drawerGroup.add(e);
+  };
+
+  const T = DRAWER_T, hw = b.W / 2, hd = b.D / 2;
+  panel(b.W, DRAWER_FLOOR_T, b.D, 0,
+        b.floor - DRAWER_FLOOR_GAP - DRAWER_FLOOR_T, 0);
+  /* Side walls run the full outer depth and the front and back stop at the inside
+     width, so the four abut instead of overlapping. Overlapping translucent panels
+     double their tint, and the result is four dark posts at the corners of an
+     otherwise even box. */
+  panel(T, b.side, b.D + 2 * T, -(hw + T / 2), b.floor, 0);
+  panel(T, b.side, b.D + 2 * T, hw + T / 2, b.floor, 0);
+  panel(b.W, b.side, T, 0, b.floor, -(hd + T / 2));         // back
+  // Front of the drawer is the bottom of the map, which is +z here — the same
+  // convention seat/showScene use when they negate the grid's y.
+  panel(b.W, b.front, T, 0, b.floor, hd + T / 2);
+}
+
 function showScene() {
   if (!renderer) return;
   while (group.children.length) group.remove(group.children[0]);
@@ -1189,6 +1296,7 @@ function showScene() {
       group.add(m);
     }
   });
+  syncDrawer();
   render();
 }
 function render() {
@@ -1280,7 +1388,7 @@ function layoutReadme() {
   L.push('PRINTING: flat as oriented, no supports. Print one bin and check it seats');
   L.push('in your baseplate before committing to the whole drawer.');
   L.push('');
-  L.push('Layout link: ' + shareLink());
+  L.push('Layout link: ' + designLink());
   return L.join('\n');
 }
 function platePolysAndItems(idx) {
@@ -1450,11 +1558,20 @@ $('exportDlg').addEventListener('click', (e) => {
 });
 
 /* ---------- shared project descriptor -------------------------------------- */
-const KEYS = { w: 'drawerW', d: 'drawerD', dh: 'drawerH', ph: 'plateH' };
+const KEYS = { w: 'drawerW', d: 'drawerD', dh: 'drawerH', ph: 'plateH',
+               dfh: 'drawerFrontH' };
+/* Keys that describe how the design is being LOOKED at rather than what it is. They
+   travel in a shared link, because a link that does not reproduce what the sender saw
+   is not much of a share — but they are struck out of the link the README carries.
+   The README ships inside the download, so anything that reaches it turns a view
+   toggle into a changed exported byte, and the drawer shell is not allowed to change
+   one. See designLink(). */
+const VIEW_KEYS = ['dv', 'dfh'];
 // packing lives in bin.js so it can be tested headlessly
 function descriptor() {
   const o = Object.assign({}, hashExtras, { v: 2 });
   for (const [k, id] of Object.entries(KEYS)) o[k] = state[id];
+  o.dv = state.showDrawer ? 1 : 0;
   o.bl = packLayers(layers);
   o.bseg = state.arcSegs;
   const notes = layers.map((L) => L.bins.map((b) => b.note || ''));
@@ -1464,6 +1581,12 @@ function descriptor() {
 const encodeDesc = (o) => Object.entries(o).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
 function shareLink() {
   return location.origin + location.pathname + '#' + encodeDesc(descriptor());
+}
+// the same layout with the view stripped, so the README's bytes depend on the design
+function designLink() {
+  const o = descriptor();
+  for (const k of VIEW_KEYS) delete o[k];
+  return location.origin + location.pathname + '#' + encodeDesc(o);
 }
 function loadFromHash() {
   const h = location.hash.replace(/^#/, '');
@@ -1477,6 +1600,8 @@ function loadFromHash() {
     if (k === 'v') continue;
     if (k === 'bl') { const ls = unpackLayers(val); if (ls.length) layers = ls; continue; }
     if (k === 'bseg') { $('arcSegs').value = val; continue; }
+    // a checkbox, so it cannot ride the generic .value path below
+    if (k === 'dv') { $('showDrawer').checked = val === '1'; continue; }
     if (k === 'bnotes') { pendingNotes = val; continue; }
     const id = KEYS[k];
     if (!id) { hashExtras[k] = val; continue; }
@@ -1517,6 +1642,15 @@ $('presetTray').addEventListener('click', () => {
 });
 $('solid').addEventListener('change', schedule);
 $('arcSegs').addEventListener('change', schedule);
+/* The drawer shell deliberately does not go through schedule(). That path clears the
+   geometry cache and rebuilds every bin mesh, which is the right thing for anything
+   that changes what gets printed and pure waste for something that changes only what
+   is drawn around it. */
+const drawerViewChanged = () => { readControls(); showScene(); };
+for (const id of ['showDrawer', 'drawerFrontH']) {
+  $(id).addEventListener('input', drawerViewChanged);
+  $(id).addEventListener('change', drawerViewChanged);
+}
 for (const s of document.querySelectorAll('section.p h2'))
   s.addEventListener('click', () => s.parentElement.classList.toggle('closed'));
 
