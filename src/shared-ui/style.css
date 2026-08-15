@@ -196,7 +196,7 @@ a.ghost{display:inline-flex;align-items:center;justify-content:center;text-decor
    off every edge with nothing to say what it was. It read as a failed render, and it was
    the largest thing on the page. An empty preview should look deliberately empty. */
 #threeempty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  padding:0 24px;text-align:center;color:var(--dim);font-size:13px}
+  padding:0 24px;text-align:center;color:var(--dim);font-size:13px;pointer-events:none}
 .previewbtn{position:absolute;top:8px;right:8px;z-index:3;
   background:rgba(12,17,22,.78);color:var(--cyan);border:1px solid var(--line);
   border-radius:6px;padding:7px 12px;font:inherit;font-size:12px;cursor:pointer}

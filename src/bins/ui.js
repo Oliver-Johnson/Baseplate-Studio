@@ -1300,10 +1300,15 @@ function showScene() {
      you have asked to look at the drawer, and an empty one is a real answer. */
   const empty = allBins().length === 0;
   const shell = !!state.showDrawer;
+  /* The canvas stays visible and simply has nothing in it. Hiding it seemed tidier
+     and broke the touch gestures: a hidden canvas takes no pointer events, so pinch
+     and rotate had nothing to act on before the first bin was placed. */
   $('threeempty').style.display = empty && !shell ? '' : 'none';
-  $('three').style.visibility = empty && !shell ? 'hidden' : '';
   $('threehint').style.display = empty && !shell ? 'none' : '';
-  if (empty && !shell) { renderer.render(scene, camera); return; }
+  /* syncDrawer before returning, not after: it is what tears the shell down when the
+     toggle goes off, and skipping it left the drawer standing in an empty preview
+     after you had switched it off. */
+  if (empty && !shell) { syncDrawer(); renderer.render(scene, camera); return; }
 
   const plate = new THREE.Mesh(new THREE.BoxGeometry(gw, state.plateH, gd),
     new THREE.MeshLambertMaterial({ color: 0x2b3947 }));

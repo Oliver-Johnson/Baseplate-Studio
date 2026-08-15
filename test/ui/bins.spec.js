@@ -211,13 +211,15 @@ test('libraries load locally and nothing calls out to a third party', async ({ p
 test('an empty drawer says so instead of showing a bare slab', async ({ page }) => {
   await expect(page.locator('#threeempty')).toBeVisible();
   await expect(page.locator('#threeempty')).toHaveText(/place a bin/i);
+  // nothing in the scene, rather than a slab nobody can identify
+  expect(await page.evaluate(() => group.children.length)).toBe(0);
+  // and the canvas is still live, or the touch gestures have nothing to act on
   expect(await page.locator('#three').evaluate((c) => getComputedStyle(c).visibility))
-    .toBe('hidden');
+    .not.toBe('hidden');
 
   await H.dragCells(page, [0, 0], [1, 1]);
   await expect(page.locator('#threeempty')).toBeHidden();
-  expect(await page.locator('#three').evaluate((c) => getComputedStyle(c).visibility))
-    .not.toBe('hidden');
+  expect(await page.evaluate(() => group.children.length)).toBeGreaterThan(0);
 
   // and it comes back, so this is state and not a one-shot on load
   await page.locator('#clearAll').click();
