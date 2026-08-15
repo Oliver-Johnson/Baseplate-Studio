@@ -39,7 +39,7 @@ That covers:
 | `test/bin-audit.js` | bin geometry against the published spec, and **every mesh watertight** |
 | `test/plate-audit.js` | the same, for baseplates: every piece of every representative plate configuration, plus the minimum CSG cases and the rim cap tiling |
 | `test/fit-check.js` | a spec bin fits the socket the baseplate ships |
-| `test/stack-check.js` | which base styles stack on which, measured up the lip rather than asserted in a comment — a short foot must not perch on a full lip |
+| `test/stack-check.js` | a bin seats in the one below it with the spec's 0.25 mm at **every** height up the lip, not merely somewhere positive — the foot comes from the published spec and the lip from an inset of the bin outline, so the two are maintained in different places and can drift apart while both still look right |
 | `test/hash-roundtrip.js` | a layout survives the URL round trip byte for byte |
 | `test/seo-check.js` | structured data parses and matches the visible prose |
 | `test/ui/` | Playwright: place, carve, merge, resize, share |
