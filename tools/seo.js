@@ -79,4 +79,26 @@ function inject(html) {
   return html.replace(/<\/head>/i, tag + '</head>');
 }
 
-module.exports = { inject, faqJsonLd, questions, plain };
+/* The sitemap, built from the same page list the build uses.
+ *
+ * Hand-maintained sitemaps go stale in two ways, and both cost you: a page added and
+ * not listed may never be crawled, and a lastmod that lies teaches the crawler to
+ * ignore your lastmod. Generating it from the pages that actually exist, dated by the
+ * commit that last touched each one, removes both.
+ */
+function sitemap(pages, lastmodFor) {
+  const rows = pages.map((p) => {
+    const loc = 'https://drawerforge.co.uk/' + p.out.replace(/index\.html$/, '');
+    const mod = lastmodFor ? lastmodFor(p) : null;
+    return '  <url><loc>' + loc + '</loc>' +
+      (mod ? '<lastmod>' + mod + '</lastmod>' : '') +
+      '<changefreq>' + p.changefreq + '</changefreq>' +
+      '<priority>' + p.priority + '</priority></url>';
+  });
+  const NL = '\n';
+  return '<?xml version="1.0" encoding="UTF-8"?>' + NL +
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + NL +
+    rows.join(NL) + NL + '</urlset>' + NL;
+}
+
+module.exports = { inject, faqJsonLd, questions, plain, sitemap };

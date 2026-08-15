@@ -29,6 +29,7 @@ const TOOLS = [
     name: 'baseplates',
     template: 'src/template.html',
     out: 'index.html',
+    changefreq: 'weekly', priority: '1.0',
     parts: { CSS: 'src/shared-ui/style.css', CHROME: 'src/shared-ui/chrome.js',
              CORE: 'src/core.js', UI: 'src/ui.js' },
     uiPart: 'UI',
@@ -37,6 +38,7 @@ const TOOLS = [
     name: 'bins',
     template: 'src/bins/template.html',
     out: 'bins/index.html',
+    changefreq: 'weekly', priority: '0.9',
     parts: { CSS: 'src/shared-ui/style.css', CHROME: 'src/shared-ui/chrome.js',
              CORE: 'src/core.js', BIN: 'src/bins/bin.js', UI: 'src/bins/ui.js' },
     uiPart: 'UI',
@@ -47,13 +49,16 @@ const TOOLS = [
     name: 'guide',
     template: 'src/guide/template.html',
     out: 'guide/index.html',
+    changefreq: 'monthly', priority: '0.8',
     parts: { CSS: 'src/shared-ui/style.css', CHROME: 'src/shared-ui/chrome.js' },
   },
   { name: 'guide-split', template: 'src/guide/split.html',
     out: 'guide/split/index.html',
+    changefreq: 'monthly', priority: '0.7',
     parts: { CSS: 'src/shared-ui/style.css', CHROME: 'src/shared-ui/chrome.js' } },
   { name: 'guide-sizes', template: 'src/guide/drawer-sizes.html',
     out: 'guide/drawer-sizes/index.html',
+    changefreq: 'monthly', priority: '0.7',
     parts: { CSS: 'src/shared-ui/style.css', CHROME: 'src/shared-ui/chrome.js' } },
 ];
 
@@ -141,6 +146,34 @@ for (const tool of TOOLS) {
   fs.writeFileSync(outPath, out);
   console.log(`  built ${tool.out.padEnd(16)} ${String(out.length).padStart(7)} bytes` +
               `   ids: ${referenced.size} referenced / ${templateIds.size} present`);
+}
+
+/* The sitemap is generated, not maintained. A page added and not listed may never be
+   crawled, and a lastmod that lies teaches the crawler to stop trusting lastmod. Dates
+   come from the commit that last touched each page; if git is unavailable the entry
+   simply carries no date rather than a made-up one. */
+{
+  const lastmodFor = (t) => {
+    try {
+      const out = execFileSync('git', ['log', '-1', '--format=%cI', '--', t.out],
+                               { cwd: ROOT, encoding: 'utf8' }).trim();
+      return out ? out.slice(0, 10) : null;
+    } catch (e) { return null; }
+  };
+  const xml = seo.sitemap(TOOLS, lastmodFor);
+  const smPath = path.join(ROOT, 'sitemap.xml');
+  const current = fs.existsSync(smPath) ? fs.readFileSync(smPath, 'utf8') : '';
+  if (checkOnly) {
+    if (current !== xml) {
+      console.error('  STALE: sitemap.xml does not match the built pages — run `node build.js`');
+      stale++;
+    } else {
+      console.log(`  sitemap.xml up to date (${TOOLS.length} urls)`);
+    }
+  } else if (current !== xml) {
+    fs.writeFileSync(smPath, xml);
+    console.log(`  wrote sitemap.xml    ${TOOLS.length} urls`);
+  }
 }
 
 if (checkOnly && stale) {
