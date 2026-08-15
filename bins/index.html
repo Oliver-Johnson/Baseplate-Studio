@@ -4820,7 +4820,12 @@ function drawPlan() {
 
 /* ---------- three.js preview ---------------------------------------------- */
 let scene, camera, renderer, group, drawerGroup;
-let theta = -0.9, phi = 0.95, dist = 600, dragging = null;
+/* +theta puts the camera on the front side. It was -0.9, which sat the camera
+   behind the drawer: the front row of the map rendered furthest away and the whole
+   layout read mirrored against the map you had just drawn it on. Nothing pointed
+   that out until the drawer shell arrived and its tall front panel appeared at the
+   back. Same elevation and distance, same view, just from the side you open. */
+let theta = 0.9, phi = 0.95, dist = 600, dragging = null;
 function initThree() {
   const canvas = $('three');
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });

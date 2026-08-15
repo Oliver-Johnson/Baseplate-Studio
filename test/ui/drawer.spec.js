@@ -297,3 +297,24 @@ test('the toggle and the front height ride in the shared link', async ({ page })
   expect(readme).not.toContain('dv=');
   expect(readme).not.toContain('dfh=');
 });
+
+/* The preview must show the drawer from the side you open it. It did not: the
+   default camera sat behind, so the front row of the map rendered furthest away and
+   the layout read mirrored against the map it was drawn on. Nobody noticed until the
+   drawer shell put a tall front panel at the back of the picture. */
+test('the preview looks at the drawer from the front, as the map does', async ({ page }) => {
+  await H.openBins(page);
+  const r = await page.evaluate(() => {
+    const g = grid();
+    const cam = [dist * Math.sin(phi) * Math.cos(theta),
+                 30 + dist * Math.cos(phi),
+                 dist * Math.sin(phi) * Math.sin(theta)];
+    // showScene negates the grid's y, so the front row (y = 0) ends up at +z
+    const zOf = (by) => -((by + 0.5) * 42 - (g.ny * 42) / 2);
+    const d = (z) => Math.hypot(cam[0], cam[2] - z);
+    return { front: d(zOf(0)), back: d(zOf(g.ny - 1)), spread: Math.abs(zOf(0) - zOf(g.ny - 1)) };
+  });
+  // a grid deep enough for the two rows to be meaningfully apart, or this proves nothing
+  expect(r.spread).toBeGreaterThan(100);
+  expect(r.front, 'the front row must be the near one').toBeLessThan(r.back);
+});
