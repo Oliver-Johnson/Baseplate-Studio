@@ -38,6 +38,35 @@
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px}
 a{color:var(--cyan)}
+
+/* ---- scrollbars ----
+   The rail and the stage are real scroll containers, not just the page, and the rail
+   on the bins tool is long enough that its scrollbar is a navigation aid rather than
+   decoration. Left alone it was the platform's light slab dropped into a dark panel.
+   Both mechanisms are set because neither covers everyone: scrollbar-color is the
+   standard and what Firefox reads, the ::-webkit-* pseudo-elements are what Chrome
+   and Safari read. Both properties inherit, so :root reaches every container.
+   Deliberately not overlay-thin — 12 px with an 8 px thumb is still something you can
+   put a pointer on.
+
+   The @supports guard is not decoration: Chrome honours the standard properties when
+   they are set and then ignores the pseudo-elements entirely, so declaring both
+   unconditionally left Chrome with a plain 15 px system bar and threw the styling
+   away. Firefox, which has no ::-webkit-scrollbar, takes the standard branch. */
+@supports not selector(::-webkit-scrollbar){
+  :root{scrollbar-width:thin;scrollbar-color:var(--line) var(--bg)}
+}
+::-webkit-scrollbar{width:12px;height:12px}
+::-webkit-scrollbar-track{background:var(--bg)}
+/* the transparent-looking inset is a border in the track colour, clipped away from the
+   thumb's own fill — that keeps the thumb round at both ends without a second element */
+::-webkit-scrollbar-thumb{background:var(--line);border:2px solid var(--bg);
+  background-clip:padding-box;border-radius:99px;min-height:44px;
+  transition:background-color .15s}
+::-webkit-scrollbar-thumb:hover{background:var(--dim);background-clip:padding-box}
+::-webkit-scrollbar-thumb:active{background:var(--cyan);background-clip:padding-box}
+::-webkit-scrollbar-corner{background:var(--bg)}
+@media(prefers-reduced-motion:reduce){::-webkit-scrollbar-thumb{transition:none}}
 header{padding:22px 26px 16px;border-bottom:1px solid var(--line);
   background:
     repeating-linear-gradient(0deg,transparent,transparent 20px,rgba(79,195,232,.045) 20px,rgba(79,195,232,.045) 21px),
@@ -55,19 +84,18 @@ header .privacy::before{content:"● ";color:var(--cyan)}
 .stage{padding:16px 20px 60px;overflow-y:auto;max-height:calc(100vh - 96px)}
 @media(max-width:980px){.stage{max-height:none}}
 
-/* Stacked layout: export goes last.
-   Side by side, the rail is a column and the export panel at the bottom of it reads
-   as the end of the process. Stacked, the rail comes before the stage in the
-   document, so export landed halfway down the page — before you had seen the
-   preview, the cut map or the print plan it is meant to follow. Letting the rail's
-   children join the page's flex flow lets that one panel be ordered past the stage
-   without moving it in the markup, where its position is correct. */
+/* Stacked layout.
+   The rail comes before the stage in the document, which is right side by side and
+   wrong stacked — settings you have already filled in would push the working surface
+   down the page. Letting the rail's children join the page's flex flow lets them be
+   ordered around the stage without moving them in the markup, where they belong.
+   (Export used to need an order of its own here, to stop panel 07 landing halfway up
+   a stacked page. It is a dialog now, so there is nothing left to reorder.) */
 @media(max-width:980px){
   .app{display:flex;flex-direction:column}
   .app > .rail{display:contents}
   .rail > section.p{order:10}
   .app > .stage{order:50;border-top:1px solid var(--line)}
-  .rail > section.p.export{order:90;margin:0 16px 12px}
 }
 section.p{background:var(--panel);border:1px solid var(--line);border-radius:8px;margin-bottom:12px;overflow:hidden}
 section.p>h2{font-size:11px;letter-spacing:.14em;color:var(--dim);padding:10px 13px;cursor:pointer;
@@ -112,7 +140,12 @@ button.act.on{background:var(--amber);box-shadow:0 0 0 2px rgba(0,0,0,.35) inset
 button.ghost{background:transparent;color:var(--cyan);border:1px solid var(--cyan);border-radius:6px;
   padding:8px 12px;cursor:pointer;font-size:12.5px}
 button.ghost:disabled{opacity:.4;cursor:default}
-.export .body{gap:8px}
+/* "back to baseplates" is a link, because it goes somewhere, but it is a button in
+   every other respect — including needing to be a real size to tap. Without this it
+   inherited none of the button padding and stood 19 px tall. */
+a.ghost{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;
+  background:transparent;color:var(--cyan);border:1px solid var(--cyan);border-radius:6px;
+  padding:8px 12px;font-size:12.5px}
 .stagecard{background:var(--panel);border:1px solid var(--line);border-radius:8px;margin-bottom:14px}
 .stagecard h3{font-size:11px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase;
   padding:10px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center}
@@ -253,6 +286,124 @@ article.doc .cta{margin-top:34px;padding-top:18px;border-top:1px solid var(--lin
 #fillmap .cellpart{rx:0;stroke:none}
 #fillmap .binedge{stroke:var(--cyan);stroke-width:2;stroke-linecap:round;pointer-events:none}
 #fillmap .bin.sel.cellpart{stroke:none}
+
+/* ---- download dialog ------------------------------------------------------
+   Downloading is one action taken once, at the end. As a panel it sat in the page
+   the whole time you were designing, competing for attention with the thing being
+   designed — and on both tools it had grown to five or six buttons whose names were
+   the only clue to what came out of them. It is a dialog now, and its job is to
+   confirm what you are about to get before you get it: the design, whether it fits
+   the printer you configured, and every file by name. */
+.exportbar{padding:12px 14px 14px;display:grid;gap:9px}
+/* Copying the link sits beside the download rather than inside the dialog. Sharing is
+   not downloading, and the design lives only in that link — neither tool writes it to
+   the address bar — so burying the one way to get it inside something titled "Download
+   your baseplate" made it unfindable for the job it is actually for. */
+.exportrow{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button.act.big{font-size:15px;padding:14px 20px;min-width:250px}
+
+/* The reset zeroes every margin, which for a modal dialog means the browser's own
+   centring is gone and it pins to the top-left. margin:auto puts it back.
+   display lives on [open] only — an author `display` on the bare element would beat
+   the UA's `dialog:not([open]){display:none}` and the dialog would never be shut. */
+dialog.sheet{margin:auto;border:1px solid var(--line);border-radius:10px;padding:0;
+  background:var(--panel);color:var(--ink);font-family:var(--sans);font-size:14px;
+  width:min(600px,calc(100vw - 20px));max-height:calc(100dvh - 36px);overflow:hidden;
+  box-shadow:0 18px 50px rgba(0,0,0,.6)}
+dialog.sheet[open]{display:flex;flex-direction:column}
+dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
+.sheethead{display:flex;align-items:center;gap:10px;padding:13px 14px;flex:none;
+  border-bottom:1px solid var(--line)}
+.sheethead h2{font-size:15px;font-weight:600;letter-spacing:.02em}
+.sheethead button{margin-left:auto;background:none;border:1px solid transparent;color:var(--dim);
+  font-size:20px;line-height:1;cursor:pointer;border-radius:6px;min-width:40px;min-height:40px}
+.sheethead button:hover{color:var(--ink);border-color:var(--line)}
+/* flex:none on every child matters: the file list hides its own overflow, so its
+   min-content height is zero, and inside a height-limited box that let the browser
+   squash the list — the dialog looked like it simply stopped listing files halfway
+   down. Children keep their height and the body scrolls instead. */
+.sheetbody{padding:13px 14px 16px;display:flex;flex-direction:column;gap:11px;overflow-y:auto}
+.sheetbody > *{flex:none}
+/* what the design is */
+.exsum{font-family:var(--mono);font-size:12.5px;line-height:1.55;background:var(--panel2);
+  border:1px solid var(--line);border-radius:6px;padding:10px 12px;white-space:pre-line}
+/* whether it fits, stated plainly rather than left to a table of "fits / TOO BIG" */
+.exfit{display:flex;gap:9px;font-size:13px;line-height:1.5;border-radius:6px;padding:10px 12px;
+  border:1px solid var(--line)}
+.exfit::before{font-weight:700;flex:none}
+.exfit.ok{background:rgba(79,195,232,.07);border-color:rgba(79,195,232,.4)}
+.exfit.ok::before{content:"✓";color:var(--cyan)}
+.exfit.bad{background:rgba(232,123,106,.09);border-color:rgba(232,123,106,.5)}
+.exfit.bad::before{content:"✕";color:var(--red)}
+.exfit.wait::before{content:"…";color:var(--dim)}
+/* the file list: 1px gaps over the border colour make the rules, so a row can carry
+   its own background without a second border rule per side */
+.exfiles{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
+  border-radius:7px;overflow:hidden}
+.exgroup{background:var(--panel2);padding:7px 12px;font-size:11.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--dim)}
+.exrow{background:var(--panel);display:grid;grid-template-columns:1fr auto;gap:12px;
+  align-items:center;padding:9px 12px}
+.exrow .nm{font-size:13px}
+.exrow .meta{display:block;font-family:var(--mono);font-size:11.5px;color:var(--dim);margin-top:3px}
+.exrow button{white-space:nowrap}
+.exnote{font-size:12px;color:var(--dim);line-height:1.5}
+
+/* ---- small screens --------------------------------------------------------
+   Measured at 375 px, most of this interface was 11 px text and 31 px controls —
+   readable on a desktop monitor at arm's length, not on a phone in a workshop. Text
+   goes to 12 px or more and every control to a 40 px target. Scoped to the width
+   where the layout is already one column, so the desktop rail keeps its density. */
+@media(max-width:980px){
+  header .privacy{font-size:12px}
+  header nav a{font-size:12px;padding:0 16px;min-height:40px;display:flex;align-items:center}
+  section.p>h2{font-size:12px;padding:13px}
+  section.p>h2 .n{font-size:12px}
+  .stagecard h3{font-size:12px}
+  .stagecard h3 .tail{font-size:12px}
+  label.f{font-size:12px}
+  .hint{font-size:12px}
+  .tog{font-size:13px;min-height:40px}
+  /* every control a finger has to hit */
+  input,select,button{min-height:40px}
+  input,select{padding:9px 10px}
+  .seg button{font-size:13px}
+  button.ghost,a.ghost{font-size:13px}
+  a.ghost{min-height:40px}
+  table.pieces th{font-size:12px}
+  table.pieces td{font-size:13px}
+  table.pieces button{font-size:12px;padding:5px 12px}
+  /* Six columns of piece detail do not fit a phone. Tightening the gutters gets most
+     of the way; the scroll is the honest fallback, because the alternative is what was
+     happening before — the last column, which holds the STL button, silently cut off
+     at the edge of the card with no way to reach it. */
+  table.pieces th,table.pieces td{padding:8px 8px}
+  .stagecard table.pieces{display:block;overflow-x:auto}
+  /* the guides have tables of their own, under a different class, and they were the
+     one place 11 px text survived this pass */
+  article.doc table.doc th{font-size:12px}
+  article.doc table.doc th,article.doc table.doc td{padding:7px 8px}
+  article.doc table.doc{display:block;overflow-x:auto}
+  #warnings .w{font-size:12.5px}
+  #status{font-size:12px}
+  #threehint{font-size:12px}
+  .previewbtn{font-size:13px;min-height:40px}
+  footer{font-size:13px}
+  footer .mono{font-size:12px}
+  .kofi b{font-size:13px}
+  .kofi i{font-size:12px}
+  .kofi button{min-width:40px;font-size:20px}
+  .exrow .nm{font-size:13.5px}
+  .exrow .meta{font-size:12px}
+  .exgroup{font-size:12px}
+  .exsum{font-size:12.5px}
+  .exnote{font-size:12.5px}
+  .exportrow{flex-direction:column;align-items:stretch}
+  button.act.big{width:100%}
+  /* the toggle switch itself stays 36×20 — the whole .tog label is the target, and
+     it is the label that had to grow */
+  .tog input{min-height:20px}
+}
 </style>
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Will the seams be visible or catch on things?","acceptedAnswer":{"@type":"Answer","text":"The seam sits in the wall between cells, where the bins already leave a gap. Bins bridge across it and hide it. A well-fitting joint is not noticeable in use."}},{"@type":"Question","name":"Is a split plate weaker than one piece?","acceptedAnswer":{"@type":"Answer","text":"In the drawer, it barely matters — the plate rests on a flat floor and is contained by the drawer walls, so it is never asked to resist bending. Staggering the joints removes the one real weakness, a continuous seam across the full width."}},{"@type":"Question","name":"Can I print the pieces in different colours?","acceptedAnswer":{"@type":"Answer","text":"Yes, and it looks deliberate rather than accidental if you stagger the joints. Each piece is a separate STL."}},{"@type":"Question","name":"What if one piece still doesn't fit after splitting?","acceptedAnswer":{"@type":"Answer","text":"Add another cut. The cut map lets you click any grid line to place one by hand, and it warns when a piece exceeds your bed rather than letting you discover it in the slicer."}}]}

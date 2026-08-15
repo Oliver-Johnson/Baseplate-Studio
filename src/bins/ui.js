@@ -391,8 +391,20 @@ function drawMap() {
   const sc = Math.min(availW / W, availH / H, CELL_PX / S);
   svg.setAttribute('width', Math.round(W * sc));
   svg.setAttribute('height', Math.round(H * sc));
-  if (top) top.style.gridTemplateColumns = wide
-    ? '' : `${Math.round(W * sc) + 30}px minmax(${PREVIEW_MIN}px, 1fr)`;
+  /* Sizing the two columns from the map is only meaningful where there ARE two
+     columns. The stylesheet collapses .stagetop to one column below 1280 px, and an
+     inline style beats a media query — so on a phone this pinned a 320 px preview
+     beside the map and hung the whole card off the right edge of the screen.
+     Clearing the inline style and asking the element how many tracks it ended up with
+     keeps that breakpoint in one place, the stylesheet, instead of repeating the
+     number here where the two could drift apart. */
+  if (top) {
+    top.style.gridTemplateColumns = '';
+    const twoCol = !wide &&
+      getComputedStyle(top).gridTemplateColumns.trim().split(/\s+/).length > 1;
+    if (twoCol)
+      top.style.gridTemplateColumns = `${Math.round(W * sc) + 30}px minmax(${PREVIEW_MIN}px, 1fr)`;
+  }
 
   while (svg.firstChild) svg.removeChild(svg.firstChild);
   const el = (n, a) => { const e = document.createElementNS(SVGNS, n);
@@ -990,7 +1002,7 @@ function refresh() {
   for (const btn of $('typeRows').querySelectorAll('button[data-t]'))
     btn.addEventListener('click', () => {
       const t = types().find((x) => x.key === btn.dataset.t);
-      if (t) saveBlob(G.stlBinary(geomFor(t.b).polys, 'bin'), typeName(t) + '.stl');
+      if (t) downloadType(t);
     });
   $('totals').textContent = allBins().length
     ? `${allBins().length} bins · ${ts.length} distinct type(s) · ≈ ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g PLA at ${state.infill}% infill`
@@ -998,6 +1010,7 @@ function refresh() {
 
   drawWarnings();
   drawPlan();
+  updateExportTail();
   showScene();
 }
 
@@ -1192,6 +1205,12 @@ function typeName(t) {
   return `bin-${t.b.u}x${t.b.v}x${t.b.hUnits}${t.b.solid ? '-solid' : ''}` +
          `${t.b.divX || t.b.divY ? `-${t.b.divX}x${t.b.divY}div` : ''}-qty${t.qty}`;
 }
+/* One bin type as an STL. Two places offer this — the row in "Bins to print" and the
+   row in the download dialog — and they are the one pair that could give you two
+   differently named files for the same click. */
+function downloadType(t) {
+  saveBlob(G.stlBinary(geomFor(t.b).polys, 'bin'), typeName(t) + '.stl');
+}
 function layoutReadme() {
   const g = grid(), ts = types();
   const L = [];
@@ -1261,19 +1280,45 @@ async function plate3mfBytes(idx) {
   pz.file('3D/3dmodel.model', x.model);
   return pz.generateAsync({ type: 'uint8array' });
 }
-$('dlPlates').addEventListener('click', async () => {
-  if (!printPlan) return;
-  const good = printPlan.plates.map((p, i) => [p, i]).filter(([p]) => !p.overflow);
+const goodPlates = () =>
+  printPlan ? printPlan.plates.map((p, i) => [p, i]).filter(([p]) => !p.overflow) : [];
+
+/* Plates are numbered by position among the ones that fit, not by index in the raw
+   list — everywhere. A bin too big for the bed gets a plate of its own that is never
+   exported, and numbering around those produced a zip holding plate-1 and plate-3
+   while the print plan on the page, and the per-plate downloads, both counted 1, 2, 3.
+   The name is shared with the standalone download so the same plate arrives under the
+   same name whichever row you clicked. */
+const plateName = (k) => `bin-plate-${k + 1}.3mf`;
+async function downloadPlate(k) {
+  const good = goodPlates();
+  if (!good[k]) return;
+  saveBlob(await plate3mfBytes(good[k][1]), plateName(k));
+}
+async function downloadAllPlates() {
+  const good = goodPlates();
   if (!good.length) return;
-  if (good.length === 1) { saveBlob(await plate3mfBytes(good[0][1]), 'bin-plates.3mf'); return; }
+  if (good.length === 1) return downloadPlate(0);
   const zip = new JSZip();
-  for (const [, i] of good) zip.file(`plate-${i + 1}.3mf`, await plate3mfBytes(i));
-  const blob = await zip.generateAsync({ type: 'blob' });
+  for (let k = 0; k < good.length; k++) zip.file(plateName(k), await plate3mfBytes(good[k][1]));
+  saveBlobAsync(await zip.generateAsync({ type: 'blob' }),
+                `drawerforge-bin-plates-x${good.length}.zip`);
+}
+async function downloadBinZip() {
+  if (!allBins().length) return;
+  const zip = new JSZip();
+  for (const t of types())
+    zip.file(typeName(t) + '.stl', G.stlBinary(geomFor(t.b).polys, 'bin'));
+  zip.file('README.txt', layoutReadme());
+  saveBlobAsync(await zip.generateAsync({ type: 'blob' }),
+                `drawerforge-bins-${grid().nx}x${grid().ny}.zip`);
+}
+function saveBlobAsync(blob, name) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `drawerforge-bin-plates-x${good.length}.zip`; a.click();
+  a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-});
+}
 $('bedPreset').addEventListener('change', () => {
   const v = $('bedPreset').value;
   if (v === 'custom') return;
@@ -1281,17 +1326,103 @@ $('bedPreset').addEventListener('change', () => {
   $('bedW').value = w; $('bedD').value = d; if (h) $('bedH').value = h;
   schedule();
 });
-$('dlAll').addEventListener('click', async () => {
-  if (!allBins().length) return;
-  const zip = new JSZip();
-  for (const t of types())
-    zip.file(typeName(t) + '.stl', G.stlBinary(geomFor(t.b).polys, 'bin'));
-  zip.file('README.txt', layoutReadme());
-  const blob = await zip.generateAsync({ type: 'blob' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `drawerforge-bins-${grid().nx}x${grid().ny}.zip`; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+
+/* ---------- the download dialog -------------------------------------------
+   Built fresh every time it opens. A column of buttons tells you nothing about what
+   comes out of them, so the dialog states what the design is, whether it fits the
+   printer you configured, and then names every file with its size or its count. The
+   row and group widgets are shared with the baseplates tool, in widgets.js.
+   Nothing here needs the live re-render the baseplates dialog has: everything on this
+   page is computed synchronously, and a modal makes the page behind it inert, so the
+   layout cannot change while the dialog is open. */
+const exGroup = (text) => DF.group($('exFiles'), text);
+const exRow = (name, meta, label, onClick, attrs) =>
+  DF.row($('exFiles'), { name, meta, label, onClick, attrs });
+
+function bedFitText() {
+  const bed = `${state.bedW} × ${state.bedD} mm bed`;
+  const bins = allBins().map(({ b }) => b);
+  if (!bins.length) return { cls: 'wait', t: 'No bins placed yet — drag across the drawer map to place one.' };
+  const wide = bins.filter((b) => !fitsBed(b.u, b.v));
+  const tall = bins.filter((b) => {
+    const lip = (!b.solid && allFullEdges(b)) ? LIP_H : 0;
+    return b.hUnits * SPEC.unitH + lip > state.bedH + 0.001;
+  });
+  if (!wide.length && !tall.length) {
+    const w = Math.max(...bins.map((b) => footW(b.u))), d = Math.max(...bins.map((b) => footW(b.v)));
+    const h = Math.max(...bins.map((b) => b.hUnits * SPEC.unitH +
+      ((!b.solid && allFullEdges(b)) ? LIP_H : 0)));
+    return { cls: 'ok', t: `Everything fits your ${bed}. The largest bin is ` +
+      `${Math.max(w, d).toFixed(0)} × ${Math.min(w, d).toFixed(0)} mm and the tallest ` +
+      `stands ${h.toFixed(1)} mm, inside your ${state.bedH} mm Z height.` };
+  }
+  const parts = [];
+  if (wide.length) parts.push(`${wide.length} bin${wide.length > 1 ? 's are' : ' is'} too big for your ${bed}`);
+  if (tall.length) parts.push(`${tall.length} bin${tall.length > 1 ? 's stand' : ' stands'} taller than your ${state.bedH} mm Z height`);
+  return { cls: 'bad', t: parts.join(', and ') +
+    '. Those are left off the print plates — Checks says what to do with each of them.' };
+}
+
+function renderExport() {
+  const g = grid(), ts = types(), n = allBins().length;
+  let vol = 0;
+  for (const t of ts) vol += geomFor(t.b).vol * t.qty;
+  $('exDesign').textContent = n
+    ? `${g.nx} × ${g.ny} cell grid in a ${state.drawerW} × ${state.drawerD} mm drawer\n` +
+      `${n} bin(s) of ${ts.length} distinct type(s) over ${layers.length} layer(s)\n` +
+      `about ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g of PLA at ${state.infill}% infill`
+    : `${g.nx} × ${g.ny} cell grid in a ${state.drawerW} × ${state.drawerD} mm drawer — no bins in it yet`;
+  const fit = bedFitText();
+  $('exFit').className = 'exfit ' + fit.cls;
+  $('exFit').textContent = fit.t;
+
+  $('exFiles').innerHTML = '';
+  const good = goodPlates();
+  if (good.length) {
+    exGroup('Pre-arranged print plates');
+    exRow('Every plate', `${good.length} plate(s) · 3MF` + (good.length > 1 ? ' in a ZIP' : ''),
+          'Download', downloadAllPlates, { 'data-ex': 'allplates' });
+    /* Per-plate downloads. The combined export already builds each plate on its own
+       and zips them, so one plate at a time is the same call with the zip left off —
+       and it is what you want when a print fails, or when you are only doing one
+       plate's worth this evening. */
+    good.forEach(([pl], k) => exRow(`Plate ${k + 1}`,
+      `${pl.placed.length} bin(s) on a ${state.bedW} × ${state.bedD} mm bed · 3MF`, 'Download',
+      () => downloadPlate(k), { 'data-ex': 'plate' }));
+  }
+  if (ts.length) {
+    exGroup('Meshes');
+    exRow('Every bin type, with a README', `${ts.length} STL file(s) + README.txt · ZIP`,
+          'Download', downloadBinZip, { 'data-ex': 'zip' });
+    for (const t of ts)
+      exRow(`${t.b.u}×${t.b.v}×${t.b.hUnits}${t.b.solid ? ' solid' : ''} × ${t.qty}`,
+            `${DF.bytes(DF.stlBytes(geomFor(t.b).polys))} · STL`, 'STL',
+            () => downloadType(t), { 'data-ex': 'stl' });
+  }
+}
+function updateExportTail() {
+  const n = allBins().length, p = goodPlates().length;
+  $('exportTail').textContent = n
+    ? `${n} bin${n > 1 ? 's' : ''}` + (p ? ` · ${p} plate${p > 1 ? 's' : ''}` : '')
+    : '';
+}
+$('openExport').addEventListener('click', () => {
+  renderExport();
+  const dlg = $('exportDlg');
+  // showModal is the whole point — the fallback is for a browser old enough not to
+  // have it, where an in-flow panel that closes is still better than a dead button
+  if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+});
+$('exportClose').addEventListener('click', () => $('exportDlg').close());
+/* Click to dismiss, from the backdrop only. A click reports the common ancestor of its
+   two ends, so selecting text in the summary and releasing outside the box reported the
+   dialog itself and shut it — losing the selection and the dialog together. Both ends
+   have to be the backdrop. */
+let downOnBackdrop = false;
+$('exportDlg').addEventListener('mousedown', (e) => { downOnBackdrop = e.target === $('exportDlg'); });
+$('exportDlg').addEventListener('click', (e) => {
+  if (downOnBackdrop && e.target === $('exportDlg')) $('exportDlg').close();
+  downOnBackdrop = false;
 });
 
 /* ---------- shared project descriptor -------------------------------------- */
