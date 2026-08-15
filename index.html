@@ -27,6 +27,11 @@
 </script>
 <style>
 :root{
+  /* The page is dark and says so. Without this the browser still believes it is
+     rendering a light document, so everything it draws itself comes out for a light
+     one: the focus ring is computed as a dark outline on what it assumes is a pale
+     background, and a select's dropdown opens white in the middle of the tool. */
+  color-scheme:dark;
   --bg:#171c22; --panel:#1f262e; --panel2:#242c35; --line:#2c353f;
   --ink:#e9eef4; --dim:#8b98a5; --cyan:#4fc3e8; --amber:#e8b34f; --red:#e87b6a;
   --mono:ui-monospace,'SF Mono','Cascadia Code',Consolas,Menlo,monospace;
@@ -63,7 +68,8 @@ a{color:var(--cyan)}
 ::-webkit-scrollbar-thumb:hover{background:var(--dim);background-clip:padding-box}
 ::-webkit-scrollbar-thumb:active{background:var(--cyan);background-clip:padding-box}
 ::-webkit-scrollbar-corner{background:var(--bg)}
-@media(prefers-reduced-motion:reduce){::-webkit-scrollbar-thumb{transition:none}}
+/* (the reduced-motion rules for all of this live in one block at the end of the file —
+   they have to come after the transitions they cancel, or they lose the cascade) */
 /* Help text that names a control the device does not have is worse than none: it
    tells the reader they are missing something. Keyboard shortcuts and hover go on a
    pointer:coarse device, and the touch wording takes their place. */
@@ -72,6 +78,19 @@ a{color:var(--cyan)}
   .haskeys{display:none}
   .hastouch{display:inline}
 }
+/* Skip link. The rail is about forty controls deep before the working surface, so a
+   keyboard reaching the drawer map the honest way is a long walk. Parked off the top
+   of the viewport rather than display:none, because a hidden link is not focusable and
+   so is not a skip link at all. */
+.skip{position:fixed;left:12px;top:-64px;z-index:300;background:var(--panel);
+  color:var(--cyan);border:1px solid var(--cyan);border-radius:6px;padding:10px 14px;
+  font-size:13px;text-decoration:none;transition:top .12s}
+.skip:focus{top:12px}
+/* The skip target takes tabindex="-1" so focus really moves rather than only the
+   scroll position — otherwise the next Tab carries on from the nav and the link has
+   achieved nothing. The ring is kept, quietly: it is the only confirmation that the
+   jump landed, and it goes on the next Tab. */
+[tabindex="-1"]:focus{outline:2px solid var(--cyan);outline-offset:-2px}
 header{padding:22px 26px 16px;border-bottom:1px solid var(--line);
   background:
     repeating-linear-gradient(0deg,transparent,transparent 20px,rgba(79,195,232,.045) 20px,rgba(79,195,232,.045) 21px),
@@ -105,6 +124,21 @@ header .privacy::before{content:"● ";color:var(--cyan)}
 section.p{background:var(--panel);border:1px solid var(--line);border-radius:8px;margin-bottom:12px;overflow:hidden}
 section.p>h2{font-size:11px;letter-spacing:.14em;color:var(--dim);padding:10px 13px;cursor:pointer;
   display:flex;align-items:center;gap:9px;user-select:none;text-transform:uppercase}
+/* A panel header that collapses its panel has to be a real control, because a closed
+   panel's body is display:none: with only a click handler on the <h2>, nothing inside
+   the drawer and printer panels was reachable by keyboard at all — those two load
+   closed, so their fields simply did not exist for anyone not using a mouse.
+   The button is styled back out of existence: the header is a design element and
+   should not grow a chrome button around it. `all:unset` is the reliable way to get
+   there — it drops the UA background, border, font and alignment in one go and lets
+   the inheritable half (colour, letter-spacing, case) fall through from the h2. It
+   also drops box-sizing and display, which is why both are restated, and the focus
+   ring, which is why one is drawn explicitly below.
+   The h2 gives up its padding to the button so the whole strip stays the hit target. */
+section.p>h2.ph{padding:0}
+section.p>h2.ph>button{all:unset;box-sizing:border-box;display:flex;width:100%;
+  align-items:center;gap:9px;padding:10px 13px;cursor:pointer}
+section.p>h2.ph>button:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
 section.p>h2 .n{font-family:var(--mono);color:var(--cyan);font-size:11px}
 section.p>h2 .caret{margin-left:auto;transition:transform .15s;color:var(--dim)}
 section.p.closed .caret{transform:rotate(-90deg)}
@@ -130,6 +164,12 @@ select{font-family:var(--sans)}
 .seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .seg button{flex:1;background:var(--panel2);color:var(--dim);border:none;padding:7px 4px;
   cursor:pointer;font-size:12px;font-family:var(--sans)}
+/* overflow:hidden above rounds the group's ends, and clips whatever the browser draws
+   outside a child — including the focus ring, which is drawn outside by definition.
+   Tabbing onto a layer or split-mode button left only a faint background shift as the
+   cue. A negative offset puts the ring inside the button, where nothing clips it. */
+.seg button:focus-visible{outline:2px solid var(--cyan);outline-offset:-3px}
+.seg button.on:focus-visible{outline-color:#0c1116}
 .seg button.on{background:var(--cyan);color:#0c1116;font-weight:600}
 .seg button+button{border-left:1px solid var(--line)}
 .tog{display:flex;align-items:center;gap:9px;cursor:pointer;font-size:12.5px;color:var(--ink)}
@@ -284,12 +324,26 @@ article.doc .cta{margin-top:34px;padding-top:18px;border-top:1px solid var(--lin
 #fillmap,#fillmap text{user-select:none;-webkit-user-select:none}
 #threewrap{user-select:none;-webkit-user-select:none}
 
-/* ---- tip jar ---- */
-.kofi{position:fixed;right:16px;bottom:16px;z-index:60;display:flex;align-items:center;gap:10px;
+/* ---- tip jar ----
+   The dismiss button used to sit inside the link. Interactive content inside an <a>
+   is invalid, and although Chrome happens to do the useful thing with it, a validator
+   is right to reject it and nothing guarantees the next engine agrees. The panel is a
+   plain box now, holding the link and the button as siblings. */
+/* This has to come with the display below, and it is not belt and braces. The UA hides
+   [hidden] with `display:none`, but that is a UA rule and ANY author `display` beats it
+   — so `.kofi{display:flex}` quietly un-hid the panel again. Dismissing the tip jar has
+   never worked: the button wrote the preference and the panel stayed exactly where it
+   was, on that load and on every load after, because the boot path sets the same
+   attribute. Found while restructuring the markup, not by anyone reading the CSS. */
+.kofi[hidden]{display:none}
+.kofi{position:fixed;right:16px;bottom:16px;z-index:60;display:flex;align-items:center;gap:4px;
   background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--amber);
-  border-radius:8px;padding:9px 10px 9px 12px;text-decoration:none;color:var(--ink);
+  border-radius:8px;padding:9px 10px 9px 12px;color:var(--ink);
   box-shadow:0 6px 20px rgba(0,0,0,.45);transition:border-color .15s,transform .15s}
 .kofi:hover{border-color:var(--amber);transform:translateY(-1px)}
+.kofi>a{display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit}
+.kofi>a:focus-visible,.kofi>button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px;
+  border-radius:4px}
 .kofi .cup{font-size:17px;line-height:1}
 .kofi b{display:block;font-size:12.5px;font-weight:600}
 .kofi i{display:block;font-size:10.5px;color:var(--dim);font-style:normal;margin-top:1px}
@@ -297,6 +351,16 @@ article.doc .cta{margin-top:34px;padding-top:18px;border-top:1px solid var(--lin
   cursor:pointer;padding:0 2px;margin-left:2px}
 .kofi button:hover{color:var(--ink)}
 @media(max-width:640px){.kofi i{display:none}}
+/* Clearance under the tip jar. It is fixed, so at some scroll offset it will always be
+   over something — that is the cost of a fixed panel and the reason it is dismissible.
+   What this fixes is the end of a scroller, where content had nowhere left to go and
+   was covered permanently: at 1440 the last lines of the export explainer, at 390 the
+   footer. Only while the panel is actually on screen, so a visitor who dismissed it
+   does not get a strip of dead space instead. */
+.kofi-on .rail{padding-bottom:104px}
+.kofi-on .stage{padding-bottom:124px}
+.kofi-on footer{padding-bottom:94px}
+.kofi-on article.doc{padding-bottom:134px}
 #fillmap .cellpart{rx:0;stroke:none}
 #fillmap .binedge{stroke:var(--cyan);stroke-width:2;stroke-linecap:round;pointer-events:none}
 #fillmap .bin.sel.cellpart{stroke:none}
@@ -372,6 +436,11 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   header .privacy{font-size:12px}
   header nav a{font-size:12px;padding:0 16px;min-height:40px;display:flex;align-items:center}
   section.p>h2{font-size:12px;padding:13px}
+  /* the padding is the button's when there is one, or the tap target is the text only.
+     min-height is restated because `all:unset` above resets it more specifically than
+     the blanket control rule further down this block can. */
+  section.p>h2.ph{padding:0}
+  section.p>h2.ph>button{padding:13px;min-height:44px}
   section.p>h2 .n{font-size:12px}
   .stagecard h3{font-size:12px}
   .stagecard h3 .tail{font-size:12px}
@@ -417,6 +486,25 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   /* the toggle switch itself stays 36×20 — the whole .tog label is the target, and
      it is the label that had to grow */
   .tog input{min-height:20px}
+}
+
+/* ---- reduced motion -------------------------------------------------------
+   Every transition on the site, in one place, at the end of the file. It has to be
+   the end: a media query adds no specificity, so a block sitting above the rules it
+   cancels loses the cascade to them and does nothing — which is how this came to
+   cover only the scrollbar thumb while the caret, the toggle knob and the tip jar
+   kept animating. Nothing here is load-bearing; they are all short cues, so turning
+   them off costs the interface nothing and the state each one signals is still
+   carried by colour, position and aria-expanded. */
+@media(prefers-reduced-motion:reduce){
+  ::-webkit-scrollbar-thumb,
+  header nav a,
+  section.p>h2 .caret,
+  .tog input,
+  .tog input::after,
+  .skip,
+  .kofi{transition:none}
+  .kofi:hover{transform:none}
 }
 </style>
 </head>
@@ -4031,17 +4119,52 @@ fitThree();
 
   /* Tip jar. Persistent, but dismissible and it stays dismissed — a banner you
      cannot get rid of is worse than no banner. The flag is a local preference,
-     not a tracker: nothing leaves the browser. */
+     not a tracker: nothing leaves the browser.
+
+     It no longer appears on load. It is fixed to the bottom right, so it sits over
+     whatever happens to be at the foot of the viewport, and on arrival that is the
+     first thing anyone reads: measured at 1440 it landed mid-sentence in the export
+     explainer, and at 390 across the dividers fields. First load is also the least
+     earned moment to ask for money — the visitor has not used the tool yet. So it
+     waits for the visitor to have started: a scroll, which on either tool means they
+     are working rather than merely arrived. The timer is the fallback for a drawer
+     that fits on one screen, where no scroll ever happens and the jar would otherwise
+     never show. Whichever comes first, once, and then it stays.
+
+     The markup ships it `hidden` so it cannot flash before this runs. That does mean
+     no tip jar without JavaScript, which is the right trade for a page whose entire
+     content is generated by JavaScript, and harmless on the prose pages. */
   var bar = document.getElementById('kofi');
   if (!bar) return;
-  try { if (localStorage.getItem('df-kofi') === 'off') bar.hidden = true; } catch (e) {}
+  var off = false;
+  try { off = localStorage.getItem('df-kofi') === 'off'; } catch (e) {}
+
   var x = document.getElementById('kofiX');
   if (x) x.addEventListener('click', function (e) {
     e.preventDefault();
-    e.stopPropagation();
     bar.hidden = true;
+    document.documentElement.classList.remove('kofi-on');
     try { localStorage.setItem('df-kofi', 'off'); } catch (e2) {}
   });
+
+  if (!off) {
+    var shown = false;
+    var show = function () {
+      if (shown) return;
+      shown = true;
+      clearTimeout(wait);
+      // scroll is watched in the capture phase because the rail and the stage are their
+      // own scroll containers on the tools — their scroll events do not reach window
+      document.removeEventListener('scroll', onScroll, true);
+      bar.hidden = false;
+      /* The clearance padding goes on while the panel is up and comes off with it, so
+         a visitor who dismissed it is not left with a strip of empty page instead. */
+      document.documentElement.classList.add('kofi-on');
+    };
+    var onScroll = function () { show(); };
+    var wait = setTimeout(show, 45000);
+    document.addEventListener('scroll', onScroll, true);
+  }
 })();
 </script>
 </body>
