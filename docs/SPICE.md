@@ -192,11 +192,34 @@ apart even at zero clearance, and seven gaps of that outweigh the 0.85 mm it sav
 ends by having a bore narrower than a lid. A clean-sheet 8-row plate clears by 0.19 mm,
 which is not a margin.
 
-Seven rows is therefore the answer: **28 jars, 35.77 mm to spare**, and the last four live
-outside the drawer. `spice-plate-3of3-28jar` finishes the plate from the strip and 2of3 that
-are already printed. It is generated from a 7-row lattice, not by truncating the 8-row one,
-so the back row is closed by the plate outline rather than cut short by the bisector with an
-eighth row that does not exist.
+Seven rows would give **28 jars with 35.77 mm to spare**, the last four living outside the
+drawer. `spice-plate-3of3-28jar` builds that from the strip and 2of3 already printed. It is
+generated from a 7-row lattice, not by truncating the 8-row one, so the back row is closed by
+the plate outline rather than cut short by the bisector with an eighth row that is not there.
+
+### What was actually built: five rows held, three loose
+
+The owner kept all 32 jars and stopped at the two pieces already printed — **one loose row at
+the front, the 5-row plate, two loose rows at the back**. 357.84 mm.
+
+Two corrections made that possible, both of which I had wrong first time:
+
+- **A loose jar nests into the plate's scalloped edge, not against a wall.** The collar arcs
+  retreat ~18 mm between sockets, so the handoff costs `√((25.605 + 23.4)² − q²)` = 43.53
+  against 43.36 for jar-to-jar. **0.17 mm, not the 4.04 mm** I first claimed by treating the
+  plate edge as straight. That error made every mixed arrangement look impossible.
+- **The seam interlocks by 5.41 mm.** Butted rather than meshed, the strip + 2of3 span 234.02
+  rather than 228.62, which puts the drawer at 358.02 and not 352.62 — and 5.41 is almost
+  exactly the 5.12 mm by which the arrangement appeared not to fit.
+
+The governing fact, once the arithmetic was right: **every row you plate costs 1.28 mm more
+than leaving it loose** (44.64 against 43.36), because sockets cannot hold jars as tightly as
+jars hold each other. So organising more rows makes the total *longer*. In a drawer that was
+99.9 % full with 32 loose jars, five held rows is the ceiling — 24 organised would need
+359.02 mm, one millimetre more than exists.
+
+Putting the loose row at the front rather than behind costs 0.10 mm, because the handoff is
+paid at both ends instead of one. Not worth rearranging for.
 
 ## Open
 
