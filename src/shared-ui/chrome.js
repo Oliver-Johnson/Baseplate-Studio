@@ -21,6 +21,15 @@
       location.href = a.getAttribute('href') + location.hash;
     });
 
+  /* A touch screen has no wheel and no shift key, so "wheel zoom · shift-drag pan"
+     described controls that do not exist there. Rewritten rather than removed: the
+     gestures are still worth naming, they are just different ones. Matching on
+     pointer:coarse rather than width, because the question is what the input device
+     can do, not how wide the screen is. */
+  var coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  var hint = document.getElementById('threehint');
+  if (hint && coarse) hint.textContent = 'drag rotate · pinch zoom';
+
   /* Full-screen preview.
      On a touch screen the 3D preview was unusable: dragging a finger across it
      scrolled the page instead of rotating the model, because the canvas has to let

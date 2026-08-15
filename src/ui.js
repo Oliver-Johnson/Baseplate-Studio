@@ -341,15 +341,55 @@ function initThree() {
   new ResizeObserver(onResize).observe(canvas); onResize();
   // controls
   let drag = null;
-  canvas.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, pan: e.shiftKey }; canvas.setPointerCapture(e.pointerId); });
+  /* Two-finger pinch, because a touch screen has no wheel and no shift key.
+     Every pointer is tracked rather than just the first: with one down we rotate as
+     before, with two the gap between them drives zoom and the midpoint drives pan —
+     which is the same pair of gestures the mouse gets from the wheel and shift-drag,
+     just expressed the way a hand does it. */
+  const pts = new Map();
+  const gap = () => {
+    const [a, b] = [...pts.values()];
+    return Math.hypot(a[0] - b[0], a[1] - b[1]);
+  };
+  const mid = () => {
+    const [a, b] = [...pts.values()];
+    return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  };
+  let pinch = null, pmid = null;
+  const zoom = (f) => { sph.r = Math.max(60, Math.min(2200, sph.r * f)); };
+
+  canvas.addEventListener('pointerdown', e => {
+    pts.set(e.pointerId, [e.clientX, e.clientY]);
+    canvas.setPointerCapture(e.pointerId);
+    if (pts.size === 2) { pinch = gap(); pmid = mid(); drag = null; }
+    else if (pts.size === 1) drag = { x: e.clientX, y: e.clientY, pan: e.shiftKey };
+  });
   canvas.addEventListener('pointermove', e => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pts.size >= 2) {
+      const g = gap(), m = mid();
+      if (pinch > 0 && g > 0) zoom(pinch / g);
+      if (pmid) { sph.cx -= (m[0] - pmid[0]) * sph.r * 0.0011; sph.cy += (m[1] - pmid[1]) * sph.r * 0.0011; }
+      pinch = g; pmid = m;
+      return;
+    }
     if (!drag) return;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     if (drag.pan) { sph.cx -= dx * sph.r * 0.0011; sph.cy += dy * sph.r * 0.0011; }
     else { sph.theta -= dx * 0.0065; sph.phi = Math.max(0.03, Math.min(3.11, sph.phi - dy * 0.0065)); }
     drag.x = e.clientX; drag.y = e.clientY;
   });
-  canvas.addEventListener('pointerup', () => drag = null);
+  const lift = (e) => {
+    pts.delete(e.pointerId);
+    if (pts.size < 2) { pinch = null; pmid = null; }
+    // lifting one of two fingers must re-seat the rotate anchor on the one still
+    // down, or the model jumps by the distance between them
+    if (pts.size === 1) { const [p] = [...pts.values()]; drag = { x: p[0], y: p[1], pan: false }; }
+    if (pts.size === 0) drag = null;
+  };
+  canvas.addEventListener('pointerup', lift);
+  canvas.addEventListener('pointercancel', lift);
   canvas.addEventListener('wheel', e => { e.preventDefault(); sph.r = Math.max(60, Math.min(2200, sph.r * (1 + e.deltaY * 0.0011))); }, { passive: false });
   (function loop() {
     requestAnimationFrame(loop);

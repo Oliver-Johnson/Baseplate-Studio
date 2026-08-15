@@ -55,6 +55,14 @@ a{color:var(--cyan)}
 ::-webkit-scrollbar-thumb:active{background:var(--cyan);background-clip:padding-box}
 ::-webkit-scrollbar-corner{background:var(--bg)}
 @media(prefers-reduced-motion:reduce){::-webkit-scrollbar-thumb{transition:none}}
+/* Help text that names a control the device does not have is worse than none: it
+   tells the reader they are missing something. Keyboard shortcuts and hover go on a
+   pointer:coarse device, and the touch wording takes their place. */
+.hastouch{display:none}
+@media(pointer:coarse){
+  .haskeys{display:none}
+  .hastouch{display:inline}
+}
 header{padding:22px 26px 16px;border-bottom:1px solid var(--line);
   background:
     repeating-linear-gradient(0deg,transparent,transparent 20px,rgba(79,195,232,.045) 20px,rgba(79,195,232,.045) 21px),
@@ -631,6 +639,15 @@ can come back to it later.</p>
       e.preventDefault();
       location.href = a.getAttribute('href') + location.hash;
     });
+
+  /* A touch screen has no wheel and no shift key, so "wheel zoom · shift-drag pan"
+     described controls that do not exist there. Rewritten rather than removed: the
+     gestures are still worth naming, they are just different ones. Matching on
+     pointer:coarse rather than width, because the question is what the input device
+     can do, not how wide the screen is. */
+  var coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  var hint = document.getElementById('threehint');
+  if (hint && coarse) hint.textContent = 'drag rotate · pinch zoom';
 
   /* Full-screen preview.
      On a touch screen the 3D preview was unusable: dragging a finger across it

@@ -1090,10 +1090,41 @@ function initThree() {
   const d1 = new THREE.DirectionalLight(0xffffff, 0.85); d1.position.set(1, 1.4, 1); scene.add(d1);
   const d2 = new THREE.DirectionalLight(0x88bbff, 0.35); d2.position.set(-1, -0.6, 0.4); scene.add(d2);
   group = new THREE.Group(); scene.add(group);
-  canvas.addEventListener('pointerdown', (e) => { dragging = [e.clientX, e.clientY]; canvas.setPointerCapture(e.pointerId); });
-  canvas.addEventListener('pointerup', () => { dragging = null; });
+  /* Two-finger pinch to zoom. A touch screen has no wheel, and the expanded preview
+     takes touch-action away from the canvas so a drag rotates instead of scrolling —
+     which left no way to zoom at all on a phone. One finger rotates as before. */
+  const pts = new Map();
+  const gap = () => {
+    const [a, b] = [...pts.values()];
+    return Math.hypot(a[0] - b[0], a[1] - b[1]);
+  };
+  let pinch = null;
+  canvas.addEventListener('pointerdown', (e) => {
+    pts.set(e.pointerId, [e.clientX, e.clientY]);
+    dragging = [e.clientX, e.clientY];
+    canvas.setPointerCapture(e.pointerId);
+    if (pts.size === 2) { pinch = gap(); dragging = null; hideTip(); }
+  });
+  const lift = (e) => {
+    pts.delete(e.pointerId);
+    if (pts.size < 2) pinch = null;
+    // re-seat on the finger still down, or the model jumps when the other lifts
+    dragging = pts.size === 1 ? [...pts.values()][0].slice() : null;
+  };
+  canvas.addEventListener('pointerup', lift);
+  canvas.addEventListener('pointercancel', lift);
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
   canvas.addEventListener('pointermove', (e) => {
+    if (pts.has(e.pointerId)) pts.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pts.size >= 2) {
+      const g = gap();
+      if (pinch > 0 && g > 0) {
+        dist = Math.min(4000, Math.max(80, dist * (pinch / g)));
+        render();
+      }
+      pinch = g;
+      return;
+    }
     if (dragging) {
       theta -= (e.clientX - dragging[0]) * 0.01;
       phi = Math.min(3.11, Math.max(0.03, phi - (e.clientY - dragging[1]) * 0.01));

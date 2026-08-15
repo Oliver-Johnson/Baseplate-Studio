@@ -65,6 +65,14 @@ a{color:var(--cyan)}
 ::-webkit-scrollbar-thumb:active{background:var(--cyan);background-clip:padding-box}
 ::-webkit-scrollbar-corner{background:var(--bg)}
 @media(prefers-reduced-motion:reduce){::-webkit-scrollbar-thumb{transition:none}}
+/* Help text that names a control the device does not have is worse than none: it
+   tells the reader they are missing something. Keyboard shortcuts and hover go on a
+   pointer:coarse device, and the touch wording takes their place. */
+.hastouch{display:none}
+@media(pointer:coarse){
+  .haskeys{display:none}
+  .hastouch{display:inline}
+}
 header{padding:22px 26px 16px;border-bottom:1px solid var(--line);
   background:
     repeating-linear-gradient(0deg,transparent,transparent 20px,rgba(79,195,232,.045) 20px,rgba(79,195,232,.045) 21px),
@@ -554,7 +562,7 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   <div class="covbar"><i id="covfill" style="width:0%"></i></div>
   <div class="body">
     <div class="mono" id="coverage">—</div>
-    <div class="hint">Drag across empty cells to place a bin. Click one to select it, drag it to move it, or pull a corner grip to resize. A ⚠ marks a bin that will not sit properly where it is — hover it for the reason. It stays put either way, in case you are about to place the thing that fixes it. <b>Alt-click</b> a cell inside the selected bin to carve it out, or alt-click a gap to put it back — that is how you make an L or a U. Front of the drawer is at the bottom.</div>
+    <div class="hint">Drag across empty cells to place a bin. Click one to select it, drag it to move it, or pull a corner grip to resize. A ⚠ marks a bin that will not sit properly where it is — <span class="haskeys">hover it</span><span class="hastouch">tap it</span> for the reason. It stays put either way, in case you are about to place the thing that fixes it. <b>Alt-click</b> a cell inside the selected bin to carve it out, or alt-click a gap to put it back — that is how you make an L or a U. Front of the drawer is at the bottom.</div>
     <div class="row">
       <button class="ghost" id="fillRest">Fill the rest with <span id="fillSize">1×1</span></button>
       <button class="ghost" id="clearAll">Clear all</button>
@@ -564,7 +572,7 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
       <button class="ghost" id="redoBtn">Redo</button>
       <button class="ghost" id="dupBtn">Duplicate</button>
     </div>
-    <div class="hint">Keys: <b>Del</b> removes the selected bin, <b>arrows</b> nudge it, <b>shift+arrows</b> resize it, <b>Ctrl+D</b> duplicates, <b>Ctrl+Z</b> / <b>Ctrl+Shift+Z</b> undo and redo.</div>
+    <div class="hint haskeys">Keys: <b>Del</b> removes the selected bin, <b>arrows</b> nudge it, <b>shift+arrows</b> resize it, <b>Ctrl+D</b> duplicates, <b>Ctrl+Z</b> / <b>Ctrl+Shift+Z</b> undo and redo.</div>
   </div>
 </div>
 
@@ -4426,10 +4434,41 @@ function initThree() {
   const d1 = new THREE.DirectionalLight(0xffffff, 0.85); d1.position.set(1, 1.4, 1); scene.add(d1);
   const d2 = new THREE.DirectionalLight(0x88bbff, 0.35); d2.position.set(-1, -0.6, 0.4); scene.add(d2);
   group = new THREE.Group(); scene.add(group);
-  canvas.addEventListener('pointerdown', (e) => { dragging = [e.clientX, e.clientY]; canvas.setPointerCapture(e.pointerId); });
-  canvas.addEventListener('pointerup', () => { dragging = null; });
+  /* Two-finger pinch to zoom. A touch screen has no wheel, and the expanded preview
+     takes touch-action away from the canvas so a drag rotates instead of scrolling —
+     which left no way to zoom at all on a phone. One finger rotates as before. */
+  const pts = new Map();
+  const gap = () => {
+    const [a, b] = [...pts.values()];
+    return Math.hypot(a[0] - b[0], a[1] - b[1]);
+  };
+  let pinch = null;
+  canvas.addEventListener('pointerdown', (e) => {
+    pts.set(e.pointerId, [e.clientX, e.clientY]);
+    dragging = [e.clientX, e.clientY];
+    canvas.setPointerCapture(e.pointerId);
+    if (pts.size === 2) { pinch = gap(); dragging = null; hideTip(); }
+  });
+  const lift = (e) => {
+    pts.delete(e.pointerId);
+    if (pts.size < 2) pinch = null;
+    // re-seat on the finger still down, or the model jumps when the other lifts
+    dragging = pts.size === 1 ? [...pts.values()][0].slice() : null;
+  };
+  canvas.addEventListener('pointerup', lift);
+  canvas.addEventListener('pointercancel', lift);
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
   canvas.addEventListener('pointermove', (e) => {
+    if (pts.has(e.pointerId)) pts.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pts.size >= 2) {
+      const g = gap();
+      if (pinch > 0 && g > 0) {
+        dist = Math.min(4000, Math.max(80, dist * (pinch / g)));
+        render();
+      }
+      pinch = g;
+      return;
+    }
     if (dragging) {
       theta -= (e.clientX - dragging[0]) * 0.01;
       phi = Math.min(3.11, Math.max(0.03, phi - (e.clientY - dragging[1]) * 0.01));
@@ -4923,6 +4962,15 @@ updateUndoButtons();
       e.preventDefault();
       location.href = a.getAttribute('href') + location.hash;
     });
+
+  /* A touch screen has no wheel and no shift key, so "wheel zoom · shift-drag pan"
+     described controls that do not exist there. Rewritten rather than removed: the
+     gestures are still worth naming, they are just different ones. Matching on
+     pointer:coarse rather than width, because the question is what the input device
+     can do, not how wide the screen is. */
+  var coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  var hint = document.getElementById('threehint');
+  if (hint && coarse) hint.textContent = 'drag rotate · pinch zoom';
 
   /* Full-screen preview.
      On a touch screen the 3D preview was unusable: dragging a finger across it
