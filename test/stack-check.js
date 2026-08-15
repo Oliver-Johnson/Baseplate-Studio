@@ -1,34 +1,34 @@
 #!/usr/bin/env node
-/* Which base styles stack on which, computed rather than asserted in a comment.
+/* Does a bin seat in the lip of the bin below it, all the way up?
  *
- * Three styles exist and they are not freely interchangeable:
+ * This used to assert a 3x3 matrix of base styles against each other, because a short
+ * foot could not enter a full lip and that was the one pairing which looks right on
+ * screen and is not. There is one base now, so the matrix would be a matrix of one.
+ * What survives is the part that was never about the styles: the lip's opening and the
+ * foot that goes into it are two profiles maintained in different places — the lip is
+ * an inset from the bin's outline, the foot comes from the published spec — and
+ * nothing else checks that they agree at every height rather than at the step
+ * heights.
  *
- *   standard  spec foot (4.75 mm) + spec lip
- *   lowlip    spec foot (4.75 mm) + low lip, stopping at 2.0 mm with a flat rim
- *   low       short foot (2.0 mm) + low lip
+ * bin-audit samples the three corners of the lip table. This walks the whole lip in
+ * 0.01 mm and descends the upper bin's real outer profile into it, body included,
+ * because the body at full width is what would foul a lip the foot cleared.
  *
- * A short foot cannot enter a full lip. It runs out of taper at 2 mm, and above that
- * the bin is already at full width, so it fouls the lip wall and perches on top
- * instead of seating. That is the one combination that looks fine on screen, feels
- * fine in the hand, and leaves a stack standing 2 mm too tall and rocking.
- *
- * The test descends the upper bin's outer profile into the lower bin's lip opening
- * and reports the tightest clearance found anywhere up the lip.
+ * Both slopes are 45 degrees, so the answer is not merely "positive": the clearance is
+ * the spec's 0.25 mm at every single height, and a change that tilts either profile
+ * shows up here as a clearance that varies even while it stays positive.
  */
 'use strict';
-const {
-  SPEC, BASE_STYLES, footProfile, lipHeight, BIN_DEFAULTS,
-} = require('../src/bins/bin.js');
+const { SPEC, LIP_TABLE, lipHeight, BIN_DEFAULTS } = require('../src/bins/bin.js');
 
 const lipMin = BIN_DEFAULTS.lipMin !== undefined ? BIN_DEFAULTS.lipMin : 0.55;
+const LIP_H = lipHeight(lipMin);
+const CLEARANCE = 0.25;              // the spec's, per side
 
-/* Inner half-width of a lip at height z above the top of the bin below. */
-function lipInnerAt(style, z) {
-  const st = BASE_STYLES[style];
-  const lipH = st.lipH !== null ? st.lipH : lipHeight(lipMin);
-  const rim = st.rim !== null ? st.rim : lipMin;
-  const steps = st.lip.concat([[lipH, rim]]);
-  if (z > lipH) return Infinity;                 // above the lip: nothing in the way
+/* Inner half-width of the lip at height z above the top of the bin below. */
+function lipInnerAt(z) {
+  const steps = LIP_TABLE.concat([[LIP_H, lipMin]]);
+  if (z > LIP_H) return Infinity;                // above the lip: nothing in the way
   for (let i = 0; i < steps.length - 1; i++) {
     const [z0, t0] = steps[i], [z1, t1] = steps[i + 1];
     if (z >= z0 && z <= z1) {
@@ -40,9 +40,9 @@ function lipInnerAt(style, z) {
 }
 
 /* Outer half-width of a bin at height z above its own base: the foot while the foot
-   lasts, then the full body. The body is what fouls a lip a short foot cannot clear. */
-function outerHalfAt(style, z) {
-  const prof = footProfile(BASE_STYLES[style].footH);
+   lasts, then the full body. */
+function outerHalfAt(z) {
+  const prof = SPEC.prof;
   if (z >= prof[prof.length - 1][0]) return SPEC.half;
   for (let i = 0; i < prof.length - 1; i++) {
     const [z0, h0] = prof[i], [z1, h1] = prof[i + 1];
@@ -51,69 +51,33 @@ function outerHalfAt(style, z) {
   return prof[0][1];
 }
 
-const STYLES = ['standard', 'lowlip', 'low'];
-const lipHeightOf = (s) => {
-  const st = BASE_STYLES[s];
-  return st.lipH !== null ? st.lipH : lipHeight(lipMin);
-};
-
-function seat(upper, lower) {
-  const lipH = lipHeightOf(lower);
-  let worst = Infinity, worstAt = 0;
-  for (let z = 0; z <= lipH + 1e-9; z += 0.01) {
-    const clr = lipInnerAt(lower, z) - outerHalfAt(upper, z);
-    if (clr < worst) { worst = clr; worstAt = z; }
-  }
-  return { worst, worstAt, lipH };
-}
-
 let bad = 0;
-/* The pairs that must work, and the one that must not. */
-const EXPECT = {
-  'standard on standard': true, 'lowlip on standard': true, 'low on standard': false,
-  'standard on lowlip': true, 'lowlip on lowlip': true, 'low on lowlip': true,
-  'standard on low': true, 'lowlip on low': true, 'low on low': true,
-};
+console.log(`a bin descending into the lip below it (lip ${LIP_H.toFixed(2)} mm tall)`);
+console.log('      z    lip inner   bin outer   clearance');
 
-console.log('upper bin seating into the lip of the bin below');
-console.log('   upper      lower       lip mm   tightest clearance          verdict');
-for (const lower of STYLES)
-  for (const upper of STYLES) {
-    const { worst, worstAt, lipH } = seat(upper, lower);
-    const seats = worst > -1e-6;
-    const key = `${upper} on ${lower}`;
-    const ok = seats === EXPECT[key];
-    if (!ok) bad++;
-    console.log(`   ${upper.padEnd(10)} ${lower.padEnd(10)} ${lipH.toFixed(2).padStart(5)}   ` +
-                `${worst.toFixed(3).padStart(7)} mm at z ${worstAt.toFixed(2)}   ` +
-                `${seats ? 'seats' : 'FOULS — perches'}${ok ? '' : '   UNEXPECTED'}`);
-  }
-
-/* The stack the owner is printing: standard at the bottom, then lowlip, then low. */
-console.log('\nthe three-bin test stack, bottom to top:');
-{
-  const order = ['standard', 'lowlip', 'low'];
-  let z = 0, ok = true;
-  for (let i = 0; i < order.length; i++) {
-    const H = 1 * SPEC.unitH;                       // 1x1x1: one 7 mm unit each
-    if (i > 0) {
-      const r = seat(order[i], order[i - 1]);
-      if (r.worst <= -1e-6) ok = false;
-      console.log(`   ${order[i].padEnd(9)} onto ${order[i - 1].padEnd(9)} ` +
-                  `clearance ${r.worst.toFixed(3)} mm   ${r.worst > -1e-6 ? 'seats' : 'FOULS'}`);
-    } else {
-      console.log(`   ${order[i].padEnd(9)} on the baseplate`);
-    }
-    z += H;
-  }
-  console.log(`   stack pitch ${z.toFixed(2)} mm plus the top bin's lip`);
-  if (!ok) bad++;
-
-  // and the order that does NOT work, so the failure is on the record too
-  const wrong = seat('low', 'standard');
-  console.log(`\n   for contrast, low straight onto standard: ${wrong.worst.toFixed(3)} mm ` +
-              `at z ${wrong.worstAt.toFixed(2)} — ${wrong.worst > -1e-6 ? 'seats' : 'fouls, as intended'}`);
+let worst = Infinity, worstAt = 0, widest = -Infinity;
+for (let z = 0; z <= LIP_H + 1e-9; z += 0.01) {
+  const clr = lipInnerAt(z) - outerHalfAt(z);
+  if (clr < worst) { worst = clr; worstAt = z; }
+  if (clr > widest) widest = clr;
+}
+for (const z of [0, 0.8, 2.6, LIP_H]) {
+  const inner = lipInnerAt(z), outer = outerHalfAt(z);
+  const clr = inner - outer;
+  console.log(`   ${z.toFixed(2).padStart(4)}   ${inner.toFixed(2).padStart(9)}   ` +
+              `${outer.toFixed(2).padStart(9)}   ${clr.toFixed(3).padStart(9)}` +
+              `${Math.abs(clr - CLEARANCE) < 1e-6 ? '  ok' : '  OFF SPEC'}`);
 }
 
-console.log(bad ? `\n${bad} pairing(s) did not behave as documented` : '\nstacking matches the documented rules');
+const seats = worst > -1e-6;
+console.log(`\n   tightest ${worst.toFixed(3)} mm at z ${worstAt.toFixed(2)} — ` +
+            `${seats ? 'seats' : 'FOULS — it would perch on top'}`);
+if (!seats) bad++;
+
+const uniform = Math.abs(worst - CLEARANCE) < 1e-6 && Math.abs(widest - CLEARANCE) < 1e-6;
+console.log(`   clearance across the whole lip: ${worst.toFixed(3)} to ${widest.toFixed(3)} mm — ` +
+            `${uniform ? `uniform at the spec's ${CLEARANCE}` : 'NOT UNIFORM, the profiles disagree'}`);
+if (!uniform) bad++;
+
+console.log(bad ? `\n${bad} check(s) FAILED` : '\na bin seats in the bin below it');
 process.exit(bad ? 1 : 0);

@@ -49,7 +49,6 @@ const BIN_DEFAULTS = {
   shrink: 0,            // extra clearance per side, on top of the spec's 0.25
   lip: true,            // stacking lip on top (only when every edge is full height)
   edges: null,          // {f,b,l,r} wall heights as a fraction; 0 = open, 1 = full
-  base: 'standard',     // 'standard' | 'lowlip' | 'low' — see BASE_STYLES
   lipMin: 0.55,         // flat width of the lip's top rim
   cells: null,          // occupied [x,y] offsets; null means the whole u x v rectangle
   scoop: 0,             // radius of the front scoop fillet, 0 = none
@@ -106,58 +105,14 @@ function labelPrism(G, hwI, hdI, H, depth, t) {
 const LIP = [[0, 2.70], [0.8, 1.90], [2.6, 1.90]];
 const lipHeight = (lipMin) => 2.6 + (1.90 - lipMin);   // 3.95 at the default
 
-/* Base styles.
- *
- * A spec foot is 4.75 mm, which eats the interior: a 1-unit bin is left with
- * 1.05 mm of cavity. Truncating the foot at 2.0 mm keeps its bottom chamfer plus
- * 1.2 mm of vertical — enough taper to self-centre — and hands back 2.75 mm.
- *
- * A short foot cannot enter a full lip: 2 mm up, the lip's opening is 18.85 while
- * the body above the foot is 20.75, so it would perch on top. The two must be a
- * matched pair, hence the low lip, which stops at 2.0 with a 1.90 mm flat rim that
- * the upper bin's shoulder rests on.
- *
- * A low lip also accepts a *spec* foot — the foot simply drops to the lip floor —
- * so the three styles below are the only combinations worth having, and each is
- * valid by construction:
- *   standard  spec foot + spec lip     interoperable, stacks with anyone's bins
- *   lowlip    spec foot + low lip      seats in a baseplate, takes low bins above
- *   low       short foot + low lip     more depth; only onto another low lip
+/* There is one base: the spec foot, 4.75 mm, under the spec lip. Truncated feet
+ * were offered for a while and are gone. They bought 1.70 mm of usable depth, and
+ * only in the bins above the first — the bottom one sits on a baseplate and needs a
+ * full foot whatever the ones above it do. On a two-layer 10-unit stack that is
+ * 59.80 mm against 58.10, under 3%, and it cost a 2.15 mm taper visible as a waist
+ * at every joint, a lip that only mated with its own kind, and a base style to
+ * choose. Not worth the surface area.
  */
-const STUB_H = 2.0;
-const LIP_LOW = [[0, 2.70], [0.8, 1.90]];
-const BASE_STYLES = {
-  standard: { footH: SPEC.footH, lip: LIP,     lipH: null, rim: null },
-  lowlip:   { footH: SPEC.footH, lip: LIP_LOW, lipH: STUB_H, rim: 1.90 },
-  low:      { footH: STUB_H,     lip: LIP_LOW, lipH: STUB_H, rim: 1.90 },
-};
-const baseStyle = (c) => BASE_STYLES[c && c.base] || BASE_STYLES.standard;
-
-// foot profile truncated to a given height, keeping the spec shape
-function footProfile(footH) {
-  const out = [];
-  for (const [z, h] of SPEC.prof) {
-    if (z < footH - 1e-9) out.push([z, h]);
-    else break;
-  }
-  const last = out[out.length - 1];
-  let h = SPEC.prof[SPEC.prof.length - 1][1];
-  for (let i = 0; i < SPEC.prof.length - 1; i++) {
-    const [z0, h0] = SPEC.prof[i], [z1, h1] = SPEC.prof[i + 1];
-    if (footH >= z0 && footH <= z1) { h = h0 + (h1 - h0) * (z1 > z0 ? (footH - z0) / (z1 - z0) : 0); break; }
-  }
-  if (!last || Math.abs(last[0] - footH) > 1e-9) out.push([footH, h]);
-  /* A truncated foot must still reach full width at 45 degrees. Cutting the spec
-     profile at 2.0 mm removes its 2.60 -> 4.75 taper entirely, so the body jumped
-     from 18.60 to 20.75 with nothing under it: a 2.15 mm flat overhang all the way
-     round, which is exactly where the low-profile test print failed. The taper is
-     above the part that mates with a lip, so seating is unchanged -- contact is on
-     the chamfer below 0.80, not on this ledge. */
-  const top = out[out.length - 1];
-  if (SPEC.half - top[1] > 1e-9)
-    out.push([top[0] + (SPEC.half - top[1]), SPEC.half]);
-  return out;
-}
 
 /* ---------- 2D outlines --------------------------------------------------- */
 
@@ -303,19 +258,16 @@ function wallRing(G, outer, inner, z0, zTop) {
 // A separate overlapping shell, so it works whether the wall is thinner or
 // thicker than the lip's inward reach — no special-casing either way.
 function lipRing(G, c, hwO, hdO, H, n) {
-  const st = baseStyle(c);
-  const lipH = st.lipH !== null ? st.lipH : lipHeight(c.lipMin);
-  const rim = st.rim !== null ? st.rim : c.lipMin;
   const ring = (t) => roundRect(hwO - t, hdO - t, SPEC.r - t, n);
-  const steps = st.lip.concat([[lipH, rim]]);
+  const lipH = lipHeight(c.lipMin);
+  const steps = LIP.concat([[lipH, c.lipMin]]);
   const inner = steps.map(([, t]) => ring(t));
   const zsI = steps.map(([z]) => H + z);
   /* Chamfer the underside of the lip instead of dropping it straight down.
      The wall is 1.2 mm and the lip base is 2.70, so the lip used to begin with
      1.50 mm of material starting in mid-air over the cavity. Every printed bin
-     failed in the same place just below the internal lip, whatever its base style,
-     because the ledge is identical on all of them. Running the inner surface down
-     to the wall thickness at 45 degrees makes it self-supporting.
+     failed in the same place, just below the internal lip. Running the inner
+     surface down to the wall thickness at 45 degrees makes it self-supporting.
 
      Clamped to the wall height available: a 1-unit bin has only 1.05 mm of wall
      below the lip, so it gets a steeper chamfer rather than one that starts below
@@ -662,13 +614,8 @@ function buildBin(G, cfg) {
   const mask = maskOf(c), full = isFullRect(c);
 
   /* feet — one closed shell per occupied cell, overlapping the body above */
-  const st = baseStyle(c);
-  const prof = footProfile(st.footH);
-  /* The BLOAT extension goes above the TOP OF THE PROFILE, not above footH. On a
-     truncated foot the profile now carries a 45 degree taper past footH, so anchoring
-     the extension to footH made the sweep fold back on itself — 0, 0.8, 2.0, 4.15,
-     2.05 — and the taper never appeared in the mesh at all. */
-  const zs = prof.map((p) => p[0]).concat([prof[prof.length - 1][0] + BLOAT]);
+  const prof = SPEC.prof;
+  const zs = prof.map((p) => p[0]).concat([SPEC.footH + BLOAT]);
   for (let i = 0; i < c.u; i++)
     for (let j = 0; j < c.v; j++) {
       if (!mask.has(cellKey(i, j))) continue;
@@ -681,37 +628,20 @@ function buildBin(G, cfg) {
       rings.push(rings[rings.length - 1]);      // BLOAT extension into the body
       polys.push(...sweep(G.makePoly, rings, zs));
       polys.push(...fanCap(G.makePoly, rings[0], zs[0], false, cx, cy));
-      // the same height the sweep ends at, not footH: a truncated foot's taper carries
-      // the profile past footH, and capping at the old height left the shell open at
-      // the top and a stray lid floating inside it
+      // capped at the height the sweep actually ends at, overlap extension included:
+      // capping lower left the shell open at the top with a stray lid inside it
       polys.push(...fanCap(G.makePoly, rings[rings.length - 1], zs[zs.length - 1], true, cx, cy));
     }
 
   /* body */
   const outer = outlineAt(c.u, c.v, SPEC.half, c.shrink, n);
-  /* Where the foot finishes reaching full width. A spec foot gets there at 4.75 on
-     its own; a truncated one carries a 45 degree taper on top of itself, and the body
-     must not start until that taper has finished. The first attempt at this left the
-     body extruded at full width from footH, so the taper was buried inside it: the
-     exterior still stepped 2.15 mm sideways in mid-air, and the buried cone grazing
-     the slab is what put a shimmering band across the underside in a slicer.
-
-     The floor follows it up. A cavity cannot start while the outside is still
-     tapering, or the wall between them thins to nothing — at 3.0 mm on a low bin the
-     taper is at 19.60 and the cavity wall wants 19.55, which is 0.05 mm of plastic. */
-  const footTop = footProfile(st.footH);
-  const bodyBase = footTop[footTop.length - 1][0];
-  /* The cavity cannot start while the outside is still tapering: at 3.2 mm on a low
-     bin the exterior is at 19.85 and the cavity wall wants 19.55, which is 0.3 mm of
-     plastic — under one extrusion. So the floor sits at whichever is higher, the
-     nominal floor above the foot or the top of the taper.
-
-     It does NOT get floorT stacked on top of the taper. The taper is solid material
-     already — 2.15 mm of it on a low bin, thicker than the nominal floor — and
-     charging for a floor above it would cost a low bin 1.1 mm of the depth it exists
-     to provide. The two BLOAT is so the slab encloses the foot's overlap extension
-     rather than ending exactly on it, which leaves 128 boundary edges. */
-  const floorZ = Math.max(st.footH + c.floorT, bodyBase + 2 * BLOAT);
+  /* The foot reaches full width at 4.75, so that is where the body starts and there
+     is no step in the silhouette between them. */
+  const bodyBase = SPEC.footH;
+  /* Never less than two BLOAT above the foot, so the slab encloses the foot's overlap
+     extension rather than ending exactly on it — ending on it leaves 128 boundary
+     edges. Only a floor thinner than 0.1 mm ever hits that clamp. */
+  const floorZ = bodyBase + Math.max(c.floorT, 2 * BLOAT);
 
   /* Whether there is a lip has to be known before the body: a carved bin's wall
      panels carry their own lip, so the decision cannot wait until after. A lip over
@@ -719,9 +649,8 @@ function buildBin(G, cfg) {
   const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) =>
     c.edges[k] === undefined || c.edges[k] >= 1);
   const hasLip = c.lip && allFull && !c.solid;
-  const lipH = hasLip ? (st.lipH !== null ? st.lipH : lipHeight(c.lipMin)) : 0;
-  const lipSteps = hasLip
-    ? st.lip.concat([[lipH, st.rim !== null ? st.rim : c.lipMin]]) : null;
+  const lipH = hasLip ? lipHeight(c.lipMin) : 0;
+  const lipSteps = hasLip ? LIP.concat([[lipH, c.lipMin]]) : null;
 
   if (!full) {
     /* Carved shapes are built cell by cell. Dividers, scoop and the label shelf still
@@ -743,15 +672,11 @@ function buildBin(G, cfg) {
     // Start the ring below the cavity floor, buried in the slab. An "open" edge
     // then has its top at floorZ and the ring is still a real volume there rather
     // than a zero-height sliver — the degenerate case simply hides inside the slab.
-    /* ...but never below where the outside is still tapering. The ring is full width,
-       so a start buried under the taper punches straight through it — on a low bin it
-       reappeared at 20.75 from z 3.30, cutting the 45 degree run off two thirds of the
-       way up and putting back most of the overhang the taper exists to remove.
-
-       The 1.4 BLOAT is to miss the planes the foot already occupies. Landing exactly
-       on the foot's top ring (bodyBase) or its overlap cap (bodyBase + BLOAT) puts two
-       shells face to face, which costs 64 edges used four times apiece. A spec foot is
-       unaffected either way: its own term wins. */
+    /* ...but never onto a plane the foot already occupies. Dropping a floor's worth
+       below the floor lands exactly on bodyBase for any floor up to 1 mm, which is
+       the foot's own top ring; the overlap cap sits a BLOAT above that. Either one
+       puts two shells face to face, costing 64 edges used four times apiece, so the
+       start is lifted 1.4 BLOAT clear of both. */
     const zBase = Math.max(bodyBase + 1.4 * BLOAT,
                            floorZ - Math.min(1.0, Math.max(0.2, c.floorT)));
     const zTop = edgeHeights(outer, hw, hd, SPEC.r, c.edges, floorZ, H);
@@ -805,7 +730,7 @@ function buildBin(G, cfg) {
     lipH, totalH: topZ + lipH,       // H is the stacking pitch; totalH is what it occupies
     W: (c.u - 1) * SPEC.pitch + 2 * (SPEC.half - c.shrink),
     D: (c.v - 1) * SPEC.pitch + 2 * (SPEC.half - c.shrink),
-    footH: st.footH, base: c.base || 'standard', floorZ, cells: mask.size,
+    footH: SPEC.footH, floorZ, cells: mask.size,
     cavity: Math.max(0, H - floorZ),
   };
   return { polys: G.clampZ(polys, 0), meta };
@@ -818,10 +743,15 @@ function buildBin(G, cfg) {
  * back with dividers it never had. Separators are now characters that cannot
  * occur in a non-negative number, and packBin refuses to emit one that could.
  *
+ * Field positions are the format. A bin is 17 fields and everything after a change
+ * shifts, so adding or removing one invalidates every link already in circulation.
+ * The base-style field was dropped when the base styles went, which was free only
+ * because the site had not been advertised and no link existed to break. Anything
+ * retired from here on gets left in place as a dead field instead.
+ *
  * Pure functions living here rather than in the UI so they can be tested headlessly.
  */
 const SEP = { field: '-', bin: '_', layer: '~' };
-const BASES = ['standard', 'lowlip', 'low'];
 const PACK_EDGES = ['f', 'b', 'l', 'r'];
 
 function maskBits(b) {
@@ -845,23 +775,31 @@ function packBin(b) {
   const f = [b.x, b.y, b.u, b.v, b.hUnits, b.wall, b.floorT, b.divX, b.divY,
              b.solid ? 1 : 0]
     .concat(PACK_EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1)))
-    .concat([Math.max(0, BASES.indexOf(b.base || 'standard')), b.scoop || 0, b.label || 0,
-             maskBits(b) || 0]);
+    .concat([b.scoop || 0, b.label || 0, maskBits(b) || 0]);
   for (const v of f)
     if (String(v).includes(SEP.field) || String(v).includes(SEP.bin) || String(v).includes(SEP.layer))
       throw new Error(`bin field ${v} contains a separator — packing would corrupt it`);
   return f.join(SEP.field);
 }
+/* Anything can arrive here: the hash is in the address bar, so it gets hand-edited,
+   truncated by a chat client and pasted back a field short. Every field therefore
+   falls back to its default rather than passing NaN through to the geometry — a bin
+   with a NaN footprint builds no polygons at all, so the page comes up blank, which
+   looks exactly like losing the layout rather than like a typo. */
+const numAt = (p, i, d) => (isFinite(p[i]) ? p[i] : d);
+const countAt = (p, i, d) => (isFinite(p[i]) ? Math.max(1, Math.round(p[i])) : d);
 function unpackBin(t) {
-  const raw = t.split(SEP.field);
+  const raw = String(t).split(SEP.field);
   const p = raw.map(Number);
   const edges = {};
   PACK_EDGES.forEach((k, i) => { edges[k] = isFinite(p[10 + i]) ? p[10 + i] : 1; });
-  return { x: p[0], y: p[1], u: p[2], v: p[3], hUnits: p[4],
-           wall: p[5], floorT: p[6], divX: p[7], divY: p[8], solid: !!p[9],
-           edges, base: BASES[p[14]] || 'standard',
-           scoop: isFinite(p[15]) ? p[15] : 0, label: isFinite(p[16]) ? p[16] : 0,
-           cells: bitsToCells(raw[17] && raw[17] !== '0' ? raw[17] : '', p[2], p[3]) };
+  const u = countAt(p, 2, BIN_DEFAULTS.u), v = countAt(p, 3, BIN_DEFAULTS.v);
+  return { x: numAt(p, 0, 0), y: numAt(p, 1, 0), u, v,
+           hUnits: countAt(p, 4, BIN_DEFAULTS.hUnits),
+           wall: numAt(p, 5, BIN_DEFAULTS.wall), floorT: numAt(p, 6, BIN_DEFAULTS.floorT),
+           divX: numAt(p, 7, 0), divY: numAt(p, 8, 0), solid: !!p[9],
+           edges, scoop: numAt(p, 14, 0), label: numAt(p, 15, 0),
+           cells: bitsToCells(raw[16] && raw[16] !== '0' ? raw[16] : '', u, v) };
 }
 const packLayers = (layers) =>
   layers.map((L) => L.bins.map(packBin).join(SEP.bin)).join(SEP.layer);
@@ -870,7 +808,7 @@ const unpackLayers = (s) => (s || '').split(SEP.layer)
 
 if (typeof module !== 'undefined') {
   module.exports = { buildBin, roundRect, outlineAt, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
-    lipHeight, BASE_STYLES, footProfile, STUB_H, REQUIRED_CORE,
+    lipHeight, REQUIRED_CORE,
     maskOf, maskCheck, isFullRect, cellKey, maskBits, bitsToCells,
     packBin, unpackBin, packLayers, unpackLayers };
 }

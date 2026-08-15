@@ -39,8 +39,6 @@ const CASES = [
   { name: '1x1x1', u: 1, v: 1, hUnits: 1 },
   { name: '2x1x3-scoop', u: 2, v: 1, hUnits: 3, scoop: 8 },
   { name: '2x1x3-label', u: 2, v: 1, hUnits: 3, label: 12 },
-  { name: '2x2x3-lowlip', u: 2, v: 2, hUnits: 3, base: 'lowlip' },
-  { name: '2x2x3-low', u: 2, v: 2, hUnits: 3, base: 'low' },
   { name: '2x1x3-openfront', u: 2, v: 1, hUnits: 3, edges: { f: 0 } },
   { name: '2x2x2-tray', u: 2, v: 2, hUnits: 2, edges: { f: 0, b: 0, l: 0, r: 0 } },
   { name: '6x4x5-everything', u: 6, v: 4, hUnits: 5, divX: 2, divY: 1, scoop: 6, label: 10 },
@@ -185,44 +183,45 @@ for (const [z, half] of SPEC.prof) {
   console.log(`  z ${z.toFixed(2).padStart(5)}  half ${half.toFixed(2)}  r ${r.toFixed(2)}  centre ${(half - r).toFixed(2)}`);
 }
 
-/* Nothing was checking the OUTSIDE for overhangs, which is why a low-profile bin
-   shipped with a 2.15 mm ledge starting in mid-air, and why the taper meant to fix it
-   sat buried inside the body doing nothing across two commits. Walk the outer
-   silhouette and demand no sideways step wider than the height it rises over — that is
+/* Nothing was checking the OUTSIDE for overhangs, which is how the retired low-profile
+   base shipped a 2.15 mm ledge starting in mid-air, and how the taper meant to fix it
+   sat buried inside the body doing nothing across two commits. The styles that caused
+   it are gone; the check stays, because it is the only thing here that reads the
+   silhouette of the mesh that came out rather than the profile it was built from.
+   Walk it and demand no sideways step wider than the height it rises over — that is
    45 degrees, the angle a printer holds without support. */
 console.log('\nouter silhouette: no overhang steeper than 45 degrees');
 {
   const STEP = 0.05;
-  for (const base of ['standard', 'lowlip', 'low'])
-    for (const hUnits of [1, 3]) {
-      const r = buildBin(G, { u: 2, v: 1, hUnits, base });
-      const tris = G.polysToTriangles(r.polys);
-      const at = (z) => {
-        let m = 0;
-        for (const t of tris) {
-          const lo = Math.min(t[0][2], t[1][2], t[2][2]);
-          const hi = Math.max(t[0][2], t[1][2], t[2][2]);
-          if (z < lo - 1e-9 || z > hi + 1e-9) continue;
-          for (let i = 0; i < 3; i++) {
-            const a = t[i], b = t[(i + 1) % 3];
-            if ((a[2] - z) * (b[2] - z) > 0) continue;
-            const s = Math.abs(b[2] - a[2]) < 1e-12 ? 0 : (z - a[2]) / (b[2] - a[2]);
-            m = Math.max(m, Math.abs(a[1] + s * (b[1] - a[1])));
-          }
+  for (const hUnits of [1, 3]) {
+    const r = buildBin(G, { u: 2, v: 1, hUnits });
+    const tris = G.polysToTriangles(r.polys);
+    const at = (z) => {
+      let m = 0;
+      for (const t of tris) {
+        const lo = Math.min(t[0][2], t[1][2], t[2][2]);
+        const hi = Math.max(t[0][2], t[1][2], t[2][2]);
+        if (z < lo - 1e-9 || z > hi + 1e-9) continue;
+        for (let i = 0; i < 3; i++) {
+          const a = t[i], b = t[(i + 1) % 3];
+          if ((a[2] - z) * (b[2] - z) > 0) continue;
+          const s = Math.abs(b[2] - a[2]) < 1e-12 ? 0 : (z - a[2]) / (b[2] - a[2]);
+          m = Math.max(m, Math.abs(a[1] + s * (b[1] - a[1])));
         }
-        return m;
-      };
-      let prev = null, worst = 0, where = 0;
-      for (let z = STEP; z <= hUnits * 7; z += STEP) {
-        const v = at(z);
-        if (prev !== null && v - prev > worst) { worst = v - prev; where = z; }
-        prev = v;
       }
-      const ok = worst <= STEP + 1e-6;
-      console.log(`  ${(base + ' ' + hUnits + 'u').padEnd(13)} widest step ${worst.toFixed(3)} mm ` +
-                  `per ${STEP} mm of height, at z ${where.toFixed(2)}   ${ok ? 'ok' : 'OVERHANG'}`);
-      if (!ok) bad++;
+      return m;
+    };
+    let prev = null, worst = 0, where = 0;
+    for (let z = STEP; z <= hUnits * 7; z += STEP) {
+      const v = at(z);
+      if (prev !== null && v - prev > worst) { worst = v - prev; where = z; }
+      prev = v;
     }
+    const ok = worst <= STEP + 1e-6;
+    console.log(`  ${(hUnits + 'u').padEnd(13)} widest step ${worst.toFixed(3)} mm ` +
+                `per ${STEP} mm of height, at z ${where.toFixed(2)}   ${ok ? 'ok' : 'OVERHANG'}`);
+    if (!ok) bad++;
+  }
 }
 
 console.log(bad ? `\n${bad} case(s) FAILED` : '\nall cases clean');

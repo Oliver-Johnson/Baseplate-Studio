@@ -32,7 +32,6 @@ Your drawer dimensions carry between the two, in both directions, without losing
 - **Multiple layers** — stack bins on bins, as many layers as fit. The layer below is ghosted for alignment, and checks catch the ways a real stack fails: overhanging an empty cell, spanning bins of different heights (it would rock), or a footprint mismatch the lip can't locate
 - **Per-edge walls** — each of the four walls can be full, two thirds, half, a low retaining lip, or fully open. An open front makes a bin you can reach into; all four open makes a **flat tray or lid**
 - **Dividers** in both directions, solid blocks, and adjustable wall and floor thickness
-- **Base styles** — Standard (spec foot and lip, interoperable with anyone's bins), Low lip (spec foot, accepts low-profile bins above), or **Low profile** (2 mm foot, which turns a 1-unit bin's useless 1.05 mm cavity into 3.80 mm)
 - **Stacking lips** built to spec, so bins stack on each other and on any spec baseplate
 - **Honest material estimates** — computed analytically at your slicer's infill, not from raw mesh volume
 - **Print plan and export** — packs bins onto your bed, exports pre-arranged 3MF plates, or a ZIP with one STL per bin type and a README carrying the layout
