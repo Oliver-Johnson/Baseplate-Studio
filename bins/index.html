@@ -2699,6 +2699,57 @@ function carvedBody(G, c, mask, H, floorZ, zTop, lipSteps) {
     polys.push(...fanCap(G.makePoly, rings[rings.length - 1], zs[zs.length - 1], true, b[0], b[1]));
   };
 
+  /* Convex corners follow the spec arc, exactly like a rectangular bin's.
+     A carved bin was built from plain rectangles, so every convex corner came out
+     square and reached 1.55 mm further than the Gridfinity profile allows — visibly
+     sharp beside an uncarved bin, and outside the standard.
+
+     The corner is an annular sector: outer radius CR about the spec arc centre, inner
+     radius CR - t so the wall keeps its thickness and the lip keeps its step. It gets
+     its own sweep because an annular sector is star-shaped about no point at all, so
+     fanCap cannot close it — the outer and inner arcs are index-paired instead, which
+     is the same reasoning that made ringStrip necessary for the bins in the first
+     place. */
+  const NARC = 8;                       // arc segments per 90 degrees of corner
+  /* Shells must interpenetrate, never meet on a plane: two faces that touch share
+     their edges, and a shared edge is used four times instead of twice. Cutting the
+     panels off exactly at the arc's tangent point did precisely that and cost 160
+     bad edges. Running them OVER past it costs 5 microns of bulge where the flat
+     face crosses the arc, which is four orders of magnitude below a nozzle. */
+  const OVER = 4 * BLOAT;
+  const CC = SPEC.centre, CR = half - SPEC.centre;
+  const arcPts = (ccx, ccy, rad, a0) => {
+    const out = [];
+    for (let k = 0; k <= NARC; k++) {
+      const a = (a0 + 90 * k / NARC) * Math.PI / 180;
+      out.push([ccx + rad * Math.cos(a), ccy + rad * Math.sin(a)]);
+    }
+    return out;
+  };
+  const sweptSector = (steps, ccx, ccy, a0) => {
+    const zs = steps.map(([z]) => z);
+    const rings = steps.map(([, t]) => ({
+      // a wall thicker than the corner radius would invert the inner arc; clamp it
+      // to a sliver rather than let it fold through itself
+      outer: arcPts(ccx, ccy, CR, a0),
+      inner: arcPts(ccx, ccy, Math.max(0.2, CR - t), a0),
+    }));
+    const loop = (r) => r.outer.concat(r.inner.slice().reverse());
+    polys.push(...sweep(G.makePoly, rings.map(loop), zs));
+    // caps: index-paired band between the two arcs, never a fan
+    const cap = (r, z, up) => {
+      for (let i = 0; i < r.outer.length - 1; i++) {
+        const a = [r.outer[i][0], r.outer[i][1], z], b = [r.outer[i + 1][0], r.outer[i + 1][1], z];
+        const c2 = [r.inner[i + 1][0], r.inner[i + 1][1], z], d = [r.inner[i][0], r.inner[i][1], z];
+        for (const tri of up ? [[a, b, c2], [a, c2, d]] : [[c2, b, a], [d, c2, a]]) {
+          const pp = G.makePoly(tri); if (pp) polys.push(pp);
+        }
+      }
+    };
+    cap(rings[0], zs[0], false);
+    cap(rings[rings.length - 1], zs[zs.length - 1], true);
+  };
+
   for (const key of mask) {
     const [x, y] = key.split(',').map(Number);
     const cx = x * P - ox, cy = y * P - oy;
@@ -2706,16 +2757,42 @@ function carvedBody(G, c, mask, H, floorZ, zTop, lipSteps) {
     // slab: outer face on exposed sides, over the boundary on shared ones
     const x0 = cx - (e.l ? half : P / 2 + BLOAT), x1 = cx + (e.r ? half : P / 2 + BLOAT);
     const y0 = cy - (e.f ? half : P / 2 + BLOAT), y1 = cy + (e.b ? half : P / 2 + BLOAT);
-    polys.push(...G.extrudePoly([[x0, y0], [x1, y0], [x1, y1], [x0, y1]],
-                                SPEC.footH - BLOAT, floorZ + BLOAT));
+    // a corner is convex only where two adjacent edges of this cell are both exposed
+    const cvx = { fl: e.f && e.l, fr: e.f && e.r, bl: e.b && e.l, br: e.b && e.r };
+    const outline = [];
+    const push = (pts) => outline.push(...pts);
+    if (cvx.fl) push(arcPts(cx - CC, cy - CC, CR, 180)); else outline.push([x0, y0]);
+    if (cvx.fr) push(arcPts(cx + CC, cy - CC, CR, 270)); else outline.push([x1, y0]);
+    if (cvx.br) push(arcPts(cx + CC, cy + CC, CR, 0));   else outline.push([x1, y1]);
+    if (cvx.bl) push(arcPts(cx - CC, cy + CC, CR, 90));  else outline.push([x0, y1]);
+    polys.push(...G.extrudePoly(outline, SPEC.footH - BLOAT, floorZ + BLOAT));
     if (zTop <= floorZ + 0.01) continue;
-    // one panel per exposed edge, run long so panels meet at the corners
+    /* Panels stop at the arc's tangent point where a convex corner takes over, and
+       otherwise run long so they meet at the boundary. Running them full length past
+       a rounded corner is what left the square corner sticking out. */
     const L = x0 - BLOAT, R = x1 + BLOAT, F = y0 - BLOAT, Bk = y1 + BLOAT;
+    const yF = cvx.fl || cvx.fr ? cy - CC : null, yB = cvx.bl || cvx.br ? cy + CC : null;
     const steps = wallProfile(zTop);
-    if (e.l) sweptPanel(steps, (t) => [[x0, F], [x0 + t, F], [x0 + t, Bk], [x0, Bk]]);
-    if (e.r) sweptPanel(steps, (t) => [[x1 - t, F], [x1, F], [x1, Bk], [x1 - t, Bk]]);
-    if (e.f) sweptPanel(steps, (t) => [[L, y0], [R, y0], [R, y0 + t], [L, y0 + t]]);
-    if (e.b) sweptPanel(steps, (t) => [[L, y1 - t], [R, y1 - t], [R, y1], [L, y1]]);
+    if (e.l) sweptPanel(steps, (t) => {
+      const a = cvx.fl ? cy - CC - OVER : F, b = cvx.bl ? cy + CC + OVER : Bk;
+      return [[x0, a], [x0 + t, a], [x0 + t, b], [x0, b]];
+    });
+    if (e.r) sweptPanel(steps, (t) => {
+      const a = cvx.fr ? cy - CC - OVER : F, b = cvx.br ? cy + CC + OVER : Bk;
+      return [[x1 - t, a], [x1, a], [x1, b], [x1 - t, b]];
+    });
+    if (e.f) sweptPanel(steps, (t) => {
+      const a = cvx.fl ? cx - CC - OVER : L, b = cvx.fr ? cx + CC + OVER : R;
+      return [[a, y0], [b, y0], [b, y0 + t], [a, y0 + t]];
+    });
+    if (e.b) sweptPanel(steps, (t) => {
+      const a = cvx.bl ? cx - CC - OVER : L, b = cvx.br ? cx + CC + OVER : R;
+      return [[a, y1 - t], [b, y1 - t], [b, y1], [a, y1]];
+    });
+    if (cvx.fl) sweptSector(steps, cx - CC, cy - CC, 180);
+    if (cvx.fr) sweptSector(steps, cx + CC, cy - CC, 270);
+    if (cvx.br) sweptSector(steps, cx + CC, cy + CC, 0);
+    if (cvx.bl) sweptSector(steps, cx - CC, cy + CC, 90);
   }
 
   /* Reflex corners.
@@ -2735,7 +2812,6 @@ function carvedBody(G, c, mask, H, floorZ, zTop, lipSteps) {
    * profile as the panels, so the stacking lip carries round the corner instead of
    * stopping short of it.
    */
-  const NARC = 8;
   /* Reflex corners are built from three overlapping convex pieces rather than one
      wrapping band. The band was the right SHAPE — the containment was correct — but
      it has a reflex vertex at the notch corner, and a single fan cap cannot close a
@@ -2753,7 +2829,6 @@ function carvedBody(G, c, mask, H, floorZ, zTop, lipSteps) {
      the wall 0.02 mm proud at the transition — below a nozzle width, and the price of
      never relying on a coincident face. */
   const lap = (P / 2 - half) + 2 * BLOAT;
-  const OVER = 4 * BLOAT;
   const sector = (fx, fy, dx, dy) => (t) => {
     const base = dx > 0 ? (dy > 0 ? 0 : -Math.PI / 2) : (dy > 0 ? Math.PI / 2 : Math.PI);
     const pts = [[fx, fy]];

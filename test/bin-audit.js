@@ -81,8 +81,11 @@ for (const cs of CASES) {
 
   // expected footprint straight from the spec, independent of the builder
   const expW = (cs.u - 1) * 42 + 41.5, expD = (cs.v - 1) * 42 + 41.5;
-  // a carved shape spans its bounding box, and its cell slabs sit a BLOAT proud
-  const tol = cs.cells ? 0.2 : 0.02;
+  /* A carved shape spans its bounding box to the same tolerance as a plain one now
+     that its convex corners follow the spec arc. It used to need 0.2 mm of slack
+     because square corners put it 1.55 mm outside the Gridfinity profile diagonally
+     and 0.1 mm over on the flats. */
+  const tol = 0.02;
   const wOk = Math.abs((xmax - xmin) - expW) < tol && Math.abs((ymax - ymin) - expD) < tol;
   /* The stacking PITCH is always hUnits*7 — that is what a bin occupies in a stack.
      The real height can be less: a tray with every wall open is just its floor, so
