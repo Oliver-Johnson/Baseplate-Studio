@@ -25,6 +25,22 @@ async function openBins(page) {
   return errors;
 }
 
+/* The baseplates page builds its pieces asynchronously and on a timer, so there is a
+   window after load in which the piece table, the print plan and the export dialog are
+   all still empty. Waiting for the table to say "ready" is waiting for the real thing
+   rather than for a duration that happens to be long enough on this machine. */
+async function openPlates(page) {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  await page.goto(PLATES_URL);
+  await page.waitForFunction(() => {
+    const t = document.getElementById('pieceTail');
+    return t && /ready/.test(t.textContent);
+  }, null, { timeout: 20000 });
+  return errors;
+}
+
 /* Viewport coordinates of the centre of grid cell (gx, gy). Front of the drawer is
    the bottom of the map, so grid y counts up from there while SVG y counts down. */
 async function cellPoint(page, gx, gy) {
@@ -91,5 +107,5 @@ const setField = async (page, id, value) => {
   await page.waitForTimeout(250);
 };
 
-module.exports = { openBins, cellPoint, dragCells, clickCell, bins, setField,
+module.exports = { openBins, openPlates, cellPoint, dragCells, clickCell, bins, setField,
                    BINS_URL, PLATES_URL, CELL, ROOT };

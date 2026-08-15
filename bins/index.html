@@ -36,6 +36,7 @@
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px}
 a{color:var(--cyan)}
+
 header{padding:22px 26px 16px;border-bottom:1px solid var(--line);
   background:
     repeating-linear-gradient(0deg,transparent,transparent 20px,rgba(79,195,232,.045) 20px,rgba(79,195,232,.045) 21px),
@@ -53,19 +54,18 @@ header .privacy::before{content:"● ";color:var(--cyan)}
 .stage{padding:16px 20px 60px;overflow-y:auto;max-height:calc(100vh - 96px)}
 @media(max-width:980px){.stage{max-height:none}}
 
-/* Stacked layout: export goes last.
-   Side by side, the rail is a column and the export panel at the bottom of it reads
-   as the end of the process. Stacked, the rail comes before the stage in the
-   document, so export landed halfway down the page — before you had seen the
-   preview, the cut map or the print plan it is meant to follow. Letting the rail's
-   children join the page's flex flow lets that one panel be ordered past the stage
-   without moving it in the markup, where its position is correct. */
+/* Stacked layout.
+   The rail comes before the stage in the document, which is right side by side and
+   wrong stacked — settings you have already filled in would push the working surface
+   down the page. Letting the rail's children join the page's flex flow lets them be
+   ordered around the stage without moving them in the markup, where they belong.
+   (Export used to need an order of its own here, to stop panel 07 landing halfway up
+   a stacked page. It is a dialog now, so there is nothing left to reorder.) */
 @media(max-width:980px){
   .app{display:flex;flex-direction:column}
   .app > .rail{display:contents}
   .rail > section.p{order:10}
   .app > .stage{order:50;border-top:1px solid var(--line)}
-  .rail > section.p.export{order:90;margin:0 16px 12px}
 }
 section.p{background:var(--panel);border:1px solid var(--line);border-radius:8px;margin-bottom:12px;overflow:hidden}
 section.p>h2{font-size:11px;letter-spacing:.14em;color:var(--dim);padding:10px 13px;cursor:pointer;
@@ -110,7 +110,6 @@ button.act.on{background:var(--amber);box-shadow:0 0 0 2px rgba(0,0,0,.35) inset
 button.ghost{background:transparent;color:var(--cyan);border:1px solid var(--cyan);border-radius:6px;
   padding:8px 12px;cursor:pointer;font-size:12.5px}
 button.ghost:disabled{opacity:.4;cursor:default}
-.export .body{gap:8px}
 .stagecard{background:var(--panel);border:1px solid var(--line);border-radius:8px;margin-bottom:14px}
 .stagecard h3{font-size:11px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase;
   padding:10px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center}
@@ -251,6 +250,68 @@ article.doc .cta{margin-top:34px;padding-top:18px;border-top:1px solid var(--lin
 #fillmap .cellpart{rx:0;stroke:none}
 #fillmap .binedge{stroke:var(--cyan);stroke-width:2;stroke-linecap:round;pointer-events:none}
 #fillmap .bin.sel.cellpart{stroke:none}
+
+/* ---- download dialog ------------------------------------------------------
+   Downloading is one action taken once, at the end. As a panel it sat in the page
+   the whole time you were designing, competing for attention with the thing being
+   designed — and on both tools it had grown to five or six buttons whose names were
+   the only clue to what came out of them. It is a dialog now, and its job is to
+   confirm what you are about to get before you get it: the design, whether it fits
+   the printer you configured, and every file by name. */
+.exportbar{padding:12px 14px 14px;display:grid;gap:9px}
+/* Copying the link sits beside the download rather than inside the dialog. Sharing is
+   not downloading, and the design lives only in that link — neither tool writes it to
+   the address bar — so burying the one way to get it inside something titled "Download
+   your baseplate" made it unfindable for the job it is actually for. */
+.exportrow{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button.act.big{font-size:15px;padding:14px 20px;min-width:250px}
+
+/* The reset zeroes every margin, which for a modal dialog means the browser's own
+   centring is gone and it pins to the top-left. margin:auto puts it back.
+   display lives on [open] only — an author `display` on the bare element would beat
+   the UA's `dialog:not([open]){display:none}` and the dialog would never be shut. */
+dialog.sheet{margin:auto;border:1px solid var(--line);border-radius:10px;padding:0;
+  background:var(--panel);color:var(--ink);font-family:var(--sans);font-size:14px;
+  width:min(600px,calc(100vw - 20px));max-height:calc(100dvh - 36px);overflow:hidden;
+  box-shadow:0 18px 50px rgba(0,0,0,.6)}
+dialog.sheet[open]{display:flex;flex-direction:column}
+dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
+.sheethead{display:flex;align-items:center;gap:10px;padding:13px 14px;flex:none;
+  border-bottom:1px solid var(--line)}
+.sheethead h2{font-size:15px;font-weight:600;letter-spacing:.02em}
+.sheethead button{margin-left:auto;background:none;border:1px solid transparent;color:var(--dim);
+  font-size:20px;line-height:1;cursor:pointer;border-radius:6px;min-width:40px;min-height:40px}
+.sheethead button:hover{color:var(--ink);border-color:var(--line)}
+/* flex:none on every child matters: the file list hides its own overflow, so its
+   min-content height is zero, and inside a height-limited box that let the browser
+   squash the list — the dialog looked like it simply stopped listing files halfway
+   down. Children keep their height and the body scrolls instead. */
+.sheetbody{padding:13px 14px 16px;display:flex;flex-direction:column;gap:11px;overflow-y:auto}
+.sheetbody > *{flex:none}
+/* what the design is */
+.exsum{font-family:var(--mono);font-size:12.5px;line-height:1.55;background:var(--panel2);
+  border:1px solid var(--line);border-radius:6px;padding:10px 12px;white-space:pre-line}
+/* whether it fits, stated plainly rather than left to a table of "fits / TOO BIG" */
+.exfit{display:flex;gap:9px;font-size:13px;line-height:1.5;border-radius:6px;padding:10px 12px;
+  border:1px solid var(--line)}
+.exfit::before{font-weight:700;flex:none}
+.exfit.ok{background:rgba(79,195,232,.07);border-color:rgba(79,195,232,.4)}
+.exfit.ok::before{content:"✓";color:var(--cyan)}
+.exfit.bad{background:rgba(232,123,106,.09);border-color:rgba(232,123,106,.5)}
+.exfit.bad::before{content:"✕";color:var(--red)}
+.exfit.wait::before{content:"…";color:var(--dim)}
+/* the file list: 1px gaps over the border colour make the rules, so a row can carry
+   its own background without a second border rule per side */
+.exfiles{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
+  border-radius:7px;overflow:hidden}
+.exgroup{background:var(--panel2);padding:7px 12px;font-size:11.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--dim)}
+.exrow{background:var(--panel);display:grid;grid-template-columns:1fr auto;gap:12px;
+  align-items:center;padding:9px 12px}
+.exrow .nm{font-size:13px}
+.exrow .meta{display:block;font-family:var(--mono);font-size:11.5px;color:var(--dim);margin-top:3px}
+.exrow button{white-space:nowrap}
+.exnote{font-size:12px;color:var(--dim);line-height:1.5}
 </style>
 </head>
 <body>
@@ -440,11 +501,14 @@ article.doc .cta{margin-top:34px;padding-top:18px;border-top:1px solid var(--lin
 </div>
 
 <div class="stagecard">
-  <h3>Export</h3>
-  <button class="act" id="dlPlates">Download print plates (.3mf)</button>
-  <button class="act" id="dlAll">Download all bins (.zip)</button>
-  <button class="ghost" id="shareBtn" style="margin-top:8px">Copy layout link</button>
-  <div class="hint">One STL per bin type, with a README listing the layout. Prints flat as oriented, no supports. Print one bin before committing to a drawer's worth.</div>
+  <h3>Export <span class="tail" id="exportTail"></span></h3>
+  <div class="exportbar">
+    <div class="exportrow">
+      <button class="act big" id="openExport">Download your bins…</button>
+      <button class="ghost" id="shareBtn">Copy layout link</button>
+    </div>
+    <div class="hint">Nothing is generated until you ask for it. The dialog lists every file you get, and says whether it all fits your printer. The link carries your whole layout — it is the thing to attach to a bug report.</div>
+  </div>
 </div>
 
 </div>
@@ -454,6 +518,22 @@ article.doc .cta{margin-top:34px;padding-top:18px;border-top:1px solid var(--lin
   <div style="margin-top:10px">Issues and feature requests <a href="https://github.com/Oliver-Johnson/Baseplate-Studio/issues" rel="noopener">on GitHub</a>. If it saved you time you can <a href="https://ko-fi.com/oliver_johnson" rel="noopener">buy me a coffee</a>.</div>
   <div class="mono" style="margin-top:8px">All geometry is computed locally in your browser — nothing is uploaded. STL output is mm scale.</div>
 </footer>
+
+<!-- The download dialog. It sits before the UI script because that script wires it up
+     as it parses, and its contents are filled in each time it opens rather than kept
+     in step with the layout — nobody sees a stale file list in a closed dialog. -->
+<dialog id="exportDlg" class="sheet" aria-labelledby="exportTitle">
+  <div class="sheethead">
+    <h2 id="exportTitle">Download your bins</h2>
+    <button type="button" id="exportClose" title="Close" aria-label="Close">×</button>
+  </div>
+  <div class="sheetbody">
+    <div class="exsum" id="exDesign">—</div>
+    <div class="exfit" id="exFit">—</div>
+    <div class="exfiles" id="exFiles"></div>
+    <div class="exnote">Bins print flat as oriented, no supports. Print one and check it seats in your baseplate before committing to a drawer's worth.</div>
+  </div>
+</dialog>
 
 <script src="../vendor/three.min.js"></script>
 <script src="../vendor/jszip.min.js"></script>
@@ -2266,6 +2346,66 @@ if (typeof module !== 'undefined') {
 }
 
 </script>
+<script>/* Widgets for the download dialog. Both tools have one, and they must look and read
+   the same in both, so the pieces live here rather than being written twice.
+ *
+ * They take the container element as an argument and know no ids. That is the whole
+ * discipline: every getElementById stays in a tool's ui.js, where the build's id audit
+ * can see it and fail if the element is missing.
+ *
+ * Spliced between the core and each tool's ui.js, so DF is simply in scope by the time
+ * a ui.js is parsed — no load-order rule to remember, and the three prose pages, which
+ * have no dialog, do not ship it.
+ */
+'use strict';
+
+const DF = {
+  /* An STL is an 84-byte header plus 50 bytes a triangle, and a polygon fans into
+     verts-2 of them, so the exact file size follows from polygons already in memory. */
+  stlBytes(polys) {
+    return 84 + 50 * polys.reduce((a, p) => a + p.verts.length - 2, 0);
+  },
+  bytes(n) {
+    return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB'
+                        : Math.max(1, Math.round(n / 1024)) + ' KB';
+  },
+  group(list, text) {
+    const d = document.createElement('div');
+    d.className = 'exgroup';
+    d.textContent = text;
+    list.appendChild(d);
+    return d;
+  },
+  /* A name, a line of detail, one button. Deflating a plate 3MF takes a moment, and
+     without the label change the dialog looks like it ignored the click — so people
+     click again and get the file twice. */
+  row(list, o) {
+    const row = document.createElement('div');
+    row.className = 'exrow';
+    const left = document.createElement('div');
+    const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = o.name;
+    const mt = document.createElement('span'); mt.className = 'meta'; mt.textContent = o.meta;
+    left.appendChild(nm); left.appendChild(mt);
+    const btn = document.createElement('button');
+    btn.className = 'ghost'; btn.type = 'button'; btn.textContent = o.label || 'Download';
+    for (const k in (o.attrs || {})) btn.setAttribute(k, o.attrs[k]);
+    btn.addEventListener('click', () => {
+      const was = btn.textContent;
+      btn.disabled = true; btn.textContent = 'Working…';
+      Promise.resolve().then(o.onClick).catch((e) => {
+        console.error('download failed', e);
+        btn.textContent = 'Failed';
+      }).then(() => {
+        if (btn.textContent === 'Failed') return;
+        btn.textContent = was; btn.disabled = false;
+      });
+    });
+    row.appendChild(left); row.appendChild(btn);
+    list.appendChild(row);
+    return btn;
+  },
+};
+</script>
 <script>/* Drawerforge — Gridfinity bin geometry.
  *
  * Built entirely by direct mesh construction and overlapping closed shells.
@@ -3893,7 +4033,7 @@ function refresh() {
   for (const btn of $('typeRows').querySelectorAll('button[data-t]'))
     btn.addEventListener('click', () => {
       const t = types().find((x) => x.key === btn.dataset.t);
-      if (t) saveBlob(G.stlBinary(geomFor(t.b).polys, 'bin'), typeName(t) + '.stl');
+      if (t) downloadType(t);
     });
   $('totals').textContent = allBins().length
     ? `${allBins().length} bins · ${ts.length} distinct type(s) · ≈ ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g PLA at ${state.infill}% infill`
@@ -3901,6 +4041,7 @@ function refresh() {
 
   drawWarnings();
   drawPlan();
+  updateExportTail();
   showScene();
 }
 
@@ -4095,6 +4236,12 @@ function typeName(t) {
   return `bin-${t.b.u}x${t.b.v}x${t.b.hUnits}${t.b.solid ? '-solid' : ''}` +
          `${t.b.divX || t.b.divY ? `-${t.b.divX}x${t.b.divY}div` : ''}-qty${t.qty}`;
 }
+/* One bin type as an STL. Two places offer this — the row in "Bins to print" and the
+   row in the download dialog — and they are the one pair that could give you two
+   differently named files for the same click. */
+function downloadType(t) {
+  saveBlob(G.stlBinary(geomFor(t.b).polys, 'bin'), typeName(t) + '.stl');
+}
 function layoutReadme() {
   const g = grid(), ts = types();
   const L = [];
@@ -4164,19 +4311,45 @@ async function plate3mfBytes(idx) {
   pz.file('3D/3dmodel.model', x.model);
   return pz.generateAsync({ type: 'uint8array' });
 }
-$('dlPlates').addEventListener('click', async () => {
-  if (!printPlan) return;
-  const good = printPlan.plates.map((p, i) => [p, i]).filter(([p]) => !p.overflow);
+const goodPlates = () =>
+  printPlan ? printPlan.plates.map((p, i) => [p, i]).filter(([p]) => !p.overflow) : [];
+
+/* Plates are numbered by position among the ones that fit, not by index in the raw
+   list — everywhere. A bin too big for the bed gets a plate of its own that is never
+   exported, and numbering around those produced a zip holding plate-1 and plate-3
+   while the print plan on the page, and the per-plate downloads, both counted 1, 2, 3.
+   The name is shared with the standalone download so the same plate arrives under the
+   same name whichever row you clicked. */
+const plateName = (k) => `bin-plate-${k + 1}.3mf`;
+async function downloadPlate(k) {
+  const good = goodPlates();
+  if (!good[k]) return;
+  saveBlob(await plate3mfBytes(good[k][1]), plateName(k));
+}
+async function downloadAllPlates() {
+  const good = goodPlates();
   if (!good.length) return;
-  if (good.length === 1) { saveBlob(await plate3mfBytes(good[0][1]), 'bin-plates.3mf'); return; }
+  if (good.length === 1) return downloadPlate(0);
   const zip = new JSZip();
-  for (const [, i] of good) zip.file(`plate-${i + 1}.3mf`, await plate3mfBytes(i));
-  const blob = await zip.generateAsync({ type: 'blob' });
+  for (let k = 0; k < good.length; k++) zip.file(plateName(k), await plate3mfBytes(good[k][1]));
+  saveBlobAsync(await zip.generateAsync({ type: 'blob' }),
+                `drawerforge-bin-plates-x${good.length}.zip`);
+}
+async function downloadBinZip() {
+  if (!allBins().length) return;
+  const zip = new JSZip();
+  for (const t of types())
+    zip.file(typeName(t) + '.stl', G.stlBinary(geomFor(t.b).polys, 'bin'));
+  zip.file('README.txt', layoutReadme());
+  saveBlobAsync(await zip.generateAsync({ type: 'blob' }),
+                `drawerforge-bins-${grid().nx}x${grid().ny}.zip`);
+}
+function saveBlobAsync(blob, name) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `drawerforge-bin-plates-x${good.length}.zip`; a.click();
+  a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-});
+}
 $('bedPreset').addEventListener('change', () => {
   const v = $('bedPreset').value;
   if (v === 'custom') return;
@@ -4184,17 +4357,103 @@ $('bedPreset').addEventListener('change', () => {
   $('bedW').value = w; $('bedD').value = d; if (h) $('bedH').value = h;
   schedule();
 });
-$('dlAll').addEventListener('click', async () => {
-  if (!allBins().length) return;
-  const zip = new JSZip();
-  for (const t of types())
-    zip.file(typeName(t) + '.stl', G.stlBinary(geomFor(t.b).polys, 'bin'));
-  zip.file('README.txt', layoutReadme());
-  const blob = await zip.generateAsync({ type: 'blob' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `drawerforge-bins-${grid().nx}x${grid().ny}.zip`; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+
+/* ---------- the download dialog -------------------------------------------
+   Built fresh every time it opens. A column of buttons tells you nothing about what
+   comes out of them, so the dialog states what the design is, whether it fits the
+   printer you configured, and then names every file with its size or its count. The
+   row and group widgets are shared with the baseplates tool, in widgets.js.
+   Nothing here needs the live re-render the baseplates dialog has: everything on this
+   page is computed synchronously, and a modal makes the page behind it inert, so the
+   layout cannot change while the dialog is open. */
+const exGroup = (text) => DF.group($('exFiles'), text);
+const exRow = (name, meta, label, onClick, attrs) =>
+  DF.row($('exFiles'), { name, meta, label, onClick, attrs });
+
+function bedFitText() {
+  const bed = `${state.bedW} × ${state.bedD} mm bed`;
+  const bins = allBins().map(({ b }) => b);
+  if (!bins.length) return { cls: 'wait', t: 'No bins placed yet — drag across the drawer map to place one.' };
+  const wide = bins.filter((b) => !fitsBed(b.u, b.v));
+  const tall = bins.filter((b) => {
+    const lip = (!b.solid && allFullEdges(b)) ? LIP_H : 0;
+    return b.hUnits * SPEC.unitH + lip > state.bedH + 0.001;
+  });
+  if (!wide.length && !tall.length) {
+    const w = Math.max(...bins.map((b) => footW(b.u))), d = Math.max(...bins.map((b) => footW(b.v)));
+    const h = Math.max(...bins.map((b) => b.hUnits * SPEC.unitH +
+      ((!b.solid && allFullEdges(b)) ? LIP_H : 0)));
+    return { cls: 'ok', t: `Everything fits your ${bed}. The largest bin is ` +
+      `${Math.max(w, d).toFixed(0)} × ${Math.min(w, d).toFixed(0)} mm and the tallest ` +
+      `stands ${h.toFixed(1)} mm, inside your ${state.bedH} mm Z height.` };
+  }
+  const parts = [];
+  if (wide.length) parts.push(`${wide.length} bin${wide.length > 1 ? 's are' : ' is'} too big for your ${bed}`);
+  if (tall.length) parts.push(`${tall.length} bin${tall.length > 1 ? 's stand' : ' stands'} taller than your ${state.bedH} mm Z height`);
+  return { cls: 'bad', t: parts.join(', and ') +
+    '. Those are left off the print plates — Checks says what to do with each of them.' };
+}
+
+function renderExport() {
+  const g = grid(), ts = types(), n = allBins().length;
+  let vol = 0;
+  for (const t of ts) vol += geomFor(t.b).vol * t.qty;
+  $('exDesign').textContent = n
+    ? `${g.nx} × ${g.ny} cell grid in a ${state.drawerW} × ${state.drawerD} mm drawer\n` +
+      `${n} bin(s) of ${ts.length} distinct type(s) over ${layers.length} layer(s)\n` +
+      `about ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g of PLA at ${state.infill}% infill`
+    : `${g.nx} × ${g.ny} cell grid in a ${state.drawerW} × ${state.drawerD} mm drawer — no bins in it yet`;
+  const fit = bedFitText();
+  $('exFit').className = 'exfit ' + fit.cls;
+  $('exFit').textContent = fit.t;
+
+  $('exFiles').innerHTML = '';
+  const good = goodPlates();
+  if (good.length) {
+    exGroup('Pre-arranged print plates');
+    exRow('Every plate', `${good.length} plate(s) · 3MF` + (good.length > 1 ? ' in a ZIP' : ''),
+          'Download', downloadAllPlates, { 'data-ex': 'allplates' });
+    /* Per-plate downloads. The combined export already builds each plate on its own
+       and zips them, so one plate at a time is the same call with the zip left off —
+       and it is what you want when a print fails, or when you are only doing one
+       plate's worth this evening. */
+    good.forEach(([pl], k) => exRow(`Plate ${k + 1}`,
+      `${pl.placed.length} bin(s) on a ${state.bedW} × ${state.bedD} mm bed · 3MF`, 'Download',
+      () => downloadPlate(k), { 'data-ex': 'plate' }));
+  }
+  if (ts.length) {
+    exGroup('Meshes');
+    exRow('Every bin type, with a README', `${ts.length} STL file(s) + README.txt · ZIP`,
+          'Download', downloadBinZip, { 'data-ex': 'zip' });
+    for (const t of ts)
+      exRow(`${t.b.u}×${t.b.v}×${t.b.hUnits}${t.b.solid ? ' solid' : ''} × ${t.qty}`,
+            `${DF.bytes(DF.stlBytes(geomFor(t.b).polys))} · STL`, 'STL',
+            () => downloadType(t), { 'data-ex': 'stl' });
+  }
+}
+function updateExportTail() {
+  const n = allBins().length, p = goodPlates().length;
+  $('exportTail').textContent = n
+    ? `${n} bin${n > 1 ? 's' : ''}` + (p ? ` · ${p} plate${p > 1 ? 's' : ''}` : '')
+    : '';
+}
+$('openExport').addEventListener('click', () => {
+  renderExport();
+  const dlg = $('exportDlg');
+  // showModal is the whole point — the fallback is for a browser old enough not to
+  // have it, where an in-flow panel that closes is still better than a dead button
+  if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+});
+$('exportClose').addEventListener('click', () => $('exportDlg').close());
+/* Click to dismiss, from the backdrop only. A click reports the common ancestor of its
+   two ends, so selecting text in the summary and releasing outside the box reported the
+   dialog itself and shut it — losing the selection and the dialog together. Both ends
+   have to be the backdrop. */
+let downOnBackdrop = false;
+$('exportDlg').addEventListener('mousedown', (e) => { downOnBackdrop = e.target === $('exportDlg'); });
+$('exportDlg').addEventListener('click', (e) => {
+  if (downOnBackdrop && e.target === $('exportDlg')) $('exportDlg').close();
+  downOnBackdrop = false;
 });
 
 /* ---------- shared project descriptor -------------------------------------- */

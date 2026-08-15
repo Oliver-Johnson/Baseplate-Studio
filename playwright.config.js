@@ -6,6 +6,13 @@ const { defineConfig, devices } = require('@playwright/test');
    port was busy. */
 module.exports = defineConfig({
   testDir: './test/ui',
+  /* Both tools compute real geometry before the page settles — the baseplates page
+     runs CSG for every piece — so a case that drives one is doing seconds of work, not
+     milliseconds. Measured locally with ten workers competing for the cores, the
+     slowest case is around 20 s; CI sets no worker count and a 2-vCPU runner gives it
+     one worker and no contention. 30 s left no headroom on a busy laptop, and per-test
+     slow() marks would be an uneven fix for something every case here shares. */
+  timeout: 60_000,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: 0,

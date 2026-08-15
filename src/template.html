@@ -193,18 +193,6 @@
   </div>
 </section>
 
-<section class="p export" id="s-export">
-  <h2><span class="n">07</span> Export <span class="caret">▾</span></h2>
-  <div class="body">
-    <button class="act" id="dlAll">Download all pieces (.zip)</button>
-    <button class="ghost" id="dlTile">Test tile — bin fit (.stl)</button>
-    <button class="ghost" id="dlFit" style="display:none">Joint fit sample — 4 clearances (.stl)</button>
-    <button class="ghost" id="dlKeys" style="display:none">Connector keys (.stl)</button>
-    <button class="ghost" id="shareBtn">Copy settings link</button>
-    <div class="hint">Each ZIP includes every piece, a README with assembly order, and your settings. STLs are millimetre-scale, print flat as oriented, no supports.</div>
-  </div>
-</section>
-
 </div>
 <div class="stage">
 
@@ -215,7 +203,7 @@
 </div>
 
 <div class="stagecard">
-  <h3>Preview <span class="tail"><label class="tog" style="font-size:11px"><input type="checkbox" id="explode"> exploded</label></span></h3>
+  <h3>Preview <span class="tail"><label class="tog"><input type="checkbox" id="explode"> exploded</label></span></h3>
   <div id="threewrap"><canvas id="three"></canvas><div id="status"></div><div id="threehint">drag rotate · wheel zoom · shift-drag pan</div></div>
 </div>
 
@@ -229,7 +217,6 @@
     </div>
     <div class="hint" id="stackHint" style="display:none">Experimental: any piece that fits fully inside the footprint of the one below prints stacked on top, separated by the gap layer — snap apart afterwards. Needs well-tuned bridging (the layer above spans open sockets); test with two first. Respects your printer's Z height.</div>
     <div id="platesRow" style="display:flex;gap:12px;flex-wrap:wrap"></div>
-    <button class="act" id="dlPlates" style="justify-self:start">Download all print plates (.3mf)</button>
   </div>
 </div>
 
@@ -238,6 +225,17 @@
   <table class="pieces"><thead><tr>
     <th>Piece</th><th>Grid</th><th>Size (mm)</th><th>Joints</th><th>Bed fit</th><th></th>
   </tr></thead><tbody id="pieceRows"></tbody></table>
+</div>
+
+<div class="stagecard">
+  <h3>Export <span class="tail" id="exportTail"></span></h3>
+  <div class="exportbar">
+    <div class="exportrow">
+      <button class="act big" id="openExport">Download your baseplate…</button>
+      <button class="ghost" id="shareBtn">Copy settings link</button>
+    </div>
+    <div class="hint">Nothing is generated until you ask for it. The dialog lists every file you get, and says whether it all fits your bed. The link carries your whole design — it is the thing to attach to a bug report.</div>
+  </div>
 </div>
 
 </div>
@@ -249,10 +247,29 @@
   <div class="mono" style="margin-top:8px">All geometry is computed locally in your browser — nothing is uploaded. STL/3MF output is mm scale. v1.2</div>
 </footer>
 
+<!-- The download dialog. It sits before the UI script because that script wires it up
+     as it parses, and its contents are filled in each time it opens rather than kept
+     in step with the layout — nobody sees a stale file list in a closed dialog. -->
+<dialog id="exportDlg" class="sheet" aria-labelledby="exportTitle">
+  <div class="sheethead">
+    <h2 id="exportTitle">Download your baseplate</h2>
+    <button type="button" id="exportClose" title="Close" aria-label="Close">×</button>
+  </div>
+  <div class="sheetbody">
+    <div class="exsum" id="exDesign">—</div>
+    <div class="exfit" id="exFit">—</div>
+    <div class="exfiles" id="exFiles"></div>
+    <div class="exnote">STLs are millimetre-scale and print flat as oriented, no supports. Print the test tile first and check a bin seats in it before committing to the full plates.</div>
+  </div>
+</dialog>
+
 <script src="vendor/three.min.js"></script>
 <script src="vendor/jszip.min.js"></script>
 <script>
 /*__CORE__*/
+</script>
+<script>
+/*__WIDGETS__*/
 </script>
 <script>
 /*__UI__*/

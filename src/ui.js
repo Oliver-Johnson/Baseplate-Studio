@@ -53,15 +53,12 @@ function readControls() {
   $('connHintSnap').style.display = state.connector === 'snap' ? '' : 'none';
   $('connHintHclip').style.display = state.connector === 'hclip' ? '' : 'none';
   const hasKeys = ['bowtie','puzzlekey','snap'].includes(state.connector);
-  $('dlKeys').style.display = hasKeys ? '' : 'none';
   $('keyMountRow').style.display = hasKeys ? '' : 'none';
   $('keyMountHint').style.display = hasKeys ? '' : 'none';
-  $('dlKeys').textContent = state.connector === 'snap' ? 'Snap clips (.stl)' : 'Connector keys (.stl)';
   // top-insert applies exactly where the key lives in the wall (see activeKeyDims)
   const wallish = (hasKeys && state.keyMount === 'wall') || state.connector === 'hclip';
   $('keyInsertRow').style.display = wallish ? '' : 'none';
   $('keyInsertHint').style.display = wallish ? '' : 'none';
-  $('dlFit').style.display = state.connector === 'none' ? 'none' : '';
   $('baseModeRow').style.display = (state.magnets || state.screws) ? '' : 'none';
   $('cornerRow').style.display = $('perCorner').checked ? '' : 'none';
   $('cornerHint').style.display = $('perCorner').checked ? '' : 'none';
@@ -82,11 +79,17 @@ function recomputeLayout() {
   scheduleBuild();
 }
 
-function pieceFits(pc) {
+/* The bed room a piece actually needs: its plate, plus the dovetail tabs that stick
+   out past it. One function, because the export dialog reports the largest piece and
+   has to be quoting the same number the fit test used — otherwise it can call a piece
+   174 mm wide and reject it against a 256 mm bed in the same breath. */
+function pieceExtent(pc) {
   const pitch = state.pitch;
   const ext = state.connector === 'dovetail' ? state.tab.dp + 0.4 : 0;
-  const w = pc.mL + pc.nx*pitch + pc.mR + ext;
-  const d = pc.mF + pc.ny*pitch + pc.mB + ext;
+  return [pc.mL + pc.nx*pitch + pc.mR + ext, pc.mF + pc.ny*pitch + pc.mB + ext];
+}
+function pieceFits(pc) {
+  const [w, d] = pieceExtent(pc);
   return w <= state.bedW + 1e-6 && d <= state.bedD + 1e-6;
 }
 
@@ -282,6 +285,9 @@ function drawPieceTable() {
   const tot = layout.pieces.length;
   const okc = Object.keys(builds).length;
   $('pieceTail').textContent = okc < tot ? `building ${okc}/${tot}…` : `${tot} ready`;
+  // this runs once per piece as the build proceeds, which is exactly the cadence an
+  // open dialog needs to keep its readiness line and its file list honest
+  syncExportDialog();
 }
 
 // ---------- async build ----------
@@ -411,7 +417,7 @@ function computePrintPlan() {
     return { id: pc.id, w: m.W + m.protrusion.l + m.protrusion.r,
              d: m.D + m.protrusion.f + m.protrusion.b, h: m.H, qty: 1, stackable: true };
   });
-  if (['bowtie','puzzlekey','snap','hclip'].includes(state.connector)) {
+  if (KEYED.includes(state.connector)) {
     const kd = activeKeyDims();
     const nKeys = layout.seams.reduce((a, s) => a + s.junctions.length, 0);
     if (nKeys) items.push({ id: 'key', w: kd.len, d: kd.wEnd,
@@ -423,8 +429,8 @@ function computePrintPlan() {
 }
 function renderPrintPlan() {
   const row = $('platesRow');
-  if (!printPlan) { row.innerHTML = '<div class="hint">Print plan appears when all pieces are built.</div>'; $('planTail').textContent = ''; $('dlPlates').disabled = true; return; }
-  $('dlPlates').disabled = false;
+  updateExportTail();
+  if (!printPlan) { row.innerHTML = '<div class="hint">Print plan appears when all pieces are built.</div>'; $('planTail').textContent = ''; return; }
   const plates = printPlan.plates;
   const stacked = plates.some(pl => pl.placed.some(p => p.z > 0.01));
   $('planTail').textContent = `${plates.length} print plate${plates.length > 1 ? 's' : ''}` + (stacked ? ' · stacked' : '');
@@ -465,22 +471,14 @@ async function plate3mfBytes(idx) {
   pz.file('3D/3dmodel.model', x.model);
   return pz.generateAsync({ type: 'uint8array' });
 }
-$('dlPlates').addEventListener('click', async () => {
+async function downloadAllPlates() {
   if (!printPlan) return;
   const n = printPlan.plates.length;
-  if (n === 1) {
-    const buf = await plate3mfBytes(0);
-    saveBlob(buf, 'print-plates.3mf');
-    return;
-  }
+  if (n === 1) { saveBlob(await plate3mfBytes(0), 'print-plates.3mf'); return; }
   const zip = new JSZip();
   for (let i = 0; i < n; i++) zip.file(`plate-${i+1}.3mf`, await plate3mfBytes(i));
-  const blob = await zip.generateAsync({ type: 'blob' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `print-plates-x${n}.zip`; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-});
+  saveBlobAsync(await zip.generateAsync({ type: 'blob' }), `print-plates-x${n}.zip`);
+}
 $('plateGap').addEventListener('input', computePrintPlan);
 $('stackToggle').addEventListener('change', computePrintPlan);
 $('stackGap').addEventListener('input', computePrintPlan);
@@ -492,15 +490,20 @@ function saveBlob(buf, name) {
   a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
+function saveBlobAsync(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
 function downloadPiece(id) {
   const b = builds[id];
   if (b) saveBlob(stlBinary(b.polys, `baseplate-${id}`), `baseplate-${id}.stl`);
 }
-$('dlTile').addEventListener('click', () => {
-  const tile = buildTestTile(Object.assign({}, state, { drawerW: state.pitch, drawerD: state.pitch,
-    marginMode: 'custom', mLeft: 0, mRight: 0, mFront: 0, mBack: 0 }));
-  saveBlob(stlBinary(tile.polys, 'test-tile'), 'baseplate-test-tile-1x1.stl');
-});
+function testTilePolys() {
+  return buildTestTile(Object.assign({}, state, { drawerW: state.pitch, drawerD: state.pitch,
+    marginMode: 'custom', mLeft: 0, mRight: 0, mFront: 0, mBack: 0 })).polys;
+}
 function activeKeyDims() {
   const d = state.connector === 'hclip' ? Object.assign(hclipPrm(state.hclip), { depth: 2.3 })
     : state.keyMount === 'wall' ? Object.assign({}, DEFAULTS.keySlim) : Object.assign({}, state.key);
@@ -525,51 +528,67 @@ function keysArray() {
   }
   return { polys, nKeys, kd };
 }
-$('dlFit').addEventListener('click', () => {
+function downloadFitSample() {
   const H = layout && builds[layout.pieces[0].id] ? builds[layout.pieces[0].id].meta.H : 4.25;
   const fsam = buildFitSample(state, H);
   saveBlob(stlBinary(fsam.polys, 'fit-sample'),
     `${state.connector}-fit-sample-clr-${fsam.clrs.map(c=>c.toFixed(2)).join('-')}.stl`);
-});
-$('dlKeys').addEventListener('click', () => {
+}
+/* Every connector that needs loose parts, in one list. The ZIP used to carry its own
+   shorter copy of it that left out H-clips, so an hclip download arrived with a
+   README telling the reader to press a clip into each junction and no clip in the
+   file. One list, and one function that decides what is in the STL. */
+const KEYED = ['bowtie', 'puzzlekey', 'snap', 'hclip'];
+function keysStl() {
   if (state.connector === 'snap' && state.keyInsert === 'top') {
     const prm = Object.assign({ legT: 1.0, legLen: 1.35, legC: 1.4, barb: 0.18,
                                 bridgeW: 1.7, bridgeD: 0.85, wall: 0.6 }, { clr: state.key.clr });
     const H = layout && builds[layout.pieces[0].id] ? builds[layout.pieces[0].id].meta.H : 4.25;
     const one = snapTopClip(prm, H);
-    const nKeys = layout.seams.reduce((a, s) => a + s.junctions.filter(j => Math.abs(j - Math.round(j)) <= 0.25).length, 0) || 1;
+    const nKeys = keysNeeded();
     let polys = [];
     const cols = Math.ceil(Math.sqrt(nKeys));
     for (let k = 0; k < nKeys; k++) {
       const dx = (k % cols) * 7, dy = Math.floor(k / cols) * 4;
       for (const p of one) polys.push({ verts: p.verts.map(v => [v[0]+dx, v[1]+dy, v[2]]), plane: p.plane });
     }
-    saveBlob(stlBinary(polys, 'snap-clips'), `snap-clips-x${nKeys}.stl`);
-    return;
+    return { polys, mesh: 'snap-clips', name: `snap-clips-x${nKeys}.stl` };
   }
   const { polys, nKeys } = keysArray();
-  saveBlob(stlBinary(polys, 'connector-keys'), `${state.connector}-keys-x${nKeys}.stl`);
-});
-$('dlAll').addEventListener('click', async () => {
+  return { polys, mesh: 'connector-keys', name: `${state.connector}-keys-x${nKeys}.stl` };
+}
+function downloadKeys() {
+  const k = keysStl();
+  saveBlob(stlBinary(k.polys, k.mesh), k.name);
+}
+/* How many keys the assembly needs, counted the same way the key STL lays them out —
+   anything housed in a wall skips a seam that overlaps by a single cell, because there
+   is no wall junction there to sink one into. Top-inserted snap clips force that count
+   whatever the housing says, since they enter through the wall by definition. */
+function keyCount(wallOnly) {
+  const wallish = wallOnly || state.keyMount === 'wall' || state.connector === 'hclip';
+  return layout.seams.reduce((a, s) => a + s.junctions.filter(j =>
+    !wallish || Math.abs(j - Math.round(j)) <= 0.25).length, 0);
+}
+const topClips = () => state.connector === 'snap' && state.keyInsert === 'top';
+const keysNeeded = () => keyCount(topClips()) || 1;
+async function downloadEverythingZip() {
   if (Object.keys(builds).length < layout.pieces.length) return;
   const zip = new JSZip();
   for (const pc of layout.pieces)
     zip.file(`baseplate-${pc.id}.stl`, stlBinary(builds[pc.id].polys, pc.id));
-  if (['bowtie','puzzlekey','snap'].includes(state.connector)) {
-    const { polys, nKeys } = keysArray();
-    zip.file(`${state.connector}-keys-x${nKeys}.stl`, stlBinary(polys, 'keys'));
+  if (KEYED.includes(state.connector)) {
+    const k = keysStl();
+    zip.file(k.name, stlBinary(k.polys, k.mesh));
   }
   if (printPlan) {
     for (let i = 0; i < printPlan.plates.length; i++)
       zip.file(`print-plates/plate-${i+1}.3mf`, await plate3mfBytes(i));
   }
   zip.file('README.txt', readmeText());
-  const blob = await zip.generateAsync({ type: 'blob' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `gridfinity-baseplate-${layout.nx}x${layout.ny}.zip`; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-});
+  saveBlobAsync(await zip.generateAsync({ type: 'blob' }),
+                `gridfinity-baseplate-${layout.nx}x${layout.ny}.zip`);
+}
 function readmeText() {
   const rows = [...new Set(layout.pieces.map(p => p.band))].length;
   const lines = [];
@@ -637,6 +656,158 @@ function readmeText() {
   lines.push('Gridfinity was created by Zack Freedman (Voidstar Lab) as an open standard.');
   return lines.join('\n');
 }
+
+/* ---------- the download dialog -------------------------------------------
+   Export was panel 07: five buttons in the settings rail, present the whole time you
+   were designing, three of them named after things you would have to download to
+   identify. It is a dialog now, and it states what the design is and whether it fits
+   your bed before it lists a single file. The row and group widgets are shared with
+   the bins tool, in widgets.js. */
+const exGroup = (text) => DF.group($('exFiles'), text);
+const exRow = (name, meta, label, onClick, attrs) =>
+  DF.row($('exFiles'), { name, meta, label, onClick, attrs });
+
+const CONNECTOR_NAMES = { dovetail: 'dovetail tabs', puzzle: 'puzzle tabs', bowtie: 'bowtie keys',
+  puzzlekey: 'puzzle keys', snap: 'snap clips', hclip: 'H-clips', none: 'no connectors' };
+
+/* What goes wrong is tested before whether the build has finished, not after. Anything
+   the checks call an error stops runBuild, so the pieces never finish and never will —
+   and answering "this piece does not fit your bed" with "still building" is true and
+   useless. warningsList is the same predicate runBuild gates on, so the dialog and the
+   build cannot disagree about whether there is a problem. */
+function bedFitText() {
+  const bed = `${state.bedW} × ${state.bedD} mm bed`;
+  // guard, so the "largest piece" arithmetic below never reasons about an empty list
+  if (!layout.pieces.length)
+    return { cls: 'bad', t: 'There is nothing to generate yet — see the checks under the cut map.' };
+  const bad = layout.pieces.filter((pc) => !pieceFits(pc));
+  if (bad.length)
+    return { cls: 'bad', t: `${bad.length} piece(s) — ${bad.map((pc) => pc.id).join(', ')} — ` +
+      `will not fit your ${bed}. Add a cut through them on the cut map, or pick a split mode ` +
+      'that makes smaller pieces; the files below would print oversized as they stand.' };
+  const err = warningsList().find((w) => w.err);
+  if (err) return { cls: 'bad', t: err.t + ' Nothing can be exported until that is fixed.' };
+  const ready = Object.keys(builds).length;
+  if (ready < layout.pieces.length)
+    return { cls: 'wait', t: `Still building — ${ready} of ${layout.pieces.length} piece(s) ready. ` +
+      'The meshes below appear as they finish.' };
+  // quoting pieceExtent, so the number shown is the number the test above used
+  const big = layout.pieces.map(pieceExtent).sort((a, b) => b[0] * b[1] - a[0] * a[1])[0];
+  return { cls: 'ok', t: `All ${layout.pieces.length} piece(s) fit your ${bed} — the largest ` +
+    `needs ${big[0].toFixed(0)} × ${big[1].toFixed(0)} mm.` };
+}
+
+function renderExportSummary() {
+  const pitch = state.pitch;
+  $('exDesign').textContent =
+    `${layout.nx} × ${layout.ny} cell grid (${(layout.nx * pitch).toFixed(0)} × ${(layout.ny * pitch).toFixed(0)} mm) ` +
+    `in a ${state.drawerW} × ${state.drawerD} mm drawer\n` +
+    `${layout.pieces.length} piece(s), ${state.splitMode} split, joined with ${CONNECTOR_NAMES[state.connector] || state.connector}\n` +
+    `margins L ${layout.mL.toFixed(1)} / R ${layout.mR.toFixed(1)} / F ${layout.mF.toFixed(1)} / B ${layout.mB.toFixed(1)} mm`;
+  const fit = bedFitText();
+  $('exFit').className = 'exfit ' + fit.cls;
+  $('exFit').textContent = fit.t;
+}
+
+function renderExportFiles() {
+  $('exFiles').innerHTML = '';
+  const ready = Object.keys(builds).length >= layout.pieces.length;
+  if (printPlan) {
+    const n = printPlan.plates.length;
+    exGroup('Pre-arranged print plates');
+    exRow('Every plate', `${n} plate(s) · 3MF` + (n > 1 ? ' in a ZIP' : ''),
+          'Download', downloadAllPlates, { 'data-ex': 'allplates' });
+    /* Per-plate downloads. The combined export already builds each plate on its own
+       before zipping them, so one plate at a time is the same call with the zip left
+       off — and it is what you want when one print failed, or when tonight's print is
+       only this plate. */
+    printPlan.plates.forEach((pl, i) => exRow(`Plate ${i + 1}`,
+      `${pl.placed.length} part(s) on a ${state.bedW} × ${state.bedD} mm bed · 3MF`, 'Download',
+      async () => saveBlob(await plate3mfBytes(i), `plate-${i + 1}.3mf`),
+      { 'data-ex': 'plate' }));
+  }
+
+  exGroup('Meshes');
+  exRow('Everything, with a README', 'every piece' +
+        (printPlan ? ', the print plates' : '') + ' and the assembly order · ZIP',
+        'Download', downloadEverythingZip, { 'data-ex': 'zip' });
+  for (const pc of layout.pieces) {
+    const b = builds[pc.id];
+    const btn = exRow(`Piece ${pc.id}`,
+          `${pc.nx} × ${pc.ny} cells · ` + (b ? `${DF.bytes(DF.stlBytes(b.polys))} · STL` : 'not built yet'),
+          'STL', () => downloadPiece(pc.id), { 'data-ex': 'piece' });
+    btn.disabled = !b;   // downloadPiece would otherwise fail silently
+  }
+  if (KEYED.includes(state.connector)) {
+    exRow(state.connector === 'snap' ? 'Snap clips' : 'Connector keys',
+          `${keysNeeded()} needed, laid out on one plate · STL`, 'STL', downloadKeys,
+          { 'data-ex': 'keys' });
+  }
+
+  exGroup('Print these first');
+  /* No byte size on this row. It is the one file nothing has built yet, and building a
+     tile purely to measure it would be work done on every open for a number nobody
+     needs — the point of the row is that it is small and quick. */
+  exRow('Bin fit test tile', 'one 1 × 1 cell of the plate · STL',
+        'STL', () => saveBlob(stlBinary(testTilePolys(), 'test-tile'),
+                              'baseplate-test-tile-1x1.stl'), { 'data-ex': 'tile' });
+  if (state.connector !== 'none')
+    exRow('Joint fit sample', 'four tile pairs at graduated clearances · STL',
+          'STL', downloadFitSample, { 'data-ex': 'fit' });
+  if (!ready)
+    for (const btn of $('exFiles').querySelectorAll('button[data-ex="zip"],button[data-ex="allplates"],button[data-ex="plate"]'))
+      btn.disabled = true;
+}
+
+/* The dialog was a snapshot, and said so in a sentence that was not true: "the meshes
+   below appear as they finish", from a render with exactly one call site — the open
+   handler. Open it mid-build and it kept the same half-built list and the same disabled
+   ZIP for good, and you had to close and reopen. The build is asynchronous and the page
+   rebuilds behind a 260 ms debounce on every control change, so "change a setting, hit
+   Download" lands there routinely on a slow machine.
+   Rebuilding the list is the only honest option — the plate rows do not merely change,
+   they do not exist until the plan does — so it is rebuilt, except while the keyboard
+   is inside it, where a rebuild would throw the focus away mid-tab. That case retries
+   as soon as focus leaves. */
+let exportDeferred = false;
+function syncExportDialog() {
+  if (!$('exportDlg').open || !layout) return;
+  renderExportSummary();
+  if ($('exFiles').contains(document.activeElement)) { exportDeferred = true; return; }
+  exportDeferred = false;
+  renderExportFiles();
+}
+function updateExportTail() {
+  if (!layout) return;
+  const n = layout.pieces.length;
+  $('exportTail').textContent = `${n} piece${n > 1 ? 's' : ''}` +
+    (printPlan ? ` · ${printPlan.plates.length} plate${printPlan.plates.length > 1 ? 's' : ''}` : '');
+  syncExportDialog();
+}
+function openExportDialog() {
+  renderExportSummary();
+  renderExportFiles();
+  const dlg = $('exportDlg');
+  // showModal is the whole point — the fallback is for a browser old enough not to
+  // have it, where an in-flow panel that closes is still better than a dead button
+  if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+}
+$('openExport').addEventListener('click', openExportDialog);
+$('exportClose').addEventListener('click', () => $('exportDlg').close());
+$('exportDlg').addEventListener('focusout', () => {
+  // the new focus is not settled until after the event, hence the deferral
+  if (exportDeferred) setTimeout(syncExportDialog, 0);
+});
+/* Click to dismiss, from the backdrop only. A click reports the common ancestor of its
+   two ends, so selecting text in the summary and releasing outside the box reported the
+   dialog itself and shut it — losing the selection and the dialog together. Both ends
+   have to be the backdrop. */
+let downOnBackdrop = false;
+$('exportDlg').addEventListener('mousedown', (e) => { downOnBackdrop = e.target === $('exportDlg'); });
+$('exportDlg').addEventListener('click', (e) => {
+  if (downOnBackdrop && e.target === $('exportDlg')) $('exportDlg').close();
+  downOnBackdrop = false;
+});
 
 // ---------- share link ----------
 // Descriptor keys owned by the bins tool (or any future tool). We never interpret

@@ -23,7 +23,9 @@ const ROOT = __dirname;
 const checkOnly = process.argv.includes('--check');
 
 /* Each tool: a template with /*__MARKER__* / comments, and a file per marker.
-   CORE and the CSS are shared — one source, both tools, no drift. */
+   CORE, WIDGETS and the CSS are shared — one source, both tools, no drift. The prose
+   pages take the CSS and the chrome and nothing else, so they do not carry a line of
+   the tools' code. */
 const TOOLS = [
   {
     name: 'baseplates',
@@ -31,7 +33,7 @@ const TOOLS = [
     out: 'index.html',
     changefreq: 'weekly', priority: '1.0',
     parts: { CSS: 'src/shared-ui/style.css', CHROME: 'src/shared-ui/chrome.js',
-             CORE: 'src/core.js', UI: 'src/ui.js' },
+             CORE: 'src/core.js', WIDGETS: 'src/shared-ui/widgets.js', UI: 'src/ui.js' },
     uiPart: 'UI',
   },
   {
@@ -40,7 +42,8 @@ const TOOLS = [
     out: 'bins/index.html',
     changefreq: 'weekly', priority: '0.9',
     parts: { CSS: 'src/shared-ui/style.css', CHROME: 'src/shared-ui/chrome.js',
-             CORE: 'src/core.js', BIN: 'src/bins/bin.js', UI: 'src/bins/ui.js' },
+             CORE: 'src/core.js', WIDGETS: 'src/shared-ui/widgets.js',
+             BIN: 'src/bins/bin.js', UI: 'src/bins/ui.js' },
     uiPart: 'UI',
   },
   {

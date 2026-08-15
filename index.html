@@ -35,6 +35,7 @@
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px}
 a{color:var(--cyan)}
+
 header{padding:22px 26px 16px;border-bottom:1px solid var(--line);
   background:
     repeating-linear-gradient(0deg,transparent,transparent 20px,rgba(79,195,232,.045) 20px,rgba(79,195,232,.045) 21px),
@@ -52,19 +53,18 @@ header .privacy::before{content:"● ";color:var(--cyan)}
 .stage{padding:16px 20px 60px;overflow-y:auto;max-height:calc(100vh - 96px)}
 @media(max-width:980px){.stage{max-height:none}}
 
-/* Stacked layout: export goes last.
-   Side by side, the rail is a column and the export panel at the bottom of it reads
-   as the end of the process. Stacked, the rail comes before the stage in the
-   document, so export landed halfway down the page — before you had seen the
-   preview, the cut map or the print plan it is meant to follow. Letting the rail's
-   children join the page's flex flow lets that one panel be ordered past the stage
-   without moving it in the markup, where its position is correct. */
+/* Stacked layout.
+   The rail comes before the stage in the document, which is right side by side and
+   wrong stacked — settings you have already filled in would push the working surface
+   down the page. Letting the rail's children join the page's flex flow lets them be
+   ordered around the stage without moving them in the markup, where they belong.
+   (Export used to need an order of its own here, to stop panel 07 landing halfway up
+   a stacked page. It is a dialog now, so there is nothing left to reorder.) */
 @media(max-width:980px){
   .app{display:flex;flex-direction:column}
   .app > .rail{display:contents}
   .rail > section.p{order:10}
   .app > .stage{order:50;border-top:1px solid var(--line)}
-  .rail > section.p.export{order:90;margin:0 16px 12px}
 }
 section.p{background:var(--panel);border:1px solid var(--line);border-radius:8px;margin-bottom:12px;overflow:hidden}
 section.p>h2{font-size:11px;letter-spacing:.14em;color:var(--dim);padding:10px 13px;cursor:pointer;
@@ -109,7 +109,6 @@ button.act.on{background:var(--amber);box-shadow:0 0 0 2px rgba(0,0,0,.35) inset
 button.ghost{background:transparent;color:var(--cyan);border:1px solid var(--cyan);border-radius:6px;
   padding:8px 12px;cursor:pointer;font-size:12.5px}
 button.ghost:disabled{opacity:.4;cursor:default}
-.export .body{gap:8px}
 .stagecard{background:var(--panel);border:1px solid var(--line);border-radius:8px;margin-bottom:14px}
 .stagecard h3{font-size:11px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase;
   padding:10px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center}
@@ -250,6 +249,68 @@ article.doc .cta{margin-top:34px;padding-top:18px;border-top:1px solid var(--lin
 #fillmap .cellpart{rx:0;stroke:none}
 #fillmap .binedge{stroke:var(--cyan);stroke-width:2;stroke-linecap:round;pointer-events:none}
 #fillmap .bin.sel.cellpart{stroke:none}
+
+/* ---- download dialog ------------------------------------------------------
+   Downloading is one action taken once, at the end. As a panel it sat in the page
+   the whole time you were designing, competing for attention with the thing being
+   designed — and on both tools it had grown to five or six buttons whose names were
+   the only clue to what came out of them. It is a dialog now, and its job is to
+   confirm what you are about to get before you get it: the design, whether it fits
+   the printer you configured, and every file by name. */
+.exportbar{padding:12px 14px 14px;display:grid;gap:9px}
+/* Copying the link sits beside the download rather than inside the dialog. Sharing is
+   not downloading, and the design lives only in that link — neither tool writes it to
+   the address bar — so burying the one way to get it inside something titled "Download
+   your baseplate" made it unfindable for the job it is actually for. */
+.exportrow{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button.act.big{font-size:15px;padding:14px 20px;min-width:250px}
+
+/* The reset zeroes every margin, which for a modal dialog means the browser's own
+   centring is gone and it pins to the top-left. margin:auto puts it back.
+   display lives on [open] only — an author `display` on the bare element would beat
+   the UA's `dialog:not([open]){display:none}` and the dialog would never be shut. */
+dialog.sheet{margin:auto;border:1px solid var(--line);border-radius:10px;padding:0;
+  background:var(--panel);color:var(--ink);font-family:var(--sans);font-size:14px;
+  width:min(600px,calc(100vw - 20px));max-height:calc(100dvh - 36px);overflow:hidden;
+  box-shadow:0 18px 50px rgba(0,0,0,.6)}
+dialog.sheet[open]{display:flex;flex-direction:column}
+dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
+.sheethead{display:flex;align-items:center;gap:10px;padding:13px 14px;flex:none;
+  border-bottom:1px solid var(--line)}
+.sheethead h2{font-size:15px;font-weight:600;letter-spacing:.02em}
+.sheethead button{margin-left:auto;background:none;border:1px solid transparent;color:var(--dim);
+  font-size:20px;line-height:1;cursor:pointer;border-radius:6px;min-width:40px;min-height:40px}
+.sheethead button:hover{color:var(--ink);border-color:var(--line)}
+/* flex:none on every child matters: the file list hides its own overflow, so its
+   min-content height is zero, and inside a height-limited box that let the browser
+   squash the list — the dialog looked like it simply stopped listing files halfway
+   down. Children keep their height and the body scrolls instead. */
+.sheetbody{padding:13px 14px 16px;display:flex;flex-direction:column;gap:11px;overflow-y:auto}
+.sheetbody > *{flex:none}
+/* what the design is */
+.exsum{font-family:var(--mono);font-size:12.5px;line-height:1.55;background:var(--panel2);
+  border:1px solid var(--line);border-radius:6px;padding:10px 12px;white-space:pre-line}
+/* whether it fits, stated plainly rather than left to a table of "fits / TOO BIG" */
+.exfit{display:flex;gap:9px;font-size:13px;line-height:1.5;border-radius:6px;padding:10px 12px;
+  border:1px solid var(--line)}
+.exfit::before{font-weight:700;flex:none}
+.exfit.ok{background:rgba(79,195,232,.07);border-color:rgba(79,195,232,.4)}
+.exfit.ok::before{content:"✓";color:var(--cyan)}
+.exfit.bad{background:rgba(232,123,106,.09);border-color:rgba(232,123,106,.5)}
+.exfit.bad::before{content:"✕";color:var(--red)}
+.exfit.wait::before{content:"…";color:var(--dim)}
+/* the file list: 1px gaps over the border colour make the rules, so a row can carry
+   its own background without a second border rule per side */
+.exfiles{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
+  border-radius:7px;overflow:hidden}
+.exgroup{background:var(--panel2);padding:7px 12px;font-size:11.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--dim)}
+.exrow{background:var(--panel);display:grid;grid-template-columns:1fr auto;gap:12px;
+  align-items:center;padding:9px 12px}
+.exrow .nm{font-size:13px}
+.exrow .meta{display:block;font-family:var(--mono);font-size:11.5px;color:var(--dim);margin-top:3px}
+.exrow button{white-space:nowrap}
+.exnote{font-size:12px;color:var(--dim);line-height:1.5}
 </style>
 </head>
 <body>
@@ -416,18 +477,6 @@ article.doc .cta{margin-top:34px;padding-top:18px;border-top:1px solid var(--lin
   </div>
 </section>
 
-<section class="p export" id="s-export">
-  <h2><span class="n">07</span> Export <span class="caret">▾</span></h2>
-  <div class="body">
-    <button class="act" id="dlAll">Download all pieces (.zip)</button>
-    <button class="ghost" id="dlTile">Test tile — bin fit (.stl)</button>
-    <button class="ghost" id="dlFit" style="display:none">Joint fit sample — 4 clearances (.stl)</button>
-    <button class="ghost" id="dlKeys" style="display:none">Connector keys (.stl)</button>
-    <button class="ghost" id="shareBtn">Copy settings link</button>
-    <div class="hint">Each ZIP includes every piece, a README with assembly order, and your settings. STLs are millimetre-scale, print flat as oriented, no supports.</div>
-  </div>
-</section>
-
 </div>
 <div class="stage">
 
@@ -438,7 +487,7 @@ article.doc .cta{margin-top:34px;padding-top:18px;border-top:1px solid var(--lin
 </div>
 
 <div class="stagecard">
-  <h3>Preview <span class="tail"><label class="tog" style="font-size:11px"><input type="checkbox" id="explode"> exploded</label></span></h3>
+  <h3>Preview <span class="tail"><label class="tog"><input type="checkbox" id="explode"> exploded</label></span></h3>
   <div id="threewrap"><canvas id="three"></canvas><div id="status"></div><div id="threehint">drag rotate · wheel zoom · shift-drag pan</div></div>
 </div>
 
@@ -452,7 +501,6 @@ article.doc .cta{margin-top:34px;padding-top:18px;border-top:1px solid var(--lin
     </div>
     <div class="hint" id="stackHint" style="display:none">Experimental: any piece that fits fully inside the footprint of the one below prints stacked on top, separated by the gap layer — snap apart afterwards. Needs well-tuned bridging (the layer above spans open sockets); test with two first. Respects your printer's Z height.</div>
     <div id="platesRow" style="display:flex;gap:12px;flex-wrap:wrap"></div>
-    <button class="act" id="dlPlates" style="justify-self:start">Download all print plates (.3mf)</button>
   </div>
 </div>
 
@@ -463,6 +511,17 @@ article.doc .cta{margin-top:34px;padding-top:18px;border-top:1px solid var(--lin
   </tr></thead><tbody id="pieceRows"></tbody></table>
 </div>
 
+<div class="stagecard">
+  <h3>Export <span class="tail" id="exportTail"></span></h3>
+  <div class="exportbar">
+    <div class="exportrow">
+      <button class="act big" id="openExport">Download your baseplate…</button>
+      <button class="ghost" id="shareBtn">Copy settings link</button>
+    </div>
+    <div class="hint">Nothing is generated until you ask for it. The dialog lists every file you get, and says whether it all fits your bed. The link carries your whole design — it is the thing to attach to a bug report.</div>
+  </div>
+</div>
+
 </div>
 </div>
 <footer>
@@ -471,6 +530,22 @@ article.doc .cta{margin-top:34px;padding-top:18px;border-top:1px solid var(--lin
   <div style="margin-top:10px">Hey — thank you for using the tool! If you'd like to raise any issues or feature suggestions/requests, please raise them <a id="ghLink" href="https://github.com/Oliver-Johnson/Baseplate-Studio/issues" rel="noopener">on GitHub</a>. If it's saved you some time and you fancy it, you can also <a id="kofiLink" href="https://ko-fi.com/oliver_johnson" rel="noopener">buy me a coffee</a>.</div>
   <div class="mono" style="margin-top:8px">All geometry is computed locally in your browser — nothing is uploaded. STL/3MF output is mm scale. v1.2</div>
 </footer>
+
+<!-- The download dialog. It sits before the UI script because that script wires it up
+     as it parses, and its contents are filled in each time it opens rather than kept
+     in step with the layout — nobody sees a stale file list in a closed dialog. -->
+<dialog id="exportDlg" class="sheet" aria-labelledby="exportTitle">
+  <div class="sheethead">
+    <h2 id="exportTitle">Download your baseplate</h2>
+    <button type="button" id="exportClose" title="Close" aria-label="Close">×</button>
+  </div>
+  <div class="sheetbody">
+    <div class="exsum" id="exDesign">—</div>
+    <div class="exfit" id="exFit">—</div>
+    <div class="exfiles" id="exFiles"></div>
+    <div class="exnote">STLs are millimetre-scale and print flat as oriented, no supports. Print the test tile first and check a bin seats in it before committing to the full plates.</div>
+  </div>
+</dialog>
 
 <script src="vendor/three.min.js"></script>
 <script src="vendor/jszip.min.js"></script>
@@ -2283,6 +2358,66 @@ if (typeof module !== 'undefined') {
 }
 
 </script>
+<script>/* Widgets for the download dialog. Both tools have one, and they must look and read
+   the same in both, so the pieces live here rather than being written twice.
+ *
+ * They take the container element as an argument and know no ids. That is the whole
+ * discipline: every getElementById stays in a tool's ui.js, where the build's id audit
+ * can see it and fail if the element is missing.
+ *
+ * Spliced between the core and each tool's ui.js, so DF is simply in scope by the time
+ * a ui.js is parsed — no load-order rule to remember, and the three prose pages, which
+ * have no dialog, do not ship it.
+ */
+'use strict';
+
+const DF = {
+  /* An STL is an 84-byte header plus 50 bytes a triangle, and a polygon fans into
+     verts-2 of them, so the exact file size follows from polygons already in memory. */
+  stlBytes(polys) {
+    return 84 + 50 * polys.reduce((a, p) => a + p.verts.length - 2, 0);
+  },
+  bytes(n) {
+    return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB'
+                        : Math.max(1, Math.round(n / 1024)) + ' KB';
+  },
+  group(list, text) {
+    const d = document.createElement('div');
+    d.className = 'exgroup';
+    d.textContent = text;
+    list.appendChild(d);
+    return d;
+  },
+  /* A name, a line of detail, one button. Deflating a plate 3MF takes a moment, and
+     without the label change the dialog looks like it ignored the click — so people
+     click again and get the file twice. */
+  row(list, o) {
+    const row = document.createElement('div');
+    row.className = 'exrow';
+    const left = document.createElement('div');
+    const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = o.name;
+    const mt = document.createElement('span'); mt.className = 'meta'; mt.textContent = o.meta;
+    left.appendChild(nm); left.appendChild(mt);
+    const btn = document.createElement('button');
+    btn.className = 'ghost'; btn.type = 'button'; btn.textContent = o.label || 'Download';
+    for (const k in (o.attrs || {})) btn.setAttribute(k, o.attrs[k]);
+    btn.addEventListener('click', () => {
+      const was = btn.textContent;
+      btn.disabled = true; btn.textContent = 'Working…';
+      Promise.resolve().then(o.onClick).catch((e) => {
+        console.error('download failed', e);
+        btn.textContent = 'Failed';
+      }).then(() => {
+        if (btn.textContent === 'Failed') return;
+        btn.textContent = was; btn.disabled = false;
+      });
+    });
+    row.appendChild(left); row.appendChild(btn);
+    list.appendChild(row);
+    return btn;
+  },
+};
+</script>
 <script>
 'use strict';
 /* Drawerforge UI. Core geometry functions are in scope from the previous script tag. */
@@ -2338,15 +2473,12 @@ function readControls() {
   $('connHintSnap').style.display = state.connector === 'snap' ? '' : 'none';
   $('connHintHclip').style.display = state.connector === 'hclip' ? '' : 'none';
   const hasKeys = ['bowtie','puzzlekey','snap'].includes(state.connector);
-  $('dlKeys').style.display = hasKeys ? '' : 'none';
   $('keyMountRow').style.display = hasKeys ? '' : 'none';
   $('keyMountHint').style.display = hasKeys ? '' : 'none';
-  $('dlKeys').textContent = state.connector === 'snap' ? 'Snap clips (.stl)' : 'Connector keys (.stl)';
   // top-insert applies exactly where the key lives in the wall (see activeKeyDims)
   const wallish = (hasKeys && state.keyMount === 'wall') || state.connector === 'hclip';
   $('keyInsertRow').style.display = wallish ? '' : 'none';
   $('keyInsertHint').style.display = wallish ? '' : 'none';
-  $('dlFit').style.display = state.connector === 'none' ? 'none' : '';
   $('baseModeRow').style.display = (state.magnets || state.screws) ? '' : 'none';
   $('cornerRow').style.display = $('perCorner').checked ? '' : 'none';
   $('cornerHint').style.display = $('perCorner').checked ? '' : 'none';
@@ -2367,11 +2499,17 @@ function recomputeLayout() {
   scheduleBuild();
 }
 
-function pieceFits(pc) {
+/* The bed room a piece actually needs: its plate, plus the dovetail tabs that stick
+   out past it. One function, because the export dialog reports the largest piece and
+   has to be quoting the same number the fit test used — otherwise it can call a piece
+   174 mm wide and reject it against a 256 mm bed in the same breath. */
+function pieceExtent(pc) {
   const pitch = state.pitch;
   const ext = state.connector === 'dovetail' ? state.tab.dp + 0.4 : 0;
-  const w = pc.mL + pc.nx*pitch + pc.mR + ext;
-  const d = pc.mF + pc.ny*pitch + pc.mB + ext;
+  return [pc.mL + pc.nx*pitch + pc.mR + ext, pc.mF + pc.ny*pitch + pc.mB + ext];
+}
+function pieceFits(pc) {
+  const [w, d] = pieceExtent(pc);
   return w <= state.bedW + 1e-6 && d <= state.bedD + 1e-6;
 }
 
@@ -2567,6 +2705,9 @@ function drawPieceTable() {
   const tot = layout.pieces.length;
   const okc = Object.keys(builds).length;
   $('pieceTail').textContent = okc < tot ? `building ${okc}/${tot}…` : `${tot} ready`;
+  // this runs once per piece as the build proceeds, which is exactly the cadence an
+  // open dialog needs to keep its readiness line and its file list honest
+  syncExportDialog();
 }
 
 // ---------- async build ----------
@@ -2696,7 +2837,7 @@ function computePrintPlan() {
     return { id: pc.id, w: m.W + m.protrusion.l + m.protrusion.r,
              d: m.D + m.protrusion.f + m.protrusion.b, h: m.H, qty: 1, stackable: true };
   });
-  if (['bowtie','puzzlekey','snap','hclip'].includes(state.connector)) {
+  if (KEYED.includes(state.connector)) {
     const kd = activeKeyDims();
     const nKeys = layout.seams.reduce((a, s) => a + s.junctions.length, 0);
     if (nKeys) items.push({ id: 'key', w: kd.len, d: kd.wEnd,
@@ -2708,8 +2849,8 @@ function computePrintPlan() {
 }
 function renderPrintPlan() {
   const row = $('platesRow');
-  if (!printPlan) { row.innerHTML = '<div class="hint">Print plan appears when all pieces are built.</div>'; $('planTail').textContent = ''; $('dlPlates').disabled = true; return; }
-  $('dlPlates').disabled = false;
+  updateExportTail();
+  if (!printPlan) { row.innerHTML = '<div class="hint">Print plan appears when all pieces are built.</div>'; $('planTail').textContent = ''; return; }
   const plates = printPlan.plates;
   const stacked = plates.some(pl => pl.placed.some(p => p.z > 0.01));
   $('planTail').textContent = `${plates.length} print plate${plates.length > 1 ? 's' : ''}` + (stacked ? ' · stacked' : '');
@@ -2750,22 +2891,14 @@ async function plate3mfBytes(idx) {
   pz.file('3D/3dmodel.model', x.model);
   return pz.generateAsync({ type: 'uint8array' });
 }
-$('dlPlates').addEventListener('click', async () => {
+async function downloadAllPlates() {
   if (!printPlan) return;
   const n = printPlan.plates.length;
-  if (n === 1) {
-    const buf = await plate3mfBytes(0);
-    saveBlob(buf, 'print-plates.3mf');
-    return;
-  }
+  if (n === 1) { saveBlob(await plate3mfBytes(0), 'print-plates.3mf'); return; }
   const zip = new JSZip();
   for (let i = 0; i < n; i++) zip.file(`plate-${i+1}.3mf`, await plate3mfBytes(i));
-  const blob = await zip.generateAsync({ type: 'blob' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `print-plates-x${n}.zip`; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-});
+  saveBlobAsync(await zip.generateAsync({ type: 'blob' }), `print-plates-x${n}.zip`);
+}
 $('plateGap').addEventListener('input', computePrintPlan);
 $('stackToggle').addEventListener('change', computePrintPlan);
 $('stackGap').addEventListener('input', computePrintPlan);
@@ -2777,15 +2910,20 @@ function saveBlob(buf, name) {
   a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
+function saveBlobAsync(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
 function downloadPiece(id) {
   const b = builds[id];
   if (b) saveBlob(stlBinary(b.polys, `baseplate-${id}`), `baseplate-${id}.stl`);
 }
-$('dlTile').addEventListener('click', () => {
-  const tile = buildTestTile(Object.assign({}, state, { drawerW: state.pitch, drawerD: state.pitch,
-    marginMode: 'custom', mLeft: 0, mRight: 0, mFront: 0, mBack: 0 }));
-  saveBlob(stlBinary(tile.polys, 'test-tile'), 'baseplate-test-tile-1x1.stl');
-});
+function testTilePolys() {
+  return buildTestTile(Object.assign({}, state, { drawerW: state.pitch, drawerD: state.pitch,
+    marginMode: 'custom', mLeft: 0, mRight: 0, mFront: 0, mBack: 0 })).polys;
+}
 function activeKeyDims() {
   const d = state.connector === 'hclip' ? Object.assign(hclipPrm(state.hclip), { depth: 2.3 })
     : state.keyMount === 'wall' ? Object.assign({}, DEFAULTS.keySlim) : Object.assign({}, state.key);
@@ -2810,51 +2948,67 @@ function keysArray() {
   }
   return { polys, nKeys, kd };
 }
-$('dlFit').addEventListener('click', () => {
+function downloadFitSample() {
   const H = layout && builds[layout.pieces[0].id] ? builds[layout.pieces[0].id].meta.H : 4.25;
   const fsam = buildFitSample(state, H);
   saveBlob(stlBinary(fsam.polys, 'fit-sample'),
     `${state.connector}-fit-sample-clr-${fsam.clrs.map(c=>c.toFixed(2)).join('-')}.stl`);
-});
-$('dlKeys').addEventListener('click', () => {
+}
+/* Every connector that needs loose parts, in one list. The ZIP used to carry its own
+   shorter copy of it that left out H-clips, so an hclip download arrived with a
+   README telling the reader to press a clip into each junction and no clip in the
+   file. One list, and one function that decides what is in the STL. */
+const KEYED = ['bowtie', 'puzzlekey', 'snap', 'hclip'];
+function keysStl() {
   if (state.connector === 'snap' && state.keyInsert === 'top') {
     const prm = Object.assign({ legT: 1.0, legLen: 1.35, legC: 1.4, barb: 0.18,
                                 bridgeW: 1.7, bridgeD: 0.85, wall: 0.6 }, { clr: state.key.clr });
     const H = layout && builds[layout.pieces[0].id] ? builds[layout.pieces[0].id].meta.H : 4.25;
     const one = snapTopClip(prm, H);
-    const nKeys = layout.seams.reduce((a, s) => a + s.junctions.filter(j => Math.abs(j - Math.round(j)) <= 0.25).length, 0) || 1;
+    const nKeys = keysNeeded();
     let polys = [];
     const cols = Math.ceil(Math.sqrt(nKeys));
     for (let k = 0; k < nKeys; k++) {
       const dx = (k % cols) * 7, dy = Math.floor(k / cols) * 4;
       for (const p of one) polys.push({ verts: p.verts.map(v => [v[0]+dx, v[1]+dy, v[2]]), plane: p.plane });
     }
-    saveBlob(stlBinary(polys, 'snap-clips'), `snap-clips-x${nKeys}.stl`);
-    return;
+    return { polys, mesh: 'snap-clips', name: `snap-clips-x${nKeys}.stl` };
   }
   const { polys, nKeys } = keysArray();
-  saveBlob(stlBinary(polys, 'connector-keys'), `${state.connector}-keys-x${nKeys}.stl`);
-});
-$('dlAll').addEventListener('click', async () => {
+  return { polys, mesh: 'connector-keys', name: `${state.connector}-keys-x${nKeys}.stl` };
+}
+function downloadKeys() {
+  const k = keysStl();
+  saveBlob(stlBinary(k.polys, k.mesh), k.name);
+}
+/* How many keys the assembly needs, counted the same way the key STL lays them out —
+   anything housed in a wall skips a seam that overlaps by a single cell, because there
+   is no wall junction there to sink one into. Top-inserted snap clips force that count
+   whatever the housing says, since they enter through the wall by definition. */
+function keyCount(wallOnly) {
+  const wallish = wallOnly || state.keyMount === 'wall' || state.connector === 'hclip';
+  return layout.seams.reduce((a, s) => a + s.junctions.filter(j =>
+    !wallish || Math.abs(j - Math.round(j)) <= 0.25).length, 0);
+}
+const topClips = () => state.connector === 'snap' && state.keyInsert === 'top';
+const keysNeeded = () => keyCount(topClips()) || 1;
+async function downloadEverythingZip() {
   if (Object.keys(builds).length < layout.pieces.length) return;
   const zip = new JSZip();
   for (const pc of layout.pieces)
     zip.file(`baseplate-${pc.id}.stl`, stlBinary(builds[pc.id].polys, pc.id));
-  if (['bowtie','puzzlekey','snap'].includes(state.connector)) {
-    const { polys, nKeys } = keysArray();
-    zip.file(`${state.connector}-keys-x${nKeys}.stl`, stlBinary(polys, 'keys'));
+  if (KEYED.includes(state.connector)) {
+    const k = keysStl();
+    zip.file(k.name, stlBinary(k.polys, k.mesh));
   }
   if (printPlan) {
     for (let i = 0; i < printPlan.plates.length; i++)
       zip.file(`print-plates/plate-${i+1}.3mf`, await plate3mfBytes(i));
   }
   zip.file('README.txt', readmeText());
-  const blob = await zip.generateAsync({ type: 'blob' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `gridfinity-baseplate-${layout.nx}x${layout.ny}.zip`; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-});
+  saveBlobAsync(await zip.generateAsync({ type: 'blob' }),
+                `gridfinity-baseplate-${layout.nx}x${layout.ny}.zip`);
+}
 function readmeText() {
   const rows = [...new Set(layout.pieces.map(p => p.band))].length;
   const lines = [];
@@ -2922,6 +3076,158 @@ function readmeText() {
   lines.push('Gridfinity was created by Zack Freedman (Voidstar Lab) as an open standard.');
   return lines.join('\n');
 }
+
+/* ---------- the download dialog -------------------------------------------
+   Export was panel 07: five buttons in the settings rail, present the whole time you
+   were designing, three of them named after things you would have to download to
+   identify. It is a dialog now, and it states what the design is and whether it fits
+   your bed before it lists a single file. The row and group widgets are shared with
+   the bins tool, in widgets.js. */
+const exGroup = (text) => DF.group($('exFiles'), text);
+const exRow = (name, meta, label, onClick, attrs) =>
+  DF.row($('exFiles'), { name, meta, label, onClick, attrs });
+
+const CONNECTOR_NAMES = { dovetail: 'dovetail tabs', puzzle: 'puzzle tabs', bowtie: 'bowtie keys',
+  puzzlekey: 'puzzle keys', snap: 'snap clips', hclip: 'H-clips', none: 'no connectors' };
+
+/* What goes wrong is tested before whether the build has finished, not after. Anything
+   the checks call an error stops runBuild, so the pieces never finish and never will —
+   and answering "this piece does not fit your bed" with "still building" is true and
+   useless. warningsList is the same predicate runBuild gates on, so the dialog and the
+   build cannot disagree about whether there is a problem. */
+function bedFitText() {
+  const bed = `${state.bedW} × ${state.bedD} mm bed`;
+  // guard, so the "largest piece" arithmetic below never reasons about an empty list
+  if (!layout.pieces.length)
+    return { cls: 'bad', t: 'There is nothing to generate yet — see the checks under the cut map.' };
+  const bad = layout.pieces.filter((pc) => !pieceFits(pc));
+  if (bad.length)
+    return { cls: 'bad', t: `${bad.length} piece(s) — ${bad.map((pc) => pc.id).join(', ')} — ` +
+      `will not fit your ${bed}. Add a cut through them on the cut map, or pick a split mode ` +
+      'that makes smaller pieces; the files below would print oversized as they stand.' };
+  const err = warningsList().find((w) => w.err);
+  if (err) return { cls: 'bad', t: err.t + ' Nothing can be exported until that is fixed.' };
+  const ready = Object.keys(builds).length;
+  if (ready < layout.pieces.length)
+    return { cls: 'wait', t: `Still building — ${ready} of ${layout.pieces.length} piece(s) ready. ` +
+      'The meshes below appear as they finish.' };
+  // quoting pieceExtent, so the number shown is the number the test above used
+  const big = layout.pieces.map(pieceExtent).sort((a, b) => b[0] * b[1] - a[0] * a[1])[0];
+  return { cls: 'ok', t: `All ${layout.pieces.length} piece(s) fit your ${bed} — the largest ` +
+    `needs ${big[0].toFixed(0)} × ${big[1].toFixed(0)} mm.` };
+}
+
+function renderExportSummary() {
+  const pitch = state.pitch;
+  $('exDesign').textContent =
+    `${layout.nx} × ${layout.ny} cell grid (${(layout.nx * pitch).toFixed(0)} × ${(layout.ny * pitch).toFixed(0)} mm) ` +
+    `in a ${state.drawerW} × ${state.drawerD} mm drawer\n` +
+    `${layout.pieces.length} piece(s), ${state.splitMode} split, joined with ${CONNECTOR_NAMES[state.connector] || state.connector}\n` +
+    `margins L ${layout.mL.toFixed(1)} / R ${layout.mR.toFixed(1)} / F ${layout.mF.toFixed(1)} / B ${layout.mB.toFixed(1)} mm`;
+  const fit = bedFitText();
+  $('exFit').className = 'exfit ' + fit.cls;
+  $('exFit').textContent = fit.t;
+}
+
+function renderExportFiles() {
+  $('exFiles').innerHTML = '';
+  const ready = Object.keys(builds).length >= layout.pieces.length;
+  if (printPlan) {
+    const n = printPlan.plates.length;
+    exGroup('Pre-arranged print plates');
+    exRow('Every plate', `${n} plate(s) · 3MF` + (n > 1 ? ' in a ZIP' : ''),
+          'Download', downloadAllPlates, { 'data-ex': 'allplates' });
+    /* Per-plate downloads. The combined export already builds each plate on its own
+       before zipping them, so one plate at a time is the same call with the zip left
+       off — and it is what you want when one print failed, or when tonight's print is
+       only this plate. */
+    printPlan.plates.forEach((pl, i) => exRow(`Plate ${i + 1}`,
+      `${pl.placed.length} part(s) on a ${state.bedW} × ${state.bedD} mm bed · 3MF`, 'Download',
+      async () => saveBlob(await plate3mfBytes(i), `plate-${i + 1}.3mf`),
+      { 'data-ex': 'plate' }));
+  }
+
+  exGroup('Meshes');
+  exRow('Everything, with a README', 'every piece' +
+        (printPlan ? ', the print plates' : '') + ' and the assembly order · ZIP',
+        'Download', downloadEverythingZip, { 'data-ex': 'zip' });
+  for (const pc of layout.pieces) {
+    const b = builds[pc.id];
+    const btn = exRow(`Piece ${pc.id}`,
+          `${pc.nx} × ${pc.ny} cells · ` + (b ? `${DF.bytes(DF.stlBytes(b.polys))} · STL` : 'not built yet'),
+          'STL', () => downloadPiece(pc.id), { 'data-ex': 'piece' });
+    btn.disabled = !b;   // downloadPiece would otherwise fail silently
+  }
+  if (KEYED.includes(state.connector)) {
+    exRow(state.connector === 'snap' ? 'Snap clips' : 'Connector keys',
+          `${keysNeeded()} needed, laid out on one plate · STL`, 'STL', downloadKeys,
+          { 'data-ex': 'keys' });
+  }
+
+  exGroup('Print these first');
+  /* No byte size on this row. It is the one file nothing has built yet, and building a
+     tile purely to measure it would be work done on every open for a number nobody
+     needs — the point of the row is that it is small and quick. */
+  exRow('Bin fit test tile', 'one 1 × 1 cell of the plate · STL',
+        'STL', () => saveBlob(stlBinary(testTilePolys(), 'test-tile'),
+                              'baseplate-test-tile-1x1.stl'), { 'data-ex': 'tile' });
+  if (state.connector !== 'none')
+    exRow('Joint fit sample', 'four tile pairs at graduated clearances · STL',
+          'STL', downloadFitSample, { 'data-ex': 'fit' });
+  if (!ready)
+    for (const btn of $('exFiles').querySelectorAll('button[data-ex="zip"],button[data-ex="allplates"],button[data-ex="plate"]'))
+      btn.disabled = true;
+}
+
+/* The dialog was a snapshot, and said so in a sentence that was not true: "the meshes
+   below appear as they finish", from a render with exactly one call site — the open
+   handler. Open it mid-build and it kept the same half-built list and the same disabled
+   ZIP for good, and you had to close and reopen. The build is asynchronous and the page
+   rebuilds behind a 260 ms debounce on every control change, so "change a setting, hit
+   Download" lands there routinely on a slow machine.
+   Rebuilding the list is the only honest option — the plate rows do not merely change,
+   they do not exist until the plan does — so it is rebuilt, except while the keyboard
+   is inside it, where a rebuild would throw the focus away mid-tab. That case retries
+   as soon as focus leaves. */
+let exportDeferred = false;
+function syncExportDialog() {
+  if (!$('exportDlg').open || !layout) return;
+  renderExportSummary();
+  if ($('exFiles').contains(document.activeElement)) { exportDeferred = true; return; }
+  exportDeferred = false;
+  renderExportFiles();
+}
+function updateExportTail() {
+  if (!layout) return;
+  const n = layout.pieces.length;
+  $('exportTail').textContent = `${n} piece${n > 1 ? 's' : ''}` +
+    (printPlan ? ` · ${printPlan.plates.length} plate${printPlan.plates.length > 1 ? 's' : ''}` : '');
+  syncExportDialog();
+}
+function openExportDialog() {
+  renderExportSummary();
+  renderExportFiles();
+  const dlg = $('exportDlg');
+  // showModal is the whole point — the fallback is for a browser old enough not to
+  // have it, where an in-flow panel that closes is still better than a dead button
+  if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+}
+$('openExport').addEventListener('click', openExportDialog);
+$('exportClose').addEventListener('click', () => $('exportDlg').close());
+$('exportDlg').addEventListener('focusout', () => {
+  // the new focus is not settled until after the event, hence the deferral
+  if (exportDeferred) setTimeout(syncExportDialog, 0);
+});
+/* Click to dismiss, from the backdrop only. A click reports the common ancestor of its
+   two ends, so selecting text in the summary and releasing outside the box reported the
+   dialog itself and shut it — losing the selection and the dialog together. Both ends
+   have to be the backdrop. */
+let downOnBackdrop = false;
+$('exportDlg').addEventListener('mousedown', (e) => { downOnBackdrop = e.target === $('exportDlg'); });
+$('exportDlg').addEventListener('click', (e) => {
+  if (downOnBackdrop && e.target === $('exportDlg')) $('exportDlg').close();
+  downOnBackdrop = false;
+});
 
 // ---------- share link ----------
 // Descriptor keys owned by the bins tool (or any future tool). We never interpret

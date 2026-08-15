@@ -217,11 +217,14 @@
 </div>
 
 <div class="stagecard">
-  <h3>Export</h3>
-  <button class="act" id="dlPlates">Download print plates (.3mf)</button>
-  <button class="act" id="dlAll">Download all bins (.zip)</button>
-  <button class="ghost" id="shareBtn" style="margin-top:8px">Copy layout link</button>
-  <div class="hint">One STL per bin type, with a README listing the layout. Prints flat as oriented, no supports. Print one bin before committing to a drawer's worth.</div>
+  <h3>Export <span class="tail" id="exportTail"></span></h3>
+  <div class="exportbar">
+    <div class="exportrow">
+      <button class="act big" id="openExport">Download your bins…</button>
+      <button class="ghost" id="shareBtn">Copy layout link</button>
+    </div>
+    <div class="hint">Nothing is generated until you ask for it. The dialog lists every file you get, and says whether it all fits your printer. The link carries your whole layout — it is the thing to attach to a bug report.</div>
+  </div>
 </div>
 
 </div>
@@ -232,10 +235,29 @@
   <div class="mono" style="margin-top:8px">All geometry is computed locally in your browser — nothing is uploaded. STL output is mm scale.</div>
 </footer>
 
+<!-- The download dialog. It sits before the UI script because that script wires it up
+     as it parses, and its contents are filled in each time it opens rather than kept
+     in step with the layout — nobody sees a stale file list in a closed dialog. -->
+<dialog id="exportDlg" class="sheet" aria-labelledby="exportTitle">
+  <div class="sheethead">
+    <h2 id="exportTitle">Download your bins</h2>
+    <button type="button" id="exportClose" title="Close" aria-label="Close">×</button>
+  </div>
+  <div class="sheetbody">
+    <div class="exsum" id="exDesign">—</div>
+    <div class="exfit" id="exFit">—</div>
+    <div class="exfiles" id="exFiles"></div>
+    <div class="exnote">Bins print flat as oriented, no supports. Print one and check it seats in your baseplate before committing to a drawer's worth.</div>
+  </div>
+</dialog>
+
 <script src="../vendor/three.min.js"></script>
 <script src="../vendor/jszip.min.js"></script>
 <script>
 /*__CORE__*/
+</script>
+<script>
+/*__WIDGETS__*/
 </script>
 <script>
 /*__BIN__*/
