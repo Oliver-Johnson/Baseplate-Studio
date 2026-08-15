@@ -32,6 +32,9 @@ jobs:
       # A layout travels in the URL hash; it must survive the round trip byte for byte.
       - run: node test/hash-roundtrip.js
       - run: node test/seo-check.js
+      # The guides quote real numbers. Nothing connected them to the code they came
+      # from, so a change to SPEC would leave three pages quietly lying.
+      - run: node test/guide-facts.js
 
   # Everything above tests the geometry and the build. This tests the page: place
   # bins, carve, merge, resize, and assert what the interface actually did. Every
