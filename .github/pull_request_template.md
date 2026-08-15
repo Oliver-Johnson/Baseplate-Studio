@@ -12,7 +12,9 @@
 
 ## If this touches geometry
 
-- [ ] `node test/bin-audit.js` reports **`all cases clean`** — every mesh watertight
+- [ ] Bins: `node test/bin-audit.js` reports **`all cases clean`** — every mesh watertight
+- [ ] Baseplates: `node test/plate-audit.js` reports **`all plates watertight`** — and no case
+      has picked up bad edges that were not already named as known
 - [ ] I added a case covering the new shape
 
 <!-- A screenshot of the preview is welcome, but it is not evidence: a mesh with holes
