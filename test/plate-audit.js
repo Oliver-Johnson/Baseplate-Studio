@@ -553,8 +553,38 @@ console.log('\nloose parts and samples, orientation only:');
          healCsgSeams, which is load-bearing enough that changing it to chase 5e-5 mm² is
          not a thing to do while closing an orientation gap. Named so the number is on
          record and cannot be mistaken for the check being approximate. */
-      report(`fit sample ${conn}/${keyInsert}`, G.buildFitSample(cfg, H).polys,
-             conn === 'puzzle' ? 'csgSubtract sliver spurs on the tile underside' : null);
+      /* buildFitSample takes the joint rather than re-deriving it, since deriving it
+         twice is what made the coupon present the wrong housing in the first place.
+         The UI is the authority (activeJoint in src/ui.js); this is a fixture standing
+         in for it, deliberately explicit so it reads as a test input and not as a
+         second opinion. It covers the subset this loop varies: connector and insertion,
+         at the default clearances. */
+      const keyed = ['bowtie', 'puzzlekey', 'snap', 'hclip'].includes(conn);
+      const prm = Object.assign({}, cfg.key);
+      if (keyInsert === 'top' && conn === 'hclip') prm.depth = 2.0;
+      const joint = keyed
+        ? { kind: G.jointKind(conn, cfg.keyMount, keyInsert),
+            shape: conn === 'hclip' ? 'snap' : conn, prm,
+            /* The pad is what a top-insert cup sits in. With zero the cup has nowhere
+               to go and the coupon comes back as two dozen open shells -- a fixture
+               fault, not a geometry one. buildPiece forces this same figure. */
+            pad: prm.depth + 0.8, clr: prm.clr,
+            part: G.buildKey(conn === 'hclip' ? 'snap' : conn, prm, prm.depth - 0.15) }
+        : { kind: conn, pad: 0,
+            clr: conn === 'puzzle' ? cfg.puzzle.clr : cfg.tab.clr };
+      /* hclip/top is the one configuration whose coupon is genuinely open, and it only
+         became visible here once the coupon started building the right housing at all:
+         before that it presented a bottom recess and never exercised the cup. The cause
+         is pre-existing and documented -- clipConvexPrismTop removes material above z0
+         inside the prism and emits neither a cap at z0 nor side walls, leaning on the
+         pocket cup to close it, and the cup's floor slab overlaps rather than seals. It
+         is the same reason every top-insert PLATE leaks, which is a separate argument
+         from orientation and is not one to settle inside a merge. */
+      report(`fit sample ${conn}/${keyInsert}`, G.buildFitSample(cfg, H, joint).polys,
+             conn === 'puzzle' ? 'csgSubtract sliver spurs on the tile underside'
+             : (conn === 'hclip' && keyInsert === 'top')
+               ? 'clipConvexPrismTop leaves the cup open — same cause as top-insert plates'
+               : null);
     }
 }
 

@@ -2751,6 +2751,18 @@ function checkManifold(polys) {
  * `joint.kind` names the housing for every connector, `joint.part` is present only for
  * the ones that ship a loose part.
  */
+/* Which housing a configuration uses. Pure, so it lives here rather than in the UI:
+   the coupon, the plate and the audit all have to agree, and the last three bugs in
+   this area were each two places answering this independently. src/ui.js reads it
+   through activeJoint, which adds the parts the UI alone knows. */
+function jointKind(connector, keyMount, keyInsert) {
+  const KEYS = ['bowtie', 'puzzlekey', 'snap'];
+  const inWall = connector === 'hclip' || (KEYS.includes(connector) && keyMount === 'wall');
+  if (connector === 'snap' && keyInsert === 'top') return 'snaptop';
+  if (inWall && keyInsert === 'top') return 'cup';
+  return KEYS.includes(connector) || connector === 'hclip' ? 'recess' : connector;
+}
+
 function buildFitSample(cfg, H, joint) {
   H = H || 4.25;
   const clrs = [-0.05, 0, 0.05, 0.1].map(d => Math.max(0.02, joint.clr + d));
@@ -3039,7 +3051,7 @@ const DEFAULTS = {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { computeLayout, pieceConnectors, buildPiece, buildTestTile, buildFitSample, bowtieKey, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, keyHalfConvexParts, topPocketCup, snapTopPocket, clipConvexPrismTop, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
+  module.exports = { computeLayout, pieceConnectors, buildPiece, buildTestTile, buildFitSample, jointKind, bowtieKey, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, keyHalfConvexParts, topPocketCup, snapTopPocket, clipConvexPrismTop, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
     // shared mesh primitives — also used by the bins tool
     makePoly, triangulateRing, earTriangulate, roundedSquareRing, clampZ, profilePrism,
     skeletonCellRegion, directCellRegion, polyArea2D };
@@ -3735,7 +3747,8 @@ function activeJoint() {
     return { kind: state.connector === 'none' ? 'none' : state.connector, pad,
              clr: state.connector === 'puzzle' ? state.puzzle.clr : state.tab.clr };
   const prm = activeKeyDims();
-  const kind = topClips() ? 'snaptop' : keyFromTop() ? 'cup' : 'recess';
+  // core.js owns this, so the coupon, the plate and the audit cannot disagree
+  const kind = jointKind(state.connector, state.keyMount, state.keyInsert);
   return { kind, shape: activeKeyShape(), prm, pad,
            // the clip is one part at one size in either housing, so it is fitted to the
            // full key's clearance — buildPiece says the same

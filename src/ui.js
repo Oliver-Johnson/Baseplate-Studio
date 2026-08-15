@@ -627,7 +627,8 @@ function activeJoint() {
     return { kind: state.connector === 'none' ? 'none' : state.connector, pad,
              clr: state.connector === 'puzzle' ? state.puzzle.clr : state.tab.clr };
   const prm = activeKeyDims();
-  const kind = topClips() ? 'snaptop' : keyFromTop() ? 'cup' : 'recess';
+  // core.js owns this, so the coupon, the plate and the audit cannot disagree
+  const kind = jointKind(state.connector, state.keyMount, state.keyInsert);
   return { kind, shape: activeKeyShape(), prm, pad,
            // the clip is one part at one size in either housing, so it is fitted to the
            // full key's clearance — buildPiece says the same
