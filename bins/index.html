@@ -2415,6 +2415,15 @@ function footProfile(footH) {
     if (footH >= z0 && footH <= z1) { h = h0 + (h1 - h0) * (z1 > z0 ? (footH - z0) / (z1 - z0) : 0); break; }
   }
   if (!last || Math.abs(last[0] - footH) > 1e-9) out.push([footH, h]);
+  /* A truncated foot must still reach full width at 45 degrees. Cutting the spec
+     profile at 2.0 mm removes its 2.60 -> 4.75 taper entirely, so the body jumped
+     from 18.60 to 20.75 with nothing under it: a 2.15 mm flat overhang all the way
+     round, which is exactly where the low-profile test print failed. The taper is
+     above the part that mates with a lip, so seating is unchanged -- contact is on
+     the chamfer below 0.80, not on this ledge. */
+  const top = out[out.length - 1];
+  if (SPEC.half - top[1] > 1e-9)
+    out.push([top[0] + (SPEC.half - top[1]), SPEC.half]);
   return out;
 }
 
@@ -2569,8 +2578,19 @@ function lipRing(G, c, hwO, hdO, H, n) {
   const steps = st.lip.concat([[lipH, rim]]);
   const inner = steps.map(([, t]) => ring(t));
   const zsI = steps.map(([z]) => H + z);
-  // extend the inner surface down past the floor so the shell closes below the bin top
-  inner.unshift(inner[0]); zsI.unshift(H - BLOAT);
+  /* Chamfer the underside of the lip instead of dropping it straight down.
+     The wall is 1.2 mm and the lip base is 2.70, so the lip used to begin with
+     1.50 mm of material starting in mid-air over the cavity. Every printed bin
+     failed in the same place just below the internal lip, whatever its base style,
+     because the ledge is identical on all of them. Running the inner surface down
+     to the wall thickness at 45 degrees makes it self-supporting.
+
+     Clamped to the wall height available: a 1-unit bin has only 1.05 mm of wall
+     below the lip, so it gets a steeper chamfer rather than one that starts below
+     the floor. Steeper still beats a flat overhang. */
+  const drop = Math.min(Math.max(0, steps[0][1] - c.wall),
+                        Math.max(BLOAT, H - (SPEC.footH + c.floorT) - 0.3));
+  inner.unshift(ring(c.wall)); zsI.unshift(H - drop);
 
   const outer = ring(0);
   const polys = [];
@@ -2588,13 +2608,16 @@ function lipRing(G, c, hwO, hdO, H, n) {
   // outer skin, normals outward
   for (let j = 0; j < outer.length; j++) {
     const k = (j + 1) % outer.length;
-    const p = G.makePoly([[outer[j][0], outer[j][1], H - BLOAT], [outer[k][0], outer[k][1], H - BLOAT],
+    const p = G.makePoly([[outer[j][0], outer[j][1], H - drop], [outer[k][0], outer[k][1], H - drop],
                           [outer[k][0], outer[k][1], H + lipH], [outer[j][0], outer[j][1], H + lipH]]);
     if (p) polys.push(p);
   }
   // caps: bottom (down) and the flat top rim (up) — index-paired strips, not the
   // keyhole triangulator, which silently leaves a thin ring half covered
-  polys.push(...ringStrip(G.makePoly, outer, inner[0], H - BLOAT, false));
+  /* The bottom cap sits where the chamfer starts, not at H - BLOAT: the inner
+     surface now runs down to meet the wall thickness, and a cap at the old height
+     would leave the two skins ending at different z with nothing joining them. */
+  polys.push(...ringStrip(G.makePoly, outer, inner[0], H - drop, false));
   polys.push(...ringStrip(G.makePoly, outer, inner[inner.length - 1], H + lipH, true));
   return polys;
 }
@@ -2680,7 +2703,13 @@ function carvedBody(G, c, mask, H, floorZ, zTop, lipSteps) {
        equal z that quad has zero area, makePoly drops it, and each panel loses two
        triangles — 72 boundary edges across an L. A 0.05 mm rise costs nothing and
        keeps every face real. */
-    const st = [[floorZ - BLOAT, wall], [top - (lipSteps ? BLOAT : 0), wall]];
+    /* Same 45 degree chamfer under the lip that lipRing gets, for the same reason:
+       the lip base is 2.70 against a 1.20 wall, and that 1.50 mm used to start in
+       mid-air over the cavity. Clamped to the wall height available. */
+    const drop = lipSteps
+      ? Math.min(Math.max(BLOAT, lipSteps[0][1] - wall), Math.max(BLOAT, top - floorZ - 0.3))
+      : 0;
+    const st = [[floorZ - BLOAT, wall], [top - drop, wall]];
     if (lipSteps) for (const [dz, t] of lipSteps) st.push([H + dz, t]);
     return st;
   };
