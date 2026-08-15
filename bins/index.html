@@ -3399,8 +3399,17 @@ function carvedBody(G, c, mask, H, floorZ, zTop, lipSteps) {
      outside, so its inner radius grows. Same band, opposite sense. */
   const sweptSector = (steps, ccx, ccy, a0, radii) => {
     const zs = steps.map(([z]) => z);
+    /* Name the rings by RADIUS, not by which side of the wall they are. A convex
+       corner has the material inside the arc, so its band runs CR down to CR - t; a
+       concave one has it outside, so the band runs CR up to CR + t and the two
+       arguments arrive the other way round. The loop below traces outer-forward then
+       inner-back, which is only counter-clockwise when the first really is the larger
+       — so with the concave case the whole fillet came out inside out, one per reflex
+       corner, -214 mm3 each. Every carved shape shipped with them, watertight and
+       backwards, until an orientation check went looking. */
     const rings = steps.map(([, t]) => {
-      const [ro, ri] = radii(t);
+      const [ra, rb] = radii(t);
+      const ro = Math.max(ra, rb), ri = Math.min(ra, rb);
       return { outer: arcPts(ccx, ccy, ro, a0), inner: arcPts(ccx, ccy, ri, a0) };
     });
     const loop = (r) => r.outer.concat(r.inner.slice().reverse());

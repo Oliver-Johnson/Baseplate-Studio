@@ -43,40 +43,21 @@ const CASES = [
   { name: '2x1x3-openfront', u: 2, v: 1, hUnits: 3, edges: { f: 0 } },
   { name: '2x2x2-tray', u: 2, v: 2, hUnits: 2, edges: { f: 0, b: 0, l: 0, r: 0 } },
   { name: '6x4x5-everything', u: 6, v: 4, hUnits: 5, divX: 2, divY: 1, scoop: 6, label: 10 },
-  /* carved footprints — the concave outlines the per-cell builder exists for.
-     All five are quarantined for ORIENTATION only; they are watertight, they hit their
-     footprint and they carry their lip. See the note under `orientQuarantine`. */
-  { name: 'L-3x3', u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[2, 2]]),
-    orientQuarantine: '1 reflex fillet inside out' },
-  { name: 'U-3x3', u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[1, 2]]),
-    orientQuarantine: '2 reflex fillets inside out' },
-  { name: 'T-3x3', u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[0, 0], [2, 0]]),
-    orientQuarantine: '2 reflex fillets inside out' },
-  { name: 'staircase-3x3', u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[1, 2], [2, 2], [2, 1]]),
-    orientQuarantine: '2 reflex fillets inside out' },
-  { name: 'bigL-5x4', u: 5, v: 4, hUnits: 4, cells: cellsExcept(5, 4, [[3, 3], [4, 3], [4, 2]]),
-    orientQuarantine: '2 reflex fillets inside out' },
+  // carved footprints — the concave outlines the per-cell builder exists for
+  { name: 'L-3x3', u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[2, 2]]) },
+  { name: 'U-3x3', u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[1, 2]]) },
+  { name: 'T-3x3', u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[0, 0], [2, 0]]) },
+  { name: 'staircase-3x3', u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[1, 2], [2, 2], [2, 1]]) },
+  { name: 'bigL-5x4', u: 5, v: 4, hUnits: 4, cells: cellsExcept(5, 4, [[3, 3], [4, 3], [4, 2]]) },
 ];
 
-/* Why five cases are quarantined rather than fixed.
- *
- * Every carved footprint builds one outer fillet per reflex corner, and every one of them
- * is inside out: a closed 212-triangle shell of -214.259 mm³ (-282.322 on bigL, which has
- * a taller wall). Watertight, zero bad edges, and the total mesh volume stays positive
- * because it is one shell among forty in a pile of overlapping ones — which is precisely
- * the hole in the old checks this file is now closing.
- *
- * It is a one-line sign error in `sweptSector` (src/bins/bin.js). That helper builds an
- * annular sector as `outer` CCW followed by `inner` reversed, which traces the band
- * anticlockwise only while `outer` really is the larger radius. Convex corners pass
- * [CR, CR - t] and are correct. The reflex fillet passes [CR, CR + t + OVER] — the comment
- * above it says so, "a concave one puts the material outside, so its inner radius grows" —
- * and swapping which radius is larger reverses the loop, with nothing downstream
- * renormalising it. The panels and sectors either side of it are fine.
- *
- * Not fixed here because src/bins/ is out of this change's scope. Named rather than
- * skipped so the number cannot be mistaken for background noise, and so this fails the
- * moment someone fixes it and leaves the quarantine behind. */
+/* Every carved footprint builds one outer fillet per reflex corner, and every one of
+ * them used to be inside out: a closed 212-triangle shell of -214.259 mm³. Watertight,
+ * zero bad edges, and the total volume stayed positive because it was one shell among
+ * forty in a pile of overlapping ones — which is exactly the gap the orientation check
+ * exists to close. sweptSector traced the band as `outer` forward then `inner` reversed,
+ * which is only anticlockwise while `outer` is the larger radius; the concave case
+ * passes them the other way round. It now sorts them by radius before tracing. */
 const orientQuarantine = (cs, r) => cs.orientQuarantine
   ? (r.ok ? '  ORIENTATION NOW CLEAN — take it out of quarantine' : `  known: ${cs.orientQuarantine}`)
   : '';
