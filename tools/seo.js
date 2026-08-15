@@ -79,19 +79,21 @@ function inject(html) {
   return html.replace(/<\/head>/i, tag + '</head>');
 }
 
-/* The sitemap, built from the same page list the build uses.
+/* The sitemap, built from the same page list the build uses, so a page cannot be
+ * added without being listed — which was the real failure mode of keeping it by hand.
  *
- * Hand-maintained sitemaps go stale in two ways, and both cost you: a page added and
- * not listed may never be crawled, and a lastmod that lies teaches the crawler to
- * ignore your lastmod. Generating it from the pages that actually exist, dated by the
- * commit that last touched each one, removes both.
+ * Deliberately no <lastmod>. The obvious source is the commit that last touched each
+ * page, and that cannot work: the sitemap is committed alongside the page it dates,
+ * so the moment both land, the page's last-touching commit is the one carrying the
+ * sitemap, and the next build computes a date the committed file does not have. It is
+ * self-referential and no amount of git history depth fixes it. A date that cannot be
+ * verified is worse than no date, since a lastmod a crawler catches lying is a reason
+ * to stop trusting all of them.
  */
-function sitemap(pages, lastmodFor) {
+function sitemap(pages) {
   const rows = pages.map((p) => {
     const loc = 'https://drawerforge.co.uk/' + p.out.replace(/index\.html$/, '');
-    const mod = lastmodFor ? lastmodFor(p) : null;
     return '  <url><loc>' + loc + '</loc>' +
-      (mod ? '<lastmod>' + mod + '</lastmod>' : '') +
       '<changefreq>' + p.changefreq + '</changefreq>' +
       '<priority>' + p.priority + '</priority></url>';
   });

@@ -148,19 +148,10 @@ for (const tool of TOOLS) {
               `   ids: ${referenced.size} referenced / ${templateIds.size} present`);
 }
 
-/* The sitemap is generated, not maintained. A page added and not listed may never be
-   crawled, and a lastmod that lies teaches the crawler to stop trusting lastmod. Dates
-   come from the commit that last touched each page; if git is unavailable the entry
-   simply carries no date rather than a made-up one. */
+/* The sitemap is generated from the page manifest, so adding a page cannot forget to
+   list it. It carries no dates on purpose — see tools/seo.js. */
 {
-  const lastmodFor = (t) => {
-    try {
-      const out = execFileSync('git', ['log', '-1', '--format=%cI', '--', t.out],
-                               { cwd: ROOT, encoding: 'utf8' }).trim();
-      return out ? out.slice(0, 10) : null;
-    } catch (e) { return null; }
-  };
-  const xml = seo.sitemap(TOOLS, lastmodFor);
+  const xml = seo.sitemap(TOOLS);
   const smPath = path.join(ROOT, 'sitemap.xml');
   const current = fs.existsSync(smPath) ? fs.readFileSync(smPath, 'utf8') : '';
   if (checkOnly) {

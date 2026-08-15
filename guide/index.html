@@ -39,9 +39,24 @@ header .privacy::before{content:"● ";color:var(--cyan)}
 .app{display:grid;grid-template-columns:400px 1fr;gap:0;min-height:calc(100vh - 96px)}
 @media(max-width:980px){.app{grid-template-columns:1fr}}
 .rail{border-right:1px solid var(--line);padding:14px 16px 40px;overflow-y:auto;max-height:calc(100vh - 96px)}
-@media(max-width:980px){.rail{max-height:none;border-right:none;border-bottom:1px solid var(--line)}}
+@media(max-width:980px){.rail{max-height:none;border-right:none}}
 .stage{padding:16px 20px 60px;overflow-y:auto;max-height:calc(100vh - 96px)}
 @media(max-width:980px){.stage{max-height:none}}
+
+/* Stacked layout: export goes last.
+   Side by side, the rail is a column and the export panel at the bottom of it reads
+   as the end of the process. Stacked, the rail comes before the stage in the
+   document, so export landed halfway down the page — before you had seen the
+   preview, the cut map or the print plan it is meant to follow. Letting the rail's
+   children join the page's flex flow lets that one panel be ordered past the stage
+   without moving it in the markup, where its position is correct. */
+@media(max-width:980px){
+  .app{display:flex;flex-direction:column}
+  .app > .rail{display:contents}
+  .rail > section.p{order:10}
+  .app > .stage{order:50;border-top:1px solid var(--line)}
+  .rail > section.p.export{order:90;margin:0 16px 12px}
+}
 section.p{background:var(--panel);border:1px solid var(--line);border-radius:8px;margin-bottom:12px;overflow:hidden}
 section.p>h2{font-size:11px;letter-spacing:.14em;color:var(--dim);padding:10px 13px;cursor:pointer;
   display:flex;align-items:center;gap:9px;user-select:none;text-transform:uppercase}
@@ -102,6 +117,19 @@ button.ghost:disabled{opacity:.4;cursor:default}
 #cutmap .psub{fill:var(--dim);font-size:10px}
 #cutmap .bad{fill:var(--red)}
 #threewrap{position:relative;height:380px}
+
+/* Expanded preview. The canvas only gives up touch-action while expanded: inline it
+   has to let a finger scroll the page past it, expanded a finger should rotate. */
+.previewbtn{position:absolute;top:8px;right:8px;z-index:3;
+  background:rgba(12,17,22,.78);color:var(--cyan);border:1px solid var(--line);
+  border-radius:6px;padding:7px 12px;font:inherit;font-size:12px;cursor:pointer}
+.previewbtn:hover{border-color:var(--cyan)}
+#threewrap.expanded{position:fixed;inset:0;z-index:200;height:100dvh;width:100vw;
+  margin:0;border-radius:0;background:var(--bg)}
+#threewrap.expanded canvas{width:100%;height:100%;touch-action:none}
+#threewrap.expanded .previewbtn{top:max(10px,env(safe-area-inset-top));
+  right:max(10px,env(safe-area-inset-right));padding:10px 16px;font-size:14px}
+body.previewlock{overflow:hidden}
 #three{width:100%;height:100%;display:block;border-radius:0 0 8px 8px;cursor:grab}
 #three:active{cursor:grabbing}
 #threehint{position:absolute;right:12px;bottom:10px;font-family:var(--mono);font-size:10.5px;color:var(--dim)}
@@ -452,6 +480,43 @@ can come back to it later.</p>
       e.preventDefault();
       location.href = a.getAttribute('href') + location.hash;
     });
+
+  /* Full-screen preview.
+     On a touch screen the 3D preview was unusable: dragging a finger across it
+     scrolled the page instead of rotating the model, because the canvas has to let
+     the page scroll or you could never scroll past it. Rather than trade one for the
+     other, expanding it makes the choice explicit — full screen, page scrolling
+     locked, and touch-action off the canvas so a drag rotates. Escape or the button
+     puts it back. Both tools resize their renderer from a window resize event, so
+     one dispatch covers them. */
+  var wrap = document.getElementById('threewrap');
+  if (wrap) {
+    var btn = document.createElement('button');
+    btn.className = 'previewbtn';
+    btn.type = 'button';
+    btn.title = 'Expand the preview';
+    btn.setAttribute('aria-label', 'Expand the preview');
+    btn.textContent = 'Expand';
+    wrap.appendChild(btn);
+
+    var setExpanded = function (on) {
+      wrap.classList.toggle('expanded', on);
+      document.body.classList.toggle('previewlock', on);
+      btn.textContent = on ? 'Close' : 'Expand';
+      btn.title = on ? 'Close the preview' : 'Expand the preview';
+      btn.setAttribute('aria-label', btn.title);
+      // let the page settle at its new size before the renderer measures it
+      requestAnimationFrame(function () { window.dispatchEvent(new Event('resize')); });
+    };
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      setExpanded(!wrap.classList.contains('expanded'));
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && wrap.classList.contains('expanded')) setExpanded(false);
+    });
+  }
 
   /* Tip jar. Persistent, but dismissible and it stays dismissed — a banner you
      cannot get rid of is worse than no banner. The flag is a local preference,
