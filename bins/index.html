@@ -677,6 +677,17 @@ function flipPoly(p) {
 // ---------- BSP ----------
 const COPLANAR = 0, FRONT = 1, BACK = 2, SPANNING = 3;
 function splitPolygon(plane, poly, coplanarFront, coplanarBack, front, back) {
+  /* A polygon that carries this exact plane is coplanar with it, whatever its vertices
+     say. Classifying by vertex distance alone is what let `build` fail to terminate: it
+     takes a splitting plane from one of the polygons it is about to sort, and if that
+     polygon's own vertices have drifted off it by more than EPS — a repaired mesh can be
+     a micron out — then nothing lands in the node, every polygon goes to the same child,
+     and the child repeats the choice forever. Growing a tree until the heap runs out is
+     an alarming way to find that out. */
+  const pn = poly.plane;
+  const dn = pn.n[0]*plane.n[0] + pn.n[1]*plane.n[1] + pn.n[2]*plane.n[2];
+  if (dn > 1 - 1e-9 && Math.abs(pn.w - plane.w) < 1e-9) { coplanarFront.push(poly); return; }
+  if (dn < -1 + 1e-9 && Math.abs(pn.w + plane.w) < 1e-9) { coplanarBack.push(poly); return; }
   let polyType = 0;
   const types = [];
   for (const v of poly.verts) {
@@ -775,17 +786,308 @@ class Node {
     }
   }
 }
+/* ---------- repairing what a BSP subtraction leaves behind ----------
+ *
+ * csgSubtract was "lossy whatever it was handed": a watertight box minus a watertight
+ * prism came back with boundary edges for an interior hole, a blind pocket, an edge
+ * notch and a corner bite alike. None of that was material going missing. The surface
+ * was closed all along; its CONNECTIVITY was not, in two separate ways, and both have
+ * to be repaired before the mesh will satisfy a slicer.
+ *
+ * 1. T-junctions. A split plane cuts every polygon it crosses in two, but a polygon it
+ *    merely grazes along an edge passes through whole. The long edge then faces two
+ *    short ones with a vertex sitting in its middle, and the manifold check counts three
+ *    edges used once each where the mesh is in fact sealed. It cannot be fixed during
+ *    the splits — the two sides are cut at unrelated depths of the tree and neither
+ *    knows about the other — so it is a pass over the finished soup.
+ *
+ * 2. Micron slivers. Where two cutter planes cross a face at a shallow angle they carve
+ *    the same corner twice, a couple of microns apart, and the polygon between the two
+ *    cuts has no thickness worth the name. Merging its ends is not a fudge to satisfy
+ *    the audit: at that size the two vertices are one point in every representation
+ *    downstream, and an STL stores float32.
+ *
+ * Both repairs want the same thing first — every vertex reduced to an integer id — so
+ * they share one pass. That is not tidiness: string-keyed maps over every vertex and
+ * every edge, rebuilt for each of the 126 subtractions a screwed plate performs, cost
+ * more than the whole CSG they were repairing.
+ *
+ * This function is the fix, not decoration. Disable it and the four minimum CSG cases in
+ * plate-audit.js all fail, magnets go to 3207 bad edges and screws to 8389. Everything
+ * else in this file's CSG changes is an optimisation sitting on top of it.
+ */
+/* Two points this close are one point. Chosen by measurement rather than by argument:
+   across a sweep of connectors, mounting options and smoothnesses, 1e-3 left six
+   configurations leaking at the arcSegs the tool actually ships (6 — it is not a UI
+   control), including both magnet-from-above options; 2e-3 leaves none. It is a trade
+   and not a free win: at arcSegs 8 and 16, which nothing can currently select, two
+   configurations go the other way, and volumes move by up to 0.1 mm3 on a 54000 mm3
+   plate. An earlier version of this comment called 1e-3 principled because it matched
+   checkManifold's rounding. That is a consistency argument with the measuring
+   instrument, not a correctness one, and it was choosing the worse number. */
+const VTOL = 2e-3;
+
+function healCsgSeams(polys) {
+  if (!polys.length) return polys;
+
+  /* ---- one vertex table for the whole soup, bucketed as it is built ----
+   * Buckets are VTOL cubes, hashed to a 32-bit integer rather than keyed by a string of
+   * the three cell coordinates. Two cells can land in one bucket, which costs nothing:
+   * every use of a bucket compares coordinates anyway. Every use of a STRING, on the
+   * other hand, cost most of the time this whole repair takes. */
+  const hash = (cx, cy, cz) => ((cx * 73856093) ^ (cy * 19349663) ^ (cz * 83492791)) | 0;
+  const verts = [], buckets = new Map();
+  const idOf = (v) => {
+    const cx = Math.floor(v[0]/VTOL), cy = Math.floor(v[1]/VTOL), cz = Math.floor(v[2]/VTOL);
+    const k = hash(cx, cy, cz);
+    let b = buckets.get(k);
+    if (!b) { b = []; buckets.set(k, b); }
+    for (const i of b) {
+      const w = verts[i];
+      if (w[0] === v[0] && w[1] === v[1] && w[2] === v[2]) return i;
+    }
+    b.push(verts.length); verts.push(v);
+    return verts.length - 1;
+  };
+  let faces = polys.map((p) => p.verts.map(idOf));
+  let planes = polys.map((p) => p.plane);
+
+  /* Edges are keyed by one number rather than a string of two, which ids make possible
+     and which the profile insisted on. Ids beyond 2^26 would collide; a soup that large
+     would have exhausted memory long before, and this says so if it ever does not. */
+  const EKEY = 1 << 26;
+  if (verts.length >= EKEY) throw new Error(`healCsgSeams: ${verts.length} vertices overflows the edge key`);
+
+  /* A face may be dropped only if every undirected edge in it appears an EVEN number of
+     times. Then removing it cannot change any edge's parity, and a closed cycle that
+     retraces every one of its edges encloses no area either, so the volume is untouched.
+     A real polygon uses each edge once and can never qualify. This is the whole test for
+     "this face is not really there", and it is arithmetic rather than a judgement call —
+     which matters, because the two places it is needed throw up quite different-looking
+     degeneracies and an ad-hoc check for one of them missed the other. */
+  const retraced = (f) => {
+    const seen = new Map();
+    for (let i = 0; i < f.length; i++) {
+      const a = f[i], b = f[(i + 1) % f.length];
+      const k = a < b ? a * EKEY + b : b * EKEY + a;
+      seen.set(k, (seen.get(k) || 0) + 1);
+    }
+    for (const c of seen.values()) if (c % 2) return false;
+    return true;
+  };
+
+  /* ---- collapse the slivers ----
+   * Grouping has to be by DISTANCE and not by a rounding grid: rounding puts 52.0611 and
+   * 52.0618 either side of a cell wall and leaves the sliver between them intact, which
+   * was the last handful of bad edges on a screwed plate. The bound is deliberately the
+   * one checkManifold rounds by, so any two vertices this leaves distinct are still
+   * distinct there too — the two never disagree about what is one point. */
+  const parent = verts.map((_, i) => i);
+  const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+  verts.forEach((v, i) => {
+    const cx = Math.floor(v[0]/VTOL), cy = Math.floor(v[1]/VTOL), cz = Math.floor(v[2]/VTOL);
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
+      const b = buckets.get(hash(cx+dx, cy+dy, cz+dz));
+      if (!b) continue;
+      for (const j of b) {
+        if (j <= i) continue;
+        const w = verts[j];
+        if (Math.abs(v[0]-w[0]) > VTOL || Math.abs(v[1]-w[1]) > VTOL || Math.abs(v[2]-w[2]) > VTOL) continue;
+        const ra = find(i), rb = find(j);
+        if (ra !== rb) parent[ra] = rb;
+      }
+    }
+  });
+
+  /* Move every vertex onto its group's representative. A polygon whose corners have
+     merged loses the collapsed corner; one left with fewer than three, or one that has
+     folded onto itself like A-B-A-D, goes entirely. */
+  const dirty = [];
+  {
+    const nf = [], np = [];
+    for (let fi = 0; fi < faces.length; fi++) {
+      const f = faces[fi], keep = [];
+      let moved = false;
+      for (let i = 0; i < f.length; i++) {
+        const a = find(f[i]), b = find(f[(i + 1) % f.length]);
+        if (a !== f[i]) moved = true;
+        if (a !== b) keep.push(a);
+      }
+      if (keep.length < 3 || retraced(keep)) continue;
+      nf.push(keep); np.push(planes[fi]); dirty.push(moved || keep.length !== f.length);
+    }
+    faces = nf; planes = np;
+  }
+
+  /* ---- put the missing vertices back into the long edges ----
+   * A subdivided edge leaves BOTH sides under-used: the long edge is used once, and so
+   * is each half. That prunes the work at both ends — only edges already counted wrong
+   * can need a vertex, and only the endpoints of those edges can be the vertex they
+   * need. On a screwed plate that is a few hundred edges against a few hundred points
+   * instead of a hundred thousand against a hundred thousand.
+   *
+   * Inserting can expose a further T-junction on a longer edge, hence the loop. Two
+   * passes is the most anything here has needed; the cap is headroom, and it THROWS if
+   * it is ever reached with work still to do rather than quietly returning a mesh with
+   * holes in it. Silent partial success is the failure this project keeps rediscovering
+   * — earTriangulate does it, and it shipped bins with 218 boundary edges.
+   *
+   * The distance tolerance is VTOL and not something tighter: the collapse above may
+   * just have moved a vertex that far, and a weld that cannot reach it would leave the
+   * T-junction it was meant to close. */
+  const PASSES = 6;
+  let pass = 0;
+  for (; pass < PASSES; pass++) {
+    /* Count polygon edges, not triangle edges — a fan's diagonals always pair up inside
+       the fan, so the two counts differ only by matched pairs. */
+    const use = new Map();
+    for (const f of faces)
+      for (let i = 0; i < f.length; i++) {
+        const a = f[i], b = f[(i + 1) % f.length];
+        const k = a < b ? a * EKEY + b : b * EKEY + a;
+        use.set(k, (use.get(k) || 0) + 1);
+      }
+    const cand = new Set(), suspect = new Set();
+    for (const [k, c] of use) {
+      if (c === 2) continue;
+      suspect.add(k);
+      cand.add(Math.floor(k / EKEY)); cand.add(k % EKEY);
+    }
+    if (!cand.size) break;
+    /* Sorted on x, so an edge only looks at the candidates inside its own x span. Even
+       a few hundred against a few hundred is 30 million projections on a screwed plate
+       when every edge sees every point; the window and the box test take it to a few
+       hundred thousand. */
+    const pts = [...cand].sort((p, q) => verts[p][0] - verts[q][0]);
+    const px = pts.map((i) => verts[i][0]);
+    const from = (x) => {
+      let lo = 0, hi = px.length;
+      while (lo < hi) { const m = (lo + hi) >> 1; if (px[m] < x) lo = m + 1; else hi = m; }
+      return lo;
+    };
+
+    let changed = false;
+    for (let fi = 0; fi < faces.length; fi++) {
+      const f = faces[fi], grown = [];
+      let touched = false;
+      for (let i = 0; i < f.length; i++) {
+        const ia = f[i], ib = f[(i + 1) % f.length];
+        grown.push(ia);
+        if (!suspect.has(ia < ib ? ia * EKEY + ib : ib * EKEY + ia)) continue;
+        const a = verts[ia], b = verts[ib];
+        const dx = b[0]-a[0], dy = b[1]-a[1], dz = b[2]-a[2];
+        const L2 = dx*dx + dy*dy + dz*dz;
+        if (L2 < 1e-12) continue;
+        const xhi = (dx > 0 ? b[0] : a[0]) + VTOL;
+        const ylo = (dy > 0 ? a[1] : b[1]) - VTOL, yhi = (dy > 0 ? b[1] : a[1]) + VTOL;
+        const zlo = (dz > 0 ? a[2] : b[2]) - VTOL, zhi = (dz > 0 ? b[2] : a[2]) + VTOL;
+        const hits = [];
+        for (let s = from((dx > 0 ? a[0] : b[0]) - VTOL); s < px.length && px[s] <= xhi; s++) {
+          const q = pts[s];
+          if (q === ia || q === ib) continue;
+          const p = verts[q];
+          if (p[1] < ylo || p[1] > yhi || p[2] < zlo || p[2] > zhi) continue;
+          const ux = p[0]-a[0], uy = p[1]-a[1], uz = p[2]-a[2];
+          const t = (ux*dx + uy*dy + uz*dz) / L2;
+          if (t <= 0 || t >= 1) continue;
+          const ox = ux - dx*t, oy = uy - dy*t, oz = uz - dz*t;
+          if (ox*ox + oy*oy + oz*oz > VTOL * VTOL) continue;
+          hits.push([t, q]);
+        }
+        if (!hits.length) continue;
+        hits.sort((x, y) => x[0] - y[0]);
+        for (const [, q] of hits) grown.push(q);
+        touched = true;
+      }
+      if (!touched) continue;
+      faces[fi] = grown; dirty[fi] = true; changed = true;
+    }
+    if (!changed) break;
+  }
+  if (pass === PASSES) throw new Error('healCsgSeams: T-junctions still appearing after ' + PASSES + ' passes');
+
+  /* Welding creates the other kind of fold. A sliver triangle D-C-B whose corners are
+     nearly collinear really does have its third corner sitting on the opposite edge, so
+     the insertion test above says yes and the face becomes D-C-B-C: out to a point and
+     straight back, drawn as two triangles of opposite winding that an edge count cannot
+     tell from real surface. That was csgUnion's last six bad edges. Refusing the
+     insertion instead is wrong — it leaves a genuine T-junction elsewhere on the same
+     face and the volume drifts by 1.2e-5. Dropping the face is exactly right. */
+  {
+    const kept = [], kp = [], kd = [];
+    for (let fi = 0; fi < faces.length; fi++) {
+      if (retraced(faces[fi])) continue;
+      kept.push(faces[fi]); kp.push(planes[fi]); kd.push(dirty[fi]);
+    }
+    faces = kept; planes = kp; dirty.length = 0; dirty.push(...kd);
+  }
+
+  /* ---- back to polygons ----
+   * A repaired polygon has vertices sitting mid-edge, so the triangle fan
+   * polysToTriangles builds from verts[0] can start on a straight run and emit a
+   * zero-area triangle with a NaN normal. Fanning from the vertex average instead
+   * cannot: these polygons are all convex (BSP splitting preserves convexity, and every
+   * input here is convex), so the average is strictly interior. Every boundary edge is
+   * still used exactly once and every spoke exactly twice, which is the whole point.
+   * The sub-triangles inherit the parent plane rather than deriving one from three
+   * nearly-collinear points. */
+  const out = [];
+  for (let fi = 0; fi < faces.length; fi++) {
+    const f = faces[fi], n = f.length, vs = f.map((i) => verts[i]);
+    let flat = false;
+    if (dirty[fi])
+      for (let i = 0; i < n && !flat; i++) {
+        const u = V.sub(vs[(i + 1) % n], vs[i]);
+        const w = V.sub(vs[(i + 2) % n], vs[(i + 1) % n]);
+        const c = V.cross(u, w);
+        if (V.dot(c, c) < 1e-18) flat = true;
+      }
+    if (!flat) { out.push({ verts: vs, plane: planes[fi] }); continue; }
+    const c = [0, 0, 0];
+    for (const v of vs) { c[0] += v[0]/n; c[1] += v[1]/n; c[2] += v[2]/n; }
+    for (let i = 0; i < n; i++)
+      out.push({ verts: [c, vs[i], vs[(i + 1) % n]], plane: planes[fi] });
+  }
+  return out;
+}
+
+/* Subtraction and union, with the solid's own surface kept out of its own tree.
+ *
+ * This is a POLYGON-COUNT optimisation and nothing more. Say so plainly, because the
+ * shape of the reasoning below is exactly the shape of a root-cause argument and it is
+ * not one: restore the textbook form, keep healCsgSeams, and every case in
+ * plate-audit.js still passes. The only measured difference is 45332 -> 29242 polygons
+ * on the 3x3 screws case, a 35% saving. Nothing in the audit would catch its reversion.
+ *
+ * Textbook csg.js takes the answer out of `a` — a.clipTo(b), then a.build(b's polygons),
+ * then a.allPolygons(). That reads the surface back out of a tree that was built by
+ * splitting a's polygons against each other. A cell region carries ~300 socket-surface
+ * triangles whose planes graze the top annulus at a few thousandths of a degree, so
+ * partitioning the annulus by every one of them shreds it: subtracting nothing at all
+ * from a cell region — csgSubtract(region, []) — took it from 394 polygons to 1524 and
+ * opened 481 bad edges, with no cutter anywhere near it.
+ *
+ * Nothing needs a's surface to come out of a's tree. The result of A − B is A's polygons
+ * clipped to outside B, plus B's polygons clipped to inside A and turned to face the
+ * cavity. So a's tree is built for classification and its fragments are thrown away, and
+ * the surface we keep is the ORIGINAL a polygons put through b's tree — which has a
+ * handful of planes belonging to a cutter that was chosen to be simple.
+ *
+ * The clipTo/invert dance on b is unchanged from csg.js: it is what discards a cutter
+ * face lying exactly on a face of the solid, and it still earns its keep.
+ */
 function csgSubtract(aPolys, bPolys) {
   const a = new Node(aPolys), b = new Node(bPolys);
-  a.invert(); a.clipTo(b); b.clipTo(a); b.invert(); b.clipTo(a); b.invert();
-  a.build(b.allPolygons()); a.invert();
-  return a.allPolygons();
+  const outside = b.clipPolygons(aPolys);            // a's surface, split only by the cutter
+  a.invert();                                        // classify against a's interior
+  b.clipTo(a); b.invert(); b.clipTo(a); b.invert();  // b's surface, restricted to inside a
+  return healCsgSeams(outside.concat(b.allPolygons().map(flipPoly)));
 }
 function csgUnion(aPolys, bPolys) {
   const a = new Node(aPolys), b = new Node(bPolys);
-  a.clipTo(b); b.clipTo(a); b.invert(); b.clipTo(a); b.invert();
-  a.build(b.allPolygons());
-  return a.allPolygons();
+  const outside = b.clipPolygons(aPolys);            // a's surface outside b
+  b.clipTo(a); b.invert(); b.clipTo(a); b.invert();  // b's surface outside a
+  return healCsgSeams(outside.concat(b.allPolygons()));
 }
 
 // remove all material inside convex 2D polygon `cv` (CCW) above z0 — deterministic
@@ -986,6 +1288,50 @@ function cylinder(cx, cy, r, z0, z1, seg) {
     p = makePoly([[cx, cy, z1], ring1[i], ring1[j]]); if (p) polys.push(p);
   }
   return polys;
+}
+
+/* Everything removed at one mounting site, as ONE solid.
+ *
+ * Up to three cylinders share this axis: a magnet pocket, a screw shank, and the head's
+ * counterbore. They overlap by design — the ⌀3 shank runs up the middle of the ⌀6
+ * counterbore, and with the stock sizes that counterbore sits entirely inside the ⌀6.2
+ * magnet pocket, sharing its bottom cap exactly. Three overlapping shells handed to a
+ * BSP as one "solid" is the question it cannot answer, and it answered wrong: 14304 bad
+ * edges on a 3x3 screwed plate, all of it shank wall the counterbore had already taken
+ * away. Unioning them properly first is what csgUnion is for, and this is the one place
+ * in the file where a union is the right tool rather than the trap ENGINE.md warns about
+ * — it joins two cutters, never two pieces of the model.
+ *
+ * The alternative, one subtraction per cylinder, is correct too but three times the work
+ * on the plate's biggest mesh, and each pass re-splits what the last one cut.
+ *
+ * Built at the origin so the caller can move one copy to all four corners of every cell
+ * instead of unioning 252 times for a drawer-sized plate.
+ */
+function fastenerCutter(cfg, magZ0, magZ1, shankTop) {
+  let cut = null;
+  const add = (c) => { cut = cut ? csgUnion(cut, c) : c; };
+  if (cfg.magnets)
+    add(cfg.magnetSide === 'top'
+      ? cylinder(0, 0, cfg.magnetD/2 + 0.1, magZ0, magZ1, 14)
+      : cylinder(0, 0, cfg.magnetD/2 + 0.1, -0.5, cfg.magnetH, 14));
+  if (cfg.screws) {
+    if (cfg.screwHeadD > cfg.screwHoleD)
+      add(cylinder(0, 0, cfg.screwHeadD/2, -0.5, cfg.screwHeadDepth, 14));
+    add(cylinder(0, 0, cfg.screwHoleD/2, -0.5, shankTop, 12));
+  }
+  return cut;
+}
+/* Slide a cutter sideways. Unlike transformPolys, which is for export and leaves the
+   plane alone because nothing downstream of it reads one, this has to carry the plane
+   with the vertices: it feeds a BSP, and a polygon whose plane has drifted from its
+   vertices sends the tree looking for a splitter it can never consume. */
+function movePolys(polys, dx, dy) {
+  return polys.map((p) => ({
+    verts: p.verts.map((v) => [v[0] + dx, v[1] + dy, v[2]]),
+    // n copied, not shared: Node.invert replaces a plane's normal, and the template is reused
+    plane: { n: p.plane.n.slice(), w: p.plane.w + p.plane.n[0]*dx + p.plane.n[1]*dy },
+  }));
 }
 
 // counterbore: hole cylinder full height + wider recess from chosen face
@@ -1664,6 +2010,26 @@ function skeletonCellRegion(clipped, prof, cx, cy, H, arcSegs, skin) {
  * loops is used, so the cap meets the side wall and the socket surface exactly, and no
  * triangle is ever discarded for being degenerate. It cannot half-succeed: it emits
  * exactly outer.length + inner.length triangles or none at all.
+ *
+ * Sweeping on angle alone is not enough. The outer loop is a rectangle with four
+ * corners; the inner ring has 4*arcSegs. So the sweep parks on one outer corner and fans
+ * across a quarter of the ring — and a fan from a point outside a convex loop only stays
+ * inside the annulus as far as that point's tangent to the loop. Past the tangent the
+ * triangle turns over. A rim built this way is still closed and encloses the right
+ * volume, so neither the manifold check nor a volume check can see it, but 21% of its
+ * triangles faced downwards at the shipped arcSegs 6, and 33% at 24.
+ *
+ * So each step also checks the sign. When the angular choice would turn a triangle over
+ * and the other choice would not, take the other: that steps the outer loop on to the
+ * next corner, which is where the fan should have restarted anyway.
+ *
+ * On how much this was worth, since the temptation is to claim it was the bug: csgSubtract
+ * builds its BSP from the region's own polygon planes, so a wrong-facing plane does make
+ * the tree answer "outside" for solid material millimetres away, and it did throw away
+ * part of every dovetail notch's ceiling. But measured on its own it is worth 6-17% of
+ * the bad edges, and reverting only this fix leaves dovetail at 118, magnets+screws at 8
+ * and the rest watertight. See ENGINE.md 2a.3. Fix it because an inside-out triangle is wrong on its
+ * own terms.
  */
 function annulusStrip(outerLoop, innerLoop, cx, cy, z, up) {
   const ang = (p) => {
@@ -1700,9 +2066,15 @@ function annulusStrip(outerLoop, innerLoop, cx, cy, z, up) {
     if (p) polys.push(p);
   };
 
+  const turn = (a, b, c) => (b[0]-a[0])*(c[1]-a[1]) - (b[1]-a[1])*(c[0]-a[0]);
   let i = 0, j = 0;
   while (i < n || j < m) {
-    const takeOuter = (j >= m) || (i < n && oa[i + 1] <= ia[j + 1]);
+    let takeOuter = (j >= m) || (i < n && oa[i + 1] <= ia[j + 1]);
+    if (i < n && j < m) {
+      const byOuter = turn(O[i % n], O[(i + 1) % n], I[j % m]);
+      const byInner = turn(O[i % n], I[(j + 1) % m], I[j % m]);
+      if (takeOuter ? (byOuter <= 0 && byInner > 0) : (byInner <= 0 && byOuter > 0)) takeOuter = !takeOuter;
+    }
     if (takeOuter) { emit(O[i % n], O[(i + 1) % n], I[j % m]); i++; }
     else { emit(O[i % n], I[(j + 1) % m], I[j % m]); j++; }
   }
@@ -1792,6 +2164,10 @@ function buildPiece(cfg, layout, piece, onStatus) {
   const D = piece.mF + piece.ny*pitch + piece.mB;
   const gx0 = piece.mL, gy0 = piece.mF;
 
+  // one cutter for every mounting site on the piece, built once and moved into place
+  const cellFastener = ((cfg.magnets || cfg.screws) && solidBase)
+    ? fastenerCutter(cfg, pad - cfg.magnetH, pad + 0.02, H + 0.5) : null;
+
   // ---- connectors ----
   const conn = pieceConnectors(cfg, layout, piece);
   const tabs = conn.tabs, notches = conn.notches;
@@ -1875,9 +2251,20 @@ function buildPiece(cfg, layout, piece, onStatus) {
         ? skeletonCellRegion(clipped, prof, cx, cy, H, cfg.arcSegs || 6,
                              Math.max(0.4, cfg.skin || 0.8))
         : directCellRegion(clipped, prof, cx, cy, H, pad, cfg.arcSegs || 6);
-      // small convex cutters local to this cell
-      let small = [];
-      const seqCuts = [];
+      /* Small convex cutters local to this cell, batched by feature and subtracted one
+       * batch at a time.
+       *
+       * All of them used to go into a single soup and a single subtraction. That is only
+       * sound while no two shells in the soup overlap, and the mounting cutters always
+       * overlap — see fastenerCutter, which is why they arrive here already unioned into
+       * one solid per site. Everything else is safe to batch because instances of one
+       * feature sit at distinct sites: notches are a pitch apart, mounting sites 26 mm.
+       *
+       * A subtraction per shell would be correct too, but it is both slower and worse:
+       * each pass re-splits everything the previous pass cut, and neighbouring cylinders
+       * share facet normals, so a later cutter's plane runs tangentially along an earlier
+       * cutter's wall and shaves slivers off it. */
+      const cuts = { notch: [], key: [], puzzle: [], fastener: [] };
       for (const nb of notches) {
         const near = (nb.edge === '+x' || nb.edge === '-x')
           ? (nb.s > y0 - nWt && nb.s < y1 + nWt &&
@@ -1898,7 +2285,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
             pts = [[s - nWr/2, e - g*BK], [s - nWt/2, e + g*nDp],
                    [s + nWt/2, e + g*nDp], [s + nWr/2, e - g*BK]];
           }
-          small = small.concat(extrudePoly(pts, -0.503, Math.min(t.h + 0.2, H - 0.8)));
+          cuts.notch.push(...extrudePoly(pts, -0.503, Math.min(t.h + 0.2, H - 0.8)));
         }
       }
       for (const bo of keyed) {
@@ -1919,13 +2306,13 @@ function buildPiece(cfg, layout, piece, onStatus) {
         }
         if (isHclip) {
           // bottom-insert H pocket via the snap profile (ceiling below rim geometry)
-          small = small.concat(extrudePoly(
+          cuts.key.push(...extrudePoly(
             keyHalf('snap', bo.edge, bo.e, bo.s, hclipPrm(cfg.hclip), cfg.hclip.clr),
             -0.5, Math.min(2.3, H - 0.8)));
         } else {
-          small = small.concat(
-            extrudePoly(keyHalf(cfg.keyType, bo.edge, bo.e, bo.s, keyDims, keyDims.clr),
-                        -0.5, wallKeys ? 2.0 : Math.min(cfg.key.depth, pad - 0.6)));
+          cuts.key.push(
+            ...extrudePoly(keyHalf(cfg.keyType, bo.edge, bo.e, bo.s, keyDims, keyDims.clr),
+                           -0.5, wallKeys ? 2.0 : Math.min(cfg.key.depth, pad - 0.6)));
         }
       }
       for (const pn of pnotches) {
@@ -1935,28 +2322,16 @@ function buildPiece(cfg, layout, piece, onStatus) {
              (pn.edge === '+x' ? Math.abs(x1 - W) : Math.abs(x0)) < reach)
           : (pn.s > x0 - cfg.puzzle.lobeR*2 && pn.s < x1 + cfg.puzzle.lobeR*2 &&
              (pn.edge === '+y' ? Math.abs(y1 - D) : Math.abs(y0)) < reach);
-        if (near) small = small.concat(
-          extrudePoly(puzzleShape(pn.edge, pn.e, pn.s, cfg.puzzle, cfg.puzzle.clr, true),
-                      -0.5, pad - 0.4));
+        if (near) cuts.puzzle.push(
+          ...extrudePoly(puzzleShape(pn.edge, pn.e, pn.s, cfg.puzzle, cfg.puzzle.clr, true),
+                         -0.5, pad - 0.4));
       }
-      if ((cfg.magnets || cfg.screws) && solidBase) {
+      if (cellFastener) {
         const off = cfg.holeOffset;
-        for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
-          const hx = cx + sx*off, hy = cy + sy*off;
-          if (cfg.magnets) {
-            small = small.concat(cfg.magnetSide === 'top'
-              ? cylinder(hx, hy, cfg.magnetD/2 + 0.1, pad - cfg.magnetH, pad + 0.02, 14)
-              : cylinder(hx, hy, cfg.magnetD/2 + 0.1, -0.5, cfg.magnetH, 14));
-          }
-          if (cfg.screws) {
-            small = small.concat(cylinder(hx, hy, cfg.screwHoleD/2, -0.5, H + 0.5, 12));
-            if (cfg.screwHeadD > cfg.screwHoleD)
-              small = small.concat(cylinder(hx, hy, cfg.screwHeadD/2, -0.5, cfg.screwHeadDepth, 14));
-          }
-        }
+        for (const sx of [-1, 1]) for (const sy of [-1, 1])
+          cuts.fastener.push(...movePolys(cellFastener, cx + sx*off, cy + sy*off));
       }
-      if (small.length) region = csgSubtract(region, small);
-      for (const cut of seqCuts) region = csgSubtract(region, cut);
+      for (const cut of Object.values(cuts)) if (cut.length) region = csgSubtract(region, cut);
       for (const p of region) allPolys.push(p);
       done++;
       if (onStatus && done % 8 === 0) onStatus(`cells ${done}`);
@@ -1973,6 +2348,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
     const bossH = Math.min(2.6, Math.max(
       cfg.magnets ? cfg.magnetH + 0.8 : 0,
       cfg.screws ? cfg.screwHeadDepth + 1.0 : 0));
+    const bossFastener = fastenerCutter(cfg, bossH - cfg.magnetH, bossH + 0.5, bossH + 0.5);
     for (let i = 0; i < piece.nx; i++) for (let j = 0; j < piece.ny; j++) {
       const ccx = gx0 + i*pitch + half, ccy = gy0 + j*pitch + half;
       for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
@@ -1987,18 +2363,8 @@ function buildPiece(cfg, layout, piece, onStatus) {
         pts.push([0, bossW]);
         const world = pts.map(([u, v]) => [cxr - sx*u, cyr - sy*v]);
         let boss = extrudePoly(world, 0, bossH);
-        const hx = ccx + sx*off, hy = ccy + sy*off;
-        let cuts = [];
-        if (cfg.magnets) cuts = cuts.concat(
-          cfg.magnetSide === 'top'
-            ? cylinder(hx, hy, cfg.magnetD/2 + 0.1, bossH - cfg.magnetH, bossH + 0.5, 14)
-            : cylinder(hx, hy, cfg.magnetD/2 + 0.1, -0.5, cfg.magnetH, 14));
-        if (cfg.screws) {
-          cuts = cuts.concat(cylinder(hx, hy, cfg.screwHoleD/2, -0.5, bossH + 0.5, 12));
-          if (cfg.screwHeadD > cfg.screwHoleD)
-            cuts = cuts.concat(cylinder(hx, hy, cfg.screwHeadD/2, -0.5, cfg.screwHeadDepth, 14));
-        }
-        if (cuts.length) boss = csgSubtract(boss, cuts);
+        if (bossFastener)
+          boss = csgSubtract(boss, movePolys(bossFastener, ccx + sx*off, ccy + sy*off));
         for (const p of boss) allPolys.push(p);
       }
     }
