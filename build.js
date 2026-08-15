@@ -22,48 +22,10 @@ const { execFileSync } = require('child_process');
 const ROOT = __dirname;
 const checkOnly = process.argv.includes('--check');
 
-/* Each tool: a template with /*__MARKER__* / comments, and a file per marker.
-   CORE, WIDGETS and the CSS are shared — one source, both tools, no drift. The prose
-   pages take the CSS and the chrome and nothing else, so they do not carry a line of
-   the tools' code. */
-const TOOLS = [
-  {
-    name: 'baseplates',
-    template: 'src/template.html',
-    out: 'index.html',
-    changefreq: 'weekly', priority: '1.0',
-    parts: { CSS: 'src/shared-ui/style.css', CHROME: 'src/shared-ui/chrome.js',
-             CORE: 'src/core.js', WIDGETS: 'src/shared-ui/widgets.js', UI: 'src/ui.js' },
-    uiPart: 'UI',
-  },
-  {
-    name: 'bins',
-    template: 'src/bins/template.html',
-    out: 'bins/index.html',
-    changefreq: 'weekly', priority: '0.9',
-    parts: { CSS: 'src/shared-ui/style.css', CHROME: 'src/shared-ui/chrome.js',
-             CORE: 'src/core.js', WIDGETS: 'src/shared-ui/widgets.js',
-             BIN: 'src/bins/bin.js', UI: 'src/bins/ui.js' },
-    uiPart: 'UI',
-  },
-  {
-    // A prose page: shared stylesheet, no scripts. The id and display audits are
-    // trivially satisfied because there is no UI source to check against.
-    name: 'guide',
-    template: 'src/guide/template.html',
-    out: 'guide/index.html',
-    changefreq: 'monthly', priority: '0.8',
-    parts: { CSS: 'src/shared-ui/style.css', CHROME: 'src/shared-ui/chrome.js' },
-  },
-  { name: 'guide-split', template: 'src/guide/split.html',
-    out: 'guide/split/index.html',
-    changefreq: 'monthly', priority: '0.7',
-    parts: { CSS: 'src/shared-ui/style.css', CHROME: 'src/shared-ui/chrome.js' } },
-  { name: 'guide-sizes', template: 'src/guide/drawer-sizes.html',
-    out: 'guide/drawer-sizes/index.html',
-    changefreq: 'monthly', priority: '0.7',
-    parts: { CSS: 'src/shared-ui/style.css', CHROME: 'src/shared-ui/chrome.js' } },
-];
+/* Every page, its template and the sources spliced into it, live in tools/manifest.js
+   — shared with test/ci-sim.js, which splices the same parts from git's stored bytes,
+   and with the sitemap. A second copy of this list has drifted twice. */
+const TOOLS = require('./tools/manifest.js');
 
 const seo = require('./tools/seo.js');
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
