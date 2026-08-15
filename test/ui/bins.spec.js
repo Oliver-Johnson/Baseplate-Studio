@@ -179,3 +179,28 @@ test('a carved layout survives a round trip through the url', async ({ page }) =
 
   expect(await H.bins(page)).toEqual(before);
 });
+
+/* The libraries are vendored, not fetched from a CDN. Two things must hold: they
+   actually load from the relative path (a wrong path fails silently until you try to
+   render), and nothing on the page reaches a third party — which is what lets the
+   page claim nothing is uploaded and nothing is tracked. */
+test('libraries load locally and nothing calls out to a third party', async ({ page }) => {
+  const offsite = [];
+  await page.route('**/*', (route) => {
+    const u = route.request().url();
+    if (!/^(file|data|blob):/.test(u)) offsite.push(u);
+    return route.continue();
+  });
+  await page.goto(H.BINS_URL);
+  await page.waitForFunction(() => typeof THREE !== 'undefined');
+
+  const libs = await page.evaluate(() => ({
+    three: typeof THREE !== 'undefined' ? THREE.REVISION : null,
+    jszip: typeof JSZip !== 'undefined' ? JSZip.version : null,
+    srcs: [...document.querySelectorAll('script[src]')].map((s) => s.getAttribute('src')),
+  }));
+  expect(libs.three).toBe('128');
+  expect(libs.jszip).toBe('3.10.1');
+  expect(libs.srcs.every((s) => !/^(https?:)?\/\//.test(s)), `external script: ${libs.srcs}`).toBe(true);
+  expect(offsite, 'the page must not reach off-site').toEqual([]);
+});

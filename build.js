@@ -124,6 +124,19 @@ for (const tool of TOOLS) {
     fail(`[${tool.name}] ${unreachable.length} element(s) are display:none and never un-hidden`,
          unreachable.map((id) => `#${id} — unreachable in the UI; un-hide it or remove it`));
 
+  /* ---- 4. no third-party subresources ----------------------------------- */
+  /* Every page tells the visitor that nothing is uploaded and nothing is tracked.
+     That was true of the code and not of the page: two script tags pointed at
+     cdnjs, so a third party saw every visitor's IP on load. The libraries are
+     vendored now, and this stops a CDN URL coming back by habit and quietly making
+     the promise untrue again. Links are fine — a link is the visitor's choice. */
+  const external = [...template.matchAll(/<(script|link|img|iframe)\b[^>]*\b(?:src|href)\s*=\s*["'](https?:)?\/\/[^"']+["'][^>]*>/gi)]
+    .filter((m) => !/rel\s*=\s*["'](canonical|alternate)["']/i.test(m[0]))
+    .map((m) => m[0].slice(0, 110));
+  if (external.length)
+    fail(`[${tool.name}] ${external.length} third-party subresource(s) in ${tool.template}`,
+         external.concat(['vendor it under vendor/ and reference it relatively']));
+
   /* ---- splice ----------------------------------------------------------- */
   let out = template;
   for (const marker of Object.keys(tool.parts))
