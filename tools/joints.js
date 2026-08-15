@@ -33,19 +33,23 @@ const path = (pts, close) =>
    `parts` are cut into the plate; `loose` is a separate piece you print and insert. */
 function diagram(kind, G) {
   const D = G.DEFAULTS;
-  const W = 34;                          // mm of seam shown either side
-  let body = '', caption = '', h = 16, loose = null;
+  /* One frame and one scale for all six. Sized per joint at first, which let each
+     picture fill its box -- and made a 3.6 mm h-clip look the same size as a 14 mm
+     bowtie key. That hides the most useful thing a reader comparing them could know,
+     because the parts differ in size far more than in shape. A shared scale means the
+     dovetail sits in a lot of empty plate, and that is the honest picture of a 1.9 mm
+     notch beside a key nearly eight times as long. */
+  const W = 34, h = 20;                  // mm across the seam, and top to bottom
+  let body = '', caption = '', loose = null;
 
   if (kind === 'dovetail') {
     const tab = dovetailTab(D.tab);
     body = `<path class="j-cut" d="${path(tab, true)}"/>`;
     caption = `${D.tab.wr} mm at the seam, ${D.tab.wt} mm at ${D.tab.dp} mm deep — it cannot pull straight out`;
-    h = 11;
   } else if (kind === 'puzzle') {
     const pz = G.puzzleShape('+y', 0, 0, D.puzzle, 0, false);
     body = `<path class="j-cut" d="${path(pz, true)}"/>`;
     caption = `a ${D.puzzle.neckW} mm neck opening to a ${R(D.puzzle.lobeR * 2)} mm lobe`;
-    h = 21;
   } else {
     /* The keyed joints are a recess in each piece plus a loose part. Draw the part —
        it is what you hold, and what the reader is being asked to choose between. */
@@ -74,7 +78,6 @@ function diagram(kind, G) {
       snap: `a ${R(w)} x ${R(d)} mm sprung key — the slot lets it compress going in`,
       hclip: `a ${R(w)} x ${R(d)} mm U-clip, pressed in from above once the plate is down`,
     }[kind];
-    h = Math.max(w + 6, 12);   // the length crosses the seam now, so it sets the height
   }
 
   /* Both sides of the seam, always. A joint is two pieces meeting; drawing one plate
