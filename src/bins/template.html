@@ -23,7 +23,7 @@
 "offers":{"@type":"Offer","price":"0","priceCurrency":"GBP"},
 "isPartOf":{"@type":"WebApplication","name":"Drawerforge","url":"https://drawerforge.co.uk/"},
 "description":"Free browser-based Gridfinity bin generator. Lay bins out across a whole drawer, stack them in layers, carve non-rectangular shapes, and export STL and pre-arranged 3MF print plates.",
-"featureList":["Whole-drawer bin layout","Multi-layer stacking","Non-rectangular L and U shaped bins","Dividers, scoops and label shelves","Per-edge wall heights","Split a bin to fit the print bed","Filament estimate","Pre-arranged 3MF print plates","STL export"],
+"featureList":["Whole-drawer bin layout","Multi-layer stacking","Non-rectangular L and U shaped bins","Dividers, scoops and label shelves","Per-edge wall heights","Translucent drawer preview around the bins","Split a bin to fit the print bed","Filament estimate","Pre-arranged 3MF print plates","STL export"],
 "isAccessibleForFree":true}
 </script>
 <style>
@@ -56,6 +56,9 @@
       <label class="f"><b>Baseplate height (mm)</b><input id="plateH" type="number" step="0.05" value="4.25"></label>
     </div>
     <div class="hint">Usable height is drawer floor to the lowest thing above. Baseplate height is 4.25 mm unless your joint forced a solid floor — the baseplate tool passes the real figure across.</div>
+    <label class="tog"><input id="showDrawer" type="checkbox"> Show the drawer around the bins</label>
+    <label class="f" id="drawerFrontRow" style="display:none"><b>Drawer front height (mm)</b><input id="drawerFrontH" type="number" step="0.5" min="0" value="0"></label>
+    <div class="hint" id="drawerViewHint" style="display:none">Draws the real drawer in the preview — floor and four walls, translucent so the bins still show through. The sides stand at the usable height you gave above, because that is the number the fit check already uses and a second side measurement could only disagree with it. The front panel is often taller or lower than the sides, so it gets its own figure; leave it at 0 to match them. The walls sit at the drawer's inside dimensions, so the gap between them and the baseplate is the space the grid cannot reach. It is a view only — nothing you download changes.</div>
     <label class="f"><b>Slicer infill (%)</b><input id="infill" type="number" step="5" min="0" max="100" value="15"></label>
     <div class="hint">Only affects the material estimate, not the geometry. Thin parts — walls, floor, dividers, lip — print solid whatever you set; the feet are thick enough to be infilled, and they dominate. Assumes 2 perimeters and 4 solid top/bottom layers.</div>
     <div class="mono" id="gridSummary">—</div>

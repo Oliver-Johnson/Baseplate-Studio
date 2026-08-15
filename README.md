@@ -33,6 +33,7 @@ Your drawer dimensions carry between the two, in both directions, without losing
 - **Per-edge walls** — each of the four walls can be full, two thirds, half, a low retaining lip, or fully open. An open front makes a bin you can reach into; all four open makes a **flat tray or lid**
 - **Dividers** in both directions, solid blocks, and adjustable wall and floor thickness
 - **Stacking lips** built to spec, so bins stack on each other and on any spec baseplate
+- **See the drawer** — an optional translucent shell around the preview at the drawer's inside dimensions, with the front panel at its own height, so you can judge whether the bins suit the drawer before printing any of them. It changes nothing you download
 - **Honest material estimates** — computed analytically at your slicer's infill, not from raw mesh volume
 - **Print plan and export** — packs bins onto your bed, exports pre-arranged 3MF plates, or a ZIP with one STL per bin type and a README carrying the layout
 
