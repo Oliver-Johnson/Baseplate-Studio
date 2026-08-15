@@ -220,6 +220,11 @@ a.ghost{display:inline-flex;align-items:center;justify-content:center;text-decor
 
 /* Expanded preview. The canvas only gives up touch-action while expanded: inline it
    has to let a finger scroll the page past it, expanded a finger should rotate. */
+/* The empty preview used to be the baseplate slab alone, filling the panel and running
+   off every edge with nothing to say what it was. It read as a failed render, and it was
+   the largest thing on the page. An empty preview should look deliberately empty. */
+#threeempty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  padding:0 24px;text-align:center;color:var(--dim);font-size:13px}
 .previewbtn{position:absolute;top:8px;right:8px;z-index:3;
   background:rgba(12,17,22,.78);color:var(--cyan);border:1px solid var(--line);
   border-radius:6px;padding:7px 12px;font:inherit;font-size:12px;cursor:pointer}
@@ -678,7 +683,7 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
 
 <div class="stagecard">
   <h3>Preview</h3>
-  <div id="threewrap"><canvas id="three" role="img" aria-label="3D preview of the bins, loading"></canvas><div id="status"></div><div id="threehint">drag rotate · wheel zoom</div></div>
+  <div id="threewrap"><canvas id="three" role="img" aria-label="3D preview of the bins, loading"></canvas><div id="threeempty" style="display:none">Place a bin on the map to see it here.</div><div id="status"></div><div id="threehint">drag rotate · wheel zoom</div></div>
 </div>
 
 </div>
@@ -5228,6 +5233,17 @@ function showScene() {
   while (group.children.length) group.remove(group.children[0]);
   const g = grid();
   const gw = g.nx * SPEC.pitch, gd = g.ny * SPEC.pitch;
+
+  /* With nothing placed, the baseplate on its own is a featureless slab overflowing the
+     panel in every direction — it looks like the renderer has failed rather than like an
+     empty drawer. Say so instead. The drawer shell is exempt: if you have turned it on
+     you have asked to look at the drawer, and an empty one is a real answer. */
+  const empty = allBins().length === 0;
+  const shell = !!state.showDrawer;
+  $('threeempty').style.display = empty && !shell ? '' : 'none';
+  $('three').style.visibility = empty && !shell ? 'hidden' : '';
+  $('threehint').style.display = empty && !shell ? 'none' : '';
+  if (empty && !shell) { renderer.render(scene, camera); return; }
 
   const plate = new THREE.Mesh(new THREE.BoxGeometry(gw, state.plateH, gd),
     new THREE.MeshLambertMaterial({ color: 0x2b3947 }));

@@ -222,6 +222,11 @@ a.ghost{display:inline-flex;align-items:center;justify-content:center;text-decor
 
 /* Expanded preview. The canvas only gives up touch-action while expanded: inline it
    has to let a finger scroll the page past it, expanded a finger should rotate. */
+/* The empty preview used to be the baseplate slab alone, filling the panel and running
+   off every edge with nothing to say what it was. It read as a failed render, and it was
+   the largest thing on the page. An empty preview should look deliberately empty. */
+#threeempty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  padding:0 24px;text-align:center;color:var(--dim);font-size:13px}
 .previewbtn{position:absolute;top:8px;right:8px;z-index:3;
   background:rgba(12,17,22,.78);color:var(--cyan);border:1px solid var(--line);
   border-radius:6px;padding:7px 12px;font:inherit;font-size:12px;cursor:pointer}

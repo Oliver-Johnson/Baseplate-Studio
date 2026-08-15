@@ -204,3 +204,36 @@ test('libraries load locally and nothing calls out to a third party', async ({ p
   expect(libs.srcs.every((s) => !/^(https?:)?\/\//.test(s)), `external script: ${libs.srcs}`).toBe(true);
   expect(offsite, 'the page must not reach off-site').toEqual([]);
 });
+
+/* An empty preview used to be the baseplate slab on its own, filling the panel and
+   running off every edge with nothing to identify it. It read as a failed render, and
+   it was the largest element on the page. */
+test('an empty drawer says so instead of showing a bare slab', async ({ page }) => {
+  await expect(page.locator('#threeempty')).toBeVisible();
+  await expect(page.locator('#threeempty')).toHaveText(/place a bin/i);
+  expect(await page.locator('#three').evaluate((c) => getComputedStyle(c).visibility))
+    .toBe('hidden');
+
+  await H.dragCells(page, [0, 0], [1, 1]);
+  await expect(page.locator('#threeempty')).toBeHidden();
+  expect(await page.locator('#three').evaluate((c) => getComputedStyle(c).visibility))
+    .not.toBe('hidden');
+
+  // and it comes back, so this is state and not a one-shot on load
+  await page.locator('#clearAll').click();
+  await page.waitForTimeout(300);
+  await expect(page.locator('#threeempty')).toBeVisible();
+});
+
+/* Turning the drawer shell on is asking to look at the drawer, so an empty one is a
+   real answer rather than a blank panel. */
+test('the drawer shell still draws with nothing placed', async ({ page }) => {
+  await page.evaluate(() => {
+    const t = document.getElementById('showDrawer');
+    t.checked = true; t.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await page.waitForTimeout(400);
+  await expect(page.locator('#threeempty')).toBeHidden();
+  expect(await page.evaluate(() => drawerGroup && drawerGroup.children.length))
+    .toBeGreaterThan(0);
+});

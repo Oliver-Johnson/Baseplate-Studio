@@ -1294,6 +1294,17 @@ function showScene() {
   const g = grid();
   const gw = g.nx * SPEC.pitch, gd = g.ny * SPEC.pitch;
 
+  /* With nothing placed, the baseplate on its own is a featureless slab overflowing the
+     panel in every direction — it looks like the renderer has failed rather than like an
+     empty drawer. Say so instead. The drawer shell is exempt: if you have turned it on
+     you have asked to look at the drawer, and an empty one is a real answer. */
+  const empty = allBins().length === 0;
+  const shell = !!state.showDrawer;
+  $('threeempty').style.display = empty && !shell ? '' : 'none';
+  $('three').style.visibility = empty && !shell ? 'hidden' : '';
+  $('threehint').style.display = empty && !shell ? 'none' : '';
+  if (empty && !shell) { renderer.render(scene, camera); return; }
+
   const plate = new THREE.Mesh(new THREE.BoxGeometry(gw, state.plateH, gd),
     new THREE.MeshLambertMaterial({ color: 0x2b3947 }));
   plate.position.set(0, -state.plateH / 2, 0);
