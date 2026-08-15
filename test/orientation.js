@@ -124,12 +124,12 @@ function checkOrientation(polys) {
   for (const s of shells) if (s.closed && s.volume <= 0) inverted.push(s);
   const open = shells.filter((s) => !s.closed).length;
 
-  // 2. every edge traversed as often one way as the other
-  let wind = 0, boundary = 0;
-  for (const e of E.values()) {
-    if ((e.f + e.r) % 2 === 1) boundary++;        // a hole; checkManifold's business
-    else if (e.f !== e.r) wind++;                 // 2 and 0 where it should be 1 and 1
-  }
+  /* 2. every edge traversed as often one way as the other. Odd totals are holes and
+     belong to checkManifold; counting them here as winding failures would report one
+     defect twice and put this check's number at the mercy of an unrelated one. */
+  let wind = 0;
+  for (const e of E.values())
+    if ((e.f + e.r) % 2 === 0 && e.f !== e.r) wind++;   // 2 and 0 where it should be 1 and 1
 
   // 3. no two-manifold edge with its two faces coplanar and back to back
   const N = tris.map(unitNormal);
@@ -145,7 +145,7 @@ function checkOrientation(polys) {
   }
 
   return {
-    tris: tris.length, shells: shells.length, open, inverted, wind, folds, boundary,
+    tris: tris.length, shells: shells.length, open, inverted, wind, folds,
     volume: shells.reduce((t, s) => t + s.volume, 0),
     ok: inverted.length === 0 && wind === 0 && folds === 0,
   };

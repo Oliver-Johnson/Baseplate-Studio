@@ -487,9 +487,15 @@ console.log('\nloose parts and samples, orientation only:');
     const note = quarantine
       ? (r.ok ? '  NOW CLEAN — take it out of quarantine' : `  known: ${quarantine}`)
       : '';
+    /* Say when a shell is open, because the volume printed beside it excludes those and
+       would otherwise read as a verdict on the whole part. Not asserted: whether a loose
+       part is watertight is checkManifold's question, and the one part where it currently
+       matters — the top-insert snap sample, whose rim is cut open at each junction on
+       purpose — needs that argument settled before a number here can mean anything. */
+    const open = r.open ? `, ${r.open} open` : '';
     console.log(`  ${label.padEnd(26)} ${String(r.tris).padStart(6)} tris  ` +
-                `${String(r.shells).padStart(3)} shells  ${r.volume.toFixed(3).padStart(11)} mm3  ` +
-                `${orientationNote(r)}${note}`);
+                `${String(r.shells).padStart(3)} shells${open.padEnd(9)}  ` +
+                `${r.volume.toFixed(3).padStart(11)} mm3  ${orientationNote(r)}${note}`);
     if (quarantine ? r.ok : !r.ok) bad++;
   };
   const H = 4.25;
