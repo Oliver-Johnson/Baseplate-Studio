@@ -1446,14 +1446,10 @@ function skeletonCellRegion(clipped, prof, cx, cy, H, arcSegs, skin) {
       let p = makePoly([a0, b0, b1]); if (p) polys.push(p);
       p = makePoly([a0, b1, a1]); if (p) polys.push(p);
     }
-  const annulus = (outerLoop, innerLoop, z, up) => {
-    const R = triangulateRing(outerLoop, innerLoop);
-    for (const t of R.tris) {
-      const vs = t.map((i) => [R.pts[i][0], R.pts[i][1], z]);
-      const p = makePoly(up ? vs : [vs[2], vs[1], vs[0]]);
-      if (p) polys.push(p);
-    }
-  };
+  /* Same silent failure as the direct cell had: every one of these is a face with a
+     hole in it, handed to the ear clipper. See annulusStrip. */
+  const annulus = (outerLoop, innerLoop, z, up) =>
+    polys.push(...annulusStrip(outerLoop, innerLoop, cx, cy, z, up));
   annulus(shell[0], inner[0], zs[0], false);            // underside of the shell
   annulus(clipped, shell[2], zs[2], false);             // underside of the solid band
   for (let i = 0; i < clipped.length; i++) {            // outer wall of the solid band
@@ -1463,6 +1459,64 @@ function skeletonCellRegion(clipped, prof, cx, cy, H, arcSegs, skin) {
     if (p) polys.push(p);
   }
   annulus(clipped, inner[3].map((v) => [v[0], v[1]]), H, true);   // the rim
+  return polys;
+}
+
+/* Cap the flat face between a cell outline and a socket ring.
+ *
+ * This is why every baseplate shipped with holes in it. The face is an annulus, and
+ * an annulus is a face with a hole, which is the one job earTriangulate fails at
+ * without saying so — it returns a partial result instead of throwing. On a full cell
+ * the ring is 0.25 mm wide (42 mm cell, 41.5 mm socket opening), which is exactly the
+ * thin-ring case that shipped bins with 218 boundary edges.
+ *
+ * Both loops are star-shaped about the cell centre, so they can be paired by sweeping
+ * angle and advancing whichever loop's next vertex comes first. Every vertex of both
+ * loops is used, so the cap meets the side wall and the socket surface exactly, and no
+ * triangle is ever discarded for being degenerate. It cannot half-succeed: it emits
+ * exactly outer.length + inner.length triangles or none at all.
+ */
+function annulusStrip(outerLoop, innerLoop, cx, cy, z, up) {
+  const ang = (p) => {
+    const a = Math.atan2(p[1] - cy, p[0] - cx);
+    return a < 0 ? a + 2 * Math.PI : a;
+  };
+  // CCW, and started at the vertex with the smallest angle, so angles only increase
+  const norm = (loop) => {
+    const L = loop.map((p) => [p[0], p[1]]);
+    if (polyArea2D(L) < 0) L.reverse();
+    let s = 0;
+    for (let i = 1; i < L.length; i++) if (ang(L[i]) < ang(L[s])) s = i;
+    return L.slice(s).concat(L.slice(0, s));
+  };
+  const unwrap = (L) => {
+    const out = [ang(L[0])];
+    for (let k = 1; k < L.length; k++) {
+      let v = ang(L[k]);
+      while (v < out[k - 1]) v += 2 * Math.PI;
+      out.push(v);
+    }
+    out.push(out[0] + 2 * Math.PI);
+    return out;
+  };
+
+  const O = norm(outerLoop), I = norm(innerLoop);
+  const n = O.length, m = I.length;
+  if (n < 3 || m < 3) return [];
+  const oa = unwrap(O), ia = unwrap(I);
+  const polys = [];
+  const at = (v) => [v[0], v[1], z];
+  const emit = (a, b, c) => {
+    const p = makePoly(up ? [at(a), at(b), at(c)] : [at(c), at(b), at(a)]);
+    if (p) polys.push(p);
+  };
+
+  let i = 0, j = 0;
+  while (i < n || j < m) {
+    const takeOuter = (j >= m) || (i < n && oa[i + 1] <= ia[j + 1]);
+    if (takeOuter) { emit(O[i % n], O[(i + 1) % n], I[j % m]); i++; }
+    else { emit(O[i % n], I[(j + 1) % m], I[j % m]); j++; }
+  }
   return polys;
 }
 
@@ -1490,10 +1544,12 @@ function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs) {
       p = makePoly([rings[i+1][k], rings[i][j], rings[i+1][j]]); if (p) polys.push(p);
     }
   }
-  const topR = triangulateRing(oc, rings[rings.length-1].map(v => [v[0], v[1]]));
-  for (const t of topR.tris) {
-    const p = makePoly(t.map(i => [topR.pts[i][0], topR.pts[i][1], H]));
-    if (p) polys.push(p);
+  polys.push(...annulusStrip(oc, rings[rings.length - 1], cx, cy, H, true));
+  if (pad <= 0.01) {
+    /* No floor pad means the socket runs clean through, so the underside is the same
+       annulus as the top. It used to be left off entirely, which is half of every
+       plate's missing faces. */
+    polys.push(...annulusStrip(oc, rings[0], cx, cy, rings[0][0][2], false));
   }
   if (pad > 0.01) {
     // full bottom cap + socket floor disc

@@ -21,6 +21,10 @@ jobs:
       # real-mesh cross-sections, and bin-to-socket clearance derived independently.
       - run: node test/bin-audit.js
       - run: node test/fit-check.js
+      # Plates are watertight now. Magnets and screws are quarantined by name inside
+      # the audit, which fails if a healthy case regresses or a quarantined one starts
+      # passing without being taken off the list.
+      - run: node test/plate-audit.js
       # A layout travels in the URL hash; it must survive the round trip byte for byte.
       - run: node test/hash-roundtrip.js
       - run: node test/seo-check.js
