@@ -7,7 +7,7 @@ const $ = (id) => document.getElementById(id);
 const SVGNS = 'http://www.w3.org/2000/svg';
 
 const G = {
-  makePoly, triangulateRing, extrudePoly, clampZ, profilePrism,
+  makePoly, triangulateRing, extrudePoly, clampZ, profilePrism, polyArea2D,
   polysToTriangles, stlBinary, checkManifold,
 };
 // In Node the audits pass the whole core module; in the browser this object is

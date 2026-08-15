@@ -35,7 +35,8 @@ const BLOAT = 0.05;     // shell overlap; never rely on coincident faces
 
 // Everything buildBin reaches for through G. The bins UI checks itself against this
 // at load; keep it in step when a new primitive is used.
-const REQUIRED_CORE = ['makePoly', 'triangulateRing', 'extrudePoly', 'clampZ', 'profilePrism'];
+const REQUIRED_CORE = ['makePoly', 'triangulateRing', 'extrudePoly', 'clampZ', 'profilePrism',
+                       'polyArea2D'];
 
 const BIN_DEFAULTS = {
   u: 1, v: 1,           // footprint in grid cells
@@ -419,7 +420,12 @@ function carvedBody(G, c, mask, H, floorZ, zTop, lipSteps) {
     const rings = steps.map(([, t]) => rect(t));
     const zs = steps.map(([z]) => z);
     polys.push(...sweep(G.makePoly, rings, zs));
-    const mid = (r) => [(r[0][0] + r[2][0]) / 2, (r[0][1] + r[2][1]) / 2];
+    /* Centroid, not the midpoint of two opposite corners. fanCap radiates from this
+       point, so it only closes the ring if the ring is star-shaped about it — true of
+       a rectangle either way, but the corner pieces are sectors, and the two-corner
+       midpoint fell outside them and produced inverted triangles. */
+    const mid = (r) => [r.reduce((t, p) => t + p[0], 0) / r.length,
+                        r.reduce((t, p) => t + p[1], 0) / r.length];
     const a = mid(rings[0]), b = mid(rings[rings.length - 1]);
     polys.push(...fanCap(G.makePoly, rings[0], zs[0], false, a[0], a[1]));
     polys.push(...fanCap(G.makePoly, rings[rings.length - 1], zs[zs.length - 1], true, b[0], b[1]));
@@ -443,6 +449,79 @@ function carvedBody(G, c, mask, H, floorZ, zTop, lipSteps) {
     if (e.f) sweptPanel(steps, (t) => [[L, y0], [R, y0], [R, y0 + t], [L, y0 + t]]);
     if (e.b) sweptPanel(steps, (t) => [[L, y1 - t], [R, y1 - t], [R, y1], [L, y1]]);
   }
+
+  /* Reflex corners.
+   *
+   * Every exposed face sits at `half` (20.75) from its cell centre while the cell
+   * boundary is at pitch/2 (21). That 0.25 mm is the clearance between neighbouring
+   * bins and is right on an outside edge. At a reflex corner, though, the two faces
+   * meeting there are perpendicular and belong to DIFFERENT cells, so both are inset
+   * and each panel runs only BLOAT past its own cell. The walls never touched: an L
+   * had a 0.25 mm slot at the inside corner and both walls simply stopped, with no
+   * corner geometry between them at all.
+   *
+   * One quarter disc closes it. Centred on the notch corner with a radius equal to
+   * the inset, it is tangent to both faces by construction, so the inside surface
+   * sweeps from one wall to the other at constant thickness — a pipe bend rather
+   * than a mitre — and there is no crease to leave a crack. It rides the same
+   * profile as the panels, so the stacking lip carries round the corner instead of
+   * stopping short of it.
+   */
+  const NARC = 8;
+  /* Reflex corners are built from three overlapping convex pieces rather than one
+     wrapping band. The band was the right SHAPE — the containment was correct — but
+     it has a reflex vertex at the notch corner, and a single fan cap cannot close a
+     ring that is not star-shaped about one point. Three convex pieces each cap
+     cleanly, and overlapping shells is what the rest of this file already does.
+
+       sector  the quarter between the notch corner and an arc of radius t, which is
+               tangent to both wall faces, so the wall keeps constant thickness round
+               the turn and the inside reads as one sweep rather than a mitre
+       laps    a short rectangle along each wall, running past the corner far enough
+               to overlap real panel material
+
+     The laps must reach INTO the sector, not merely touch it: two shells meeting on
+     a plane share edges and stop being two shells. They overlap by OVER, which makes
+     the wall 0.02 mm proud at the transition — below a nozzle width, and the price of
+     never relying on a coincident face. */
+  const lap = (P / 2 - half) + 2 * BLOAT;
+  const OVER = 4 * BLOAT;
+  const sector = (fx, fy, dx, dy) => (t) => {
+    const base = dx > 0 ? (dy > 0 ? 0 : -Math.PI / 2) : (dy > 0 ? Math.PI / 2 : Math.PI);
+    const pts = [[fx, fy]];
+    for (let k = 0; k <= NARC; k++) {
+      const a = base + (Math.PI / 2) * k / NARC;
+      pts.push([fx + t * Math.cos(a), fy + t * Math.sin(a)]);
+    }
+    return G.polyArea2D(pts) < 0 ? pts.reverse() : pts;
+  };
+  const box = (ax, ay, bx, by) => {
+    const pts = [[ax, ay], [bx, ay], [bx, by], [ax, by]];
+    return G.polyArea2D(pts) < 0 ? pts.reverse() : pts;
+  };
+
+  /* A grid vertex with exactly one empty cell around it is a reflex corner. Three
+     empties is a convex corner, which the panels already cover by overlapping; two
+     is a straight run or a pinch point, and neither has a corner to fill. */
+  for (let vx = 0; vx <= c.u; vx++)
+    for (let vy = 0; vy <= c.v; vy++) {
+      const around = [[vx - 1, vy - 1], [vx, vy - 1], [vx - 1, vy], [vx, vy]];
+      if (around.some(([i, j]) => i < 0 || j < 0 || i >= c.u || j >= c.v)) continue;
+      const empty = around.filter(([i, j]) => !has(i, j));
+      if (empty.length !== 1) continue;
+      const [ex, ey] = empty[0];
+      const vX = vx * P - ox - P / 2, vY = vy * P - oy - P / 2;
+      // into the material, away from the empty cell, on each axis
+      const dx = (ex * P - ox) < vX ? 1 : -1;
+      const dy = (ey * P - oy) < vY ? 1 : -1;
+      // the notch corner: where the two exposed faces meet, each inset from the boundary
+      const fx = vX - dx * (P / 2 - half);
+      const fy = vY - dy * (P / 2 - half);
+      const steps = wallProfile(zTop);
+      sweptPanel(steps, sector(fx, fy, dx, dy));
+      sweptPanel(steps, (t) => box(fx + dx * t, fy + dy * OVER, fx, fy - dy * lap));
+      sweptPanel(steps, (t) => box(fx + dx * OVER, fy + dy * t, fx - dx * lap, fy));
+    }
   return polys;
 }
 
