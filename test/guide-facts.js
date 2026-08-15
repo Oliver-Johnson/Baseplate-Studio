@@ -30,6 +30,7 @@ const check = (what, want, found) => {
   if (!ok) bad++;
 };
 const saysIn = (page, re) => prose.find(([p]) => p === page)[1].match(re);
+const R2 = (n) => Math.round(n * 100) / 100;
 const saysAnywhere = (re) => prose.some(([, s]) => re.test(s));
 
 console.log('constants the prose quotes, against the code');
@@ -227,6 +228,65 @@ for (const [p, s] of prose) {
   const ghosts = [/low[- ]profile/i, /low lip/i, /shallow foot/i].filter((re) => re.test(s));
   console.log(`  ${p.padEnd(56)}${ghosts.length ? 'MENTIONS A REMOVED FEATURE' : 'clean'}`);
   if (ghosts.length) bad++;
+}
+
+/* The joint diagrams are generated from core.js's own parameters, so their captions
+   quote real dimensions. A hand-drawn diagram is a claim about the geometry that
+   nothing checks; this asserts the generated one still agrees with the part. */
+console.log('\njoint diagrams');
+{
+  const J = require('../tools/joints.js');
+  const html = read('guide/index.html');
+  const figs = (html.match(/class="jointfig"/g) || []).length;
+  check(`${J.KINDS.length} diagrams on the guide`, J.KINDS.length, figs);
+  if (html.includes('__JOINTS__')) { console.log('  the marker was left unfilled'); bad++; }
+
+  const D = G.DEFAULTS;
+  const want = {
+    dovetail: [String(D.tab.wr), String(D.tab.wt), String(D.tab.dp)],
+    puzzle: [String(D.puzzle.neckW), String(D.puzzle.lobeR * 2)],
+    bowtie: [String(D.key.len)],
+    snap: [String(D.key.len)],
+  };
+  /* A key BRIDGES the seam -- half in each piece -- so the extent it spans ACROSS the
+     seam is its `len`, and the extent along the seam is its end width. Drawn straight
+     from keyOutline, which lays a key out along x, all four lay flat along the seam
+     holding nothing together. The captions were all correct while the pictures were
+     wrong, which is why checking the numbers in the words is not enough: a diagram
+     makes a claim of its own.
+
+     Stated as len-vs-width rather than taller-vs-wider on purpose. The h-clip is 3.6 mm
+     across its flanges and 3.8 mm along them, so "the bridging span is the longer one"
+     is simply untrue of it, and a shape rule would have called the correct picture
+     wrong. Naming the dimension holds for any aspect ratio. */
+  const span = (d) => {
+    const pts = [...d.matchAll(/[ML](-?[\d.]+) (-?[\d.]+)/g)].map((m) => [+m[1], +m[2]]);
+    const ext = (i) => Math.max(...pts.map((p) => p[i])) - Math.min(...pts.map((p) => p[i]));
+    return { alongSeam: ext(0), acrossSeam: ext(1) };
+  };
+  for (const kind of ['bowtie', 'puzzlekey', 'snap', 'hclip']) {
+    const prm = kind === 'hclip' ? G.hclipPrm(G.DEFAULTS.hclip) : G.DEFAULTS.key;
+    const m = J.diagram(kind, G).svg.match(/class="j-part" d="([^"]+)"/);
+    if (!m) { console.log(`  ${kind.padEnd(56)}no loose part drawn`); bad++; continue; }
+    const { alongSeam, acrossSeam } = span(m[1]);
+    const ok = Math.abs(acrossSeam - prm.len) < 0.05;
+    console.log(`  ${(kind + ' bridges the seam, not along it').padEnd(56)}` +
+      (ok ? `ok (spans ${acrossSeam.toFixed(1)} mm across)`
+          : `WRONG WAY — spans ${acrossSeam.toFixed(1)} across and ` +
+            `${alongSeam.toFixed(1)} along; its length is ${R2(prm.len)}`));
+    if (!ok) bad++;
+  }
+
+  const made = J.all(G);
+  for (const [kind, nums] of Object.entries(want)) {
+    const cap = made[kind].caption;
+    const missing = nums.filter((n) => !cap.includes(n));
+    const shown = html.includes(cap);
+    console.log(`  ${kind.padEnd(54)}` +
+      (missing.length ? `caption lost ${missing.join(', ')}`
+       : shown ? 'ok' : 'not on the page'));
+    if (missing.length || !shown) bad++;
+  }
 }
 
 console.log(bad ? `\n${bad} claim(s) in the guides are WRONG` : '\nthe guides still tell the truth');
