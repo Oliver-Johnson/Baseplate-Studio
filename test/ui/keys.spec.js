@@ -23,8 +23,9 @@ const ready = (page) => page.waitForFunction(
    path rather than scraped from the DOM — the numbers on screen are downstream of these,
    so they cannot also be the evidence. */
 const keyFacts = (page) => page.evaluate(() => {
-  const kd = activeKeyDims();
-  const perKey = buildKey(activeKeyShape(), kd, kd.depth - 0.15).length;
+  // the page's own answer to "which part", not a second copy of the decision — see
+  // connector-part.spec.js, which is where that answer is held to the plate's
+  const perKey = connectorPart().polys.length;
   const stl = keysStl();
   return {
     junctions: layout.seams.reduce((a, s) => a + s.junctions.length, 0),
