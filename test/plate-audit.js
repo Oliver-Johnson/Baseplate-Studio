@@ -13,15 +13,20 @@
  *
  * The caps are fixed, so a plate that prints in one piece is watertight.
  *
- * What still leaks goes through csgSubtract, which is lossy whatever it is handed:
- * a watertight box minus a watertight cutter comes back with boundary edges for an
- * interior hole, a blind pocket, an edge notch and a corner bite alike. So magnets,
- * screws, and any plate split into pieces that carry notches all inherit it.
+ * csgSubtract used to be lossy whatever it was handed — a watertight box minus a
+ * watertight cutter came back with boundary edges for an interior hole, a blind pocket,
+ * an edge notch and a corner bite alike — so magnets, screws and every split piece
+ * carrying a notch inherited it. Three cases were quarantined by name for that, and all
+ * three now pass.
  *
- * Those are quarantined by name rather than dropped, and the audit fails if a healthy
- * case regresses OR if a quarantined one starts passing and nobody took it off the
- * list. Red forever teaches people to ignore a check; silent teaches them it never
- * mattered.
+ * Three others are quarantined in their place. They are not regressions — every one of
+ * them is one to two orders of magnitude better than it was — but they leak, and a
+ * summary line reading "all plates watertight" over a configuration a user can select
+ * from a dropdown is the kind of reassurance this file exists to stop.
+ *
+ * `quarantine: '<reason>'` makes the audit fail BOTH if a healthy case regresses AND if
+ * a quarantined one starts passing and nobody took it off the list. Red forever teaches
+ * people to ignore a check; silent teaches them it never mattered.
  */
 'use strict';
 const G = require('../src/core.js');
@@ -32,18 +37,42 @@ const CASES = [
   { name: '3x3 solid', drawerW: 126, drawerD: 126 },
   { name: '3x3 skeleton', drawerW: 126, drawerD: 126, plateStyle: 'skeleton' },
   { name: '3x3 coarse arcs', drawerW: 126, drawerD: 126, arcSegs: 6 },
-  { name: '3x3 magnets', drawerW: 126, drawerD: 126, magnets: true, quarantine: 'csgSubtract' },
-  { name: '3x3 screws', drawerW: 126, drawerD: 126, screws: true, quarantine: 'csgSubtract' },
+  { name: '3x3 magnets', drawerW: 126, drawerD: 126, magnets: true },
+  /* Screws are the case that proved the cutters must not be thrown into one soup: the
+     shank runs up the middle of its own counterbore, and a BSP cannot classify a point
+     that is inside two shells of one "solid". */
+  { name: '3x3 screws', drawerW: 126, drawerD: 126, screws: true },
   /* Must be big enough to split, or there are no seams and no connector is built --
      the first version of this case quietly measured a plain plate and "passed". */
-  /* Every split piece that carries a notch leaks. csgSubtract is lossy whatever the
-     cutter looks like — interior hole, blind pocket, edge notch or corner bite all
-     come back with boundary edges. */
-  { name: '9x9 dovetail', drawerW: 400, drawerD: 400, connector: 'dovetail',
-    quarantine: 'csgSubtract' },
+  { name: '9x9 dovetail', drawerW: 400, drawerD: 400, connector: 'dovetail' },
   { name: '9x9 no joint', drawerW: 400, drawerD: 400, connector: 'none' },
   { name: '5x4 solid', drawerW: 210, drawerD: 168 },
   { name: '3x3 with margin', drawerW: 140, drawerD: 140, marginMode: 'auto' },
+  /* Every remaining connector, because all of them are dropdown options and only
+     dovetail was ever covered. They have to be big enough to split, as above. */
+  { name: '9x9 bowtie', drawerW: 400, drawerD: 400, connector: 'bowtie' },
+  { name: '9x9 puzzlekey', drawerW: 400, drawerD: 400, connector: 'puzzlekey' },
+  { name: '9x9 snap', drawerW: 400, drawerD: 400, connector: 'snap' },
+  { name: '9x9 hclip', drawerW: 400, drawerD: 400, connector: 'hclip' },
+  { name: '3x3 magnets above', drawerW: 126, drawerD: 126, magnets: true, magnetSide: 'top' },
+  { name: '3x3 magnets+screws', drawerW: 126, drawerD: 126, magnets: true, screws: true },
+
+  /* --- quarantined: real, measured, not regressions, still leaking --- */
+
+  /* Genuine open boundary: 30 edges used once and 40 used three times, on 3 of the 4
+     pieces. The puzzle notch is a lobed cavity cut at the piece edge, so unlike the
+     dovetail's convex trapezoid it presents a reflex outline to the cutter. Was 5033. */
+  { name: '9x9 puzzle', drawerW: 400, drawerD: 400, connector: 'puzzle',
+    quarantine: 'puzzle notch leaks' },
+  /* Benign, but it has to be named rather than waved through: corner bosses of adjacent
+     cells ABUT face to face on the cell boundary instead of overlapping by BLOAT, so
+     every shared face is counted twice. All counts are 4 and 6, never 1 — no boundary
+     edge, no hole. The fix is to bloat the bosses; it changes their footprint, so it is
+     not a change to make while chasing something else. Was 2964 and 8332. */
+  { name: '3x3 bosses+magnets', drawerW: 126, drawerD: 126, magnets: true,
+    baseMode: 'bosses', quarantine: 'bosses abut, not overlap' },
+  { name: '3x3 bosses+screws', drawerW: 126, drawerD: 126, screws: true,
+    baseMode: 'bosses', quarantine: 'bosses abut, not overlap' },
 ];
 
 let bad = 0;
@@ -90,31 +119,144 @@ for (const cs of CASES) {
     ? (ok ? '  NOW PASSES — take it out of quarantine' : `  known: ${cs.quarantine}`)
     : '';
   const many = pieces.length > 1 ? ` [${leaking}/${pieces.length} pieces leak]` : '';
-  console.log(`${cs.name.padEnd(17)} ${(L.nx + 'x' + L.ny).padEnd(6)} ${String(polys.length).padStart(6)}  ` +
+  /* An edge used once is a hole; an edge used four times is two shells touching. Both
+     count as "bad" and they need completely different fixes, so say which. */
+  const shape = ok ? '' : '  ' + boundaryShare(pieces);
+  console.log(`${cs.name.padEnd(19)} ${(L.nx + 'x' + L.ny).padEnd(6)} ${String(polys.length).padStart(6)}  ` +
               `${dims.padEnd(22)} ${ok ? 'watertight' : man.bad + ' BAD EDGES' + many}` +
-              `${capBottom ? '' : '  NO BOTTOM FACE'}${capTop ? '' : '  NO TOP FACE'}${note}`);
+              `${capBottom ? '' : '  NO BOTTOM FACE'}${capTop ? '' : '  NO TOP FACE'}${shape}${note}`);
   if (cs.quarantine ? ok : !ok) bad++;
 }
 
-/* The remaining leak, at its smallest, in the four shapes a cut can take. A closed box
-   minus a closed prism should be a closed solid, and is not in any of them — so this
-   is not about what the cutter looks like. Whoever fixes the CSG starts here. */
+/* How many of the bad edges are actually open boundary, and how many are shells meeting
+   face to face. Reported as a histogram of edge use, because "120 bad edges, all of them
+   used 4 times" and "120 bad edges, 30 of them used once" are different bugs. */
+function boundaryShare(pieces) {
+  const hist = new Map();
+  for (const polys of pieces) {
+    const key = (v) => v.map((x) => Math.round(x * 1000) / 1000).join(',');
+    const edges = new Map();
+    for (const t of G.polysToTriangles(polys))
+      for (let i = 0; i < 3; i++) {
+        const a = key(t[i]), b = key(t[(i + 1) % 3]);
+        const k = a < b ? a + '|' + b : b + '|' + a;
+        edges.set(k, (edges.get(k) || 0) + 1);
+      }
+    for (const c of edges.values()) if (c !== 2) hist.set(c, (hist.get(c) || 0) + 1);
+  }
+  const open = [...hist.entries()].filter(([c]) => c % 2 === 1).reduce((s, [, n]) => s + n, 0);
+  return `[${[...hist.entries()].sort((a, b) => a[0] - b[0]).map(([c, n]) => `${n}x used ${c}`).join(', ')}` +
+         `${open ? ' — OPEN BOUNDARY' : ' — shells touching, no hole'}]`;
+}
+
+/* Enclosed volume by the divergence theorem. Every triangle contributes its tetrahedron
+   with the origin, so a mesh with a hole in it, a doubled face or an inside-out triangle
+   all get the wrong answer — and unlike the edge count, this is a number healCsgSeams
+   cannot reach. It repairs connectivity, so "watertight" is a metric it optimises
+   directly; volume is the independent one, and it is what caught the screw counterbore
+   never being cut at all. */
+function volume(polys) {
+  let v = 0;
+  for (const t of G.polysToTriangles(polys)) {
+    const [a, b, c] = t;
+    v += (a[0]*(b[1]*c[2] - c[1]*b[2]) - a[1]*(b[0]*c[2] - c[0]*b[2]) + a[2]*(b[0]*c[1] - c[0]*b[1])) / 6;
+  }
+  return v;
+}
+
+/* The CSG at its smallest, in the four shapes a cut can take. A closed box minus a
+   closed prism must be a closed solid of exactly the arithmetic volume. All four used to
+   come back with boundary edges, which is where healCsgSeams was written from; keep them,
+   so the next person to touch the BSP finds out here rather than on a 30k-polygon plate.
+   The expected volumes are 20x20x5 = 2000 minus the cut: 4x4x5, 4x4x3, 6x4x5 clipped to
+   the box, 6x6x5 clipped to the box. */
 console.log('\nthe CSG itself, minimum cases:');
 {
   const box = () => G.extrudePoly([[0, 0], [20, 0], [20, 20], [0, 20]], 0, 5);
   const CUTS = [
-    ['through the middle, out both faces', [[8, 8], [12, 8], [12, 12], [8, 12]], -1, 6],
-    ['blind pocket from the top', [[8, 8], [12, 8], [12, 12], [8, 12]], 2, 6],
-    ['notch from an edge', [[-1, 8], [6, 8], [6, 12], [-1, 12]], -1, 6],
-    ['bite from a corner', [[-1, -1], [6, -1], [6, 6], [-1, 6]], -1, 6],
+    ['through the middle, out both faces', [[8, 8], [12, 8], [12, 12], [8, 12]], -1, 6, 1920],
+    ['blind pocket from the top', [[8, 8], [12, 8], [12, 12], [8, 12]], 2, 6, 1952],
+    ['notch from an edge', [[-1, 8], [6, 8], [6, 12], [-1, 12]], -1, 6, 1880],
+    ['bite from a corner', [[-1, -1], [6, -1], [6, 6], [-1, 6]], -1, 6, 1820],
   ];
-  for (const [label, pts, z0, z1] of CUTS) {
+  for (const [label, pts, z0, z1, want] of CUTS) {
     const cut = G.extrudePoly(pts, z0, z1);
     const before = G.checkManifold(cut);
-    const m = G.checkManifold(G.csgSubtract(box(), cut));
+    const res = G.csgSubtract(box(), cut);
+    const m = G.checkManifold(res);
+    const v = volume(res);
+    const vOk = Math.abs(v - want) < 1e-6;
     console.log(`  ${label.padEnd(36)} cutter ${before.bad ? 'BAD' : 'ok'}   ` +
-                `result ${m.bad ? m.bad + ' bad of ' + m.edges : 'watertight'}`);
+                `result ${(m.bad ? m.bad + ' bad of ' + m.edges : 'watertight').padEnd(11)}` +
+                `  volume ${v.toFixed(6)} of ${want}${vOk ? '' : '  WRONG'}`);
+    if (before.bad || m.bad || !vOk) bad++;
   }
+}
+
+/* csgUnion had no test at all, and fastenerCutter now depends on it for every magnet and
+   screw pocket. These are the two unions it actually performs. Both were broken before
+   the repair pass existed — 74 and 71 bad edges — which nothing would have told us. */
+console.log('\ncsgUnion, the cases fastenerCutter relies on:');
+{
+  const cyl = (r, z0, z1, seg) => G.extrudePoly(
+    Array.from({ length: seg }, (_, i) => {
+      const a = 2 * Math.PI * i / seg;
+      return [r * Math.cos(a), r * Math.sin(a)];
+    }), z0, z1);
+  const area = (r, n) => 0.5 * n * r * r * Math.sin(2 * Math.PI / n);
+  const CASES2 = [
+    ['counterbore over shank', cyl(3, -0.5, 2, 14), cyl(1.5, -0.5, 7.55, 12),
+     area(3, 14) * 2.5 + area(1.5, 12) * 5.55],
+    ['magnet pocket over counterbore', cyl(3.1, -0.5, 2, 14), cyl(3, -0.5, 2, 14),
+     area(3.1, 14) * 2.5],
+  ];
+  for (const [label, a, b, want] of CASES2) {
+    const u = G.csgUnion(a, b);
+    const m = G.checkManifold(u);
+    const v = volume(u);
+    const vOk = Math.abs(v - want) < 1e-6;
+    console.log(`  ${label.padEnd(36)} ${(m.bad ? m.bad + ' bad of ' + m.edges : 'watertight').padEnd(11)}` +
+                `  volume ${v.toFixed(6)} of ${want.toFixed(6)}${vOk ? '' : '  WRONG'}`);
+    if (m.bad || !vOk) bad++;
+  }
+}
+
+/* The rim cap has to be a VALID tiling, not merely a closed one.
+ *
+ * Watertightness cannot see a triangle that is inside out, and for most of this
+ * project's life 21% of every cell rim was at the shipped smoothness, rising to 33% at
+ * arcSegs 24. The cap pairs a 4-corner outline against a 4*arcSegs socket ring by
+ * sweeping angle, and a fan from one outline corner turns over once it passes that
+ * corner's tangent to the ring.
+ *
+ * Two independent things are asserted, and it is worth being precise about what each one
+ * can and cannot catch, because the first draft of this check got it wrong:
+ *
+ *   - No triangle has negative area. This is the one that catches the inversion.
+ *   - The strip emits exactly outline + ring triangles, which catches a dropped or
+ *     duplicated one.
+ *
+ * There was a third — the signed areas summing to outline minus ring — presented as
+ * complementary. It is not: for ANY complete pairing of the two loops the interior
+ * spokes cancel and the sum telescopes to that value by Green's theorem, whatever the
+ * orientations. It passed at 1e-13 on the fully broken version, for every smoothness. A
+ * check that cannot fail on the bug its own comment describes is worse than no check,
+ * so it is gone rather than kept as decoration. */
+console.log('\nrim cap tiling, at each smoothness:');
+for (const n of [6, 8, 12, 24]) {
+  const H = 4.25;
+  const prof = { pitchHalf: 21, rTop: 4.0, zs: [-1, 0, 0.7, 2.5, H, H + 1.5],
+                 ds: [2.85, 2.85, 2.15, 2.15, 0.4, 0.4] };
+  const cell = [[-0.05, -0.05], [42.05, -0.05], [42.05, 42.05], [-0.05, 42.05]];
+  const polys = G.directCellRegion(cell, prof, 21, 21, H, 0, n);
+  const top = polys.filter((p) => p.verts.every((v) => Math.abs(v[2] - H) < 1e-9));
+  let flipped = 0;
+  for (const p of top) if (G.polyArea2D(p.verts.map((v) => [v[0], v[1]])) < -1e-12) flipped++;
+  const wantTris = cell.length + 4 * n;
+  const ok = flipped === 0 && top.length === wantTris;
+  console.log(`  arcSegs ${String(n).padStart(2)}   ${String(top.length).padStart(3)} of ${wantTris} tris   ` +
+              (flipped ? `${flipped} INSIDE OUT (${(100 * flipped / top.length).toFixed(0)}%)` : 'all outward'));
+  if (!ok) bad++;
 }
 
 /* Caps used to leak 8*arcSegs + 8 per cell. Asserting zero at every smoothness stops a
@@ -133,6 +275,5 @@ for (const n of [6, 8, 12, 24]) {
   if (man.bad) bad++;
 }
 
-console.log(bad ? `\n${bad} case(s) FAILED`
-                : '\nall plates watertight, bar the quarantined CSG cases');
+console.log(bad ? `\n${bad} case(s) FAILED` : '\nall plates watertight');
 process.exit(bad ? 1 : 0);
