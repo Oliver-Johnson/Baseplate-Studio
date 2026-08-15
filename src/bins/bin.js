@@ -458,14 +458,15 @@ function carvedBody(G, c, mask, H, floorZ, zTop, lipSteps) {
     }
     return out;
   };
-  const sweptSector = (steps, ccx, ccy, a0) => {
+  /* radii(t) -> [rOuter, rInner]. A convex corner puts the material INSIDE the arc,
+     so its inner radius shrinks with wall thickness; a concave one puts the material
+     outside, so its inner radius grows. Same band, opposite sense. */
+  const sweptSector = (steps, ccx, ccy, a0, radii) => {
     const zs = steps.map(([z]) => z);
-    const rings = steps.map(([, t]) => ({
-      // a wall thicker than the corner radius would invert the inner arc; clamp it
-      // to a sliver rather than let it fold through itself
-      outer: arcPts(ccx, ccy, CR, a0),
-      inner: arcPts(ccx, ccy, Math.max(0.2, CR - t), a0),
-    }));
+    const rings = steps.map(([, t]) => {
+      const [ro, ri] = radii(t);
+      return { outer: arcPts(ccx, ccy, ro, a0), inner: arcPts(ccx, ccy, ri, a0) };
+    });
     const loop = (r) => r.outer.concat(r.inner.slice().reverse());
     polys.push(...sweep(G.makePoly, rings.map(loop), zs));
     // caps: index-paired band between the two arcs, never a fan
@@ -521,10 +522,12 @@ function carvedBody(G, c, mask, H, floorZ, zTop, lipSteps) {
       const a = cvx.bl ? cx - CC - OVER : L, b = cvx.br ? cx + CC + OVER : R;
       return [[a, y1 - t], [b, y1 - t], [b, y1], [a, y1]];
     });
-    if (cvx.fl) sweptSector(steps, cx - CC, cy - CC, 180);
-    if (cvx.fr) sweptSector(steps, cx + CC, cy - CC, 270);
-    if (cvx.br) sweptSector(steps, cx + CC, cy + CC, 0);
-    if (cvx.bl) sweptSector(steps, cx - CC, cy + CC, 90);
+    // clamped, so a wall thicker than the corner radius cannot fold the arc inside out
+    const cvxR = (t) => [CR, Math.max(0.2, CR - t)];
+    if (cvx.fl) sweptSector(steps, cx - CC, cy - CC, 180, cvxR);
+    if (cvx.fr) sweptSector(steps, cx + CC, cy - CC, 270, cvxR);
+    if (cvx.br) sweptSector(steps, cx + CC, cy + CC, 0, cvxR);
+    if (cvx.bl) sweptSector(steps, cx - CC, cy + CC, 90, cvxR);
   }
 
   /* Reflex corners.
@@ -589,13 +592,30 @@ function carvedBody(G, c, mask, H, floorZ, zTop, lipSteps) {
       // into the material, away from the empty cell, on each axis
       const dx = (ex * P - ox) < vX ? 1 : -1;
       const dy = (ey * P - oy) < vY ? 1 : -1;
-      // the notch corner: where the two exposed faces meet, each inset from the boundary
-      const fx = vX - dx * (P / 2 - half);
-      const fy = vY - dy * (P / 2 - half);
+      /* The notch corner, where the two exposed faces meet. Each face is inset from
+         the grid boundary by (pitch/2 - half) TOWARDS the material, so the corner is
+         that much inside the vertex — not outside it. Getting this sign backwards put
+         the corner 0.5 mm into the notch, which filled the gap but left the bin proud
+         exactly where a neighbouring bin sits. */
+      const fx = vX + dx * (P / 2 - half);
+      const fy = vY + dy * (P / 2 - half);
       const steps = wallProfile(zTop);
+      /* Fill the junction first: the two walls arrive from different cells and do not
+         otherwise touch. */
       sweptPanel(steps, sector(fx, fy, dx, dy));
       sweptPanel(steps, (t) => box(fx + dx * t, fy + dy * OVER, fx, fy - dy * lap));
       sweptPanel(steps, (t) => box(fx + dx * OVER, fy + dy * t, fx - dx * lap, fy));
+
+      /* Then round the outside of it to the same radius the convex corners use.
+         The arc centre sits in the notch, so the fillet ADDS material there — which
+         is exactly right, because the bin that goes in the notch has a convex corner
+         of the same radius, and the two are complements. Its corner nests into this
+         one with the standard clearance instead of facing a square hole. Leaving it
+         sharp, which is what happened first, is the only version that does not match
+         a neighbouring bin. */
+      const ox2 = fx - dx * CR, oy2 = fy - dy * CR;
+      const base = dx > 0 ? (dy > 0 ? 0 : 270) : (dy > 0 ? 90 : 180);
+      sweptSector(steps, ox2, oy2, base, (t) => [CR, CR + t + OVER]);
     }
   return polys;
 }
