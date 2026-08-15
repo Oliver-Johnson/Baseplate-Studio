@@ -31,6 +31,7 @@
  */
 'use strict';
 const G = require('../src/core.js');
+const { checkOrientation, orientationNote } = require('./orientation.js');
 
 const CASES = [
   { name: '1x1 solid', drawerW: 42, drawerD: 42 },
@@ -122,6 +123,14 @@ for (const cs of CASES) {
   const mans = pieces.map((p) => G.checkManifold(p));
   const man = mans.reduce((a, b) => (b.bad > a.bad ? b : a));
   const leaking = mans.filter((m) => m.bad).length;
+  /* Orientation, per piece. Watertightness cannot see which way a face points, and
+     neither can the volume of the whole piece — a plate is dozens of deliberately
+     overlapping shells and the sign of their sum survives one small shell being built
+     backwards. orientation.js checks each shell on its own. Not quarantined anywhere
+     here, including on the three cases that leak: abutting shells and shells sharing an
+     edge are both correctly wound, and both come out clean. */
+  const oris = pieces.map(checkOrientation);
+  const oriBad = oris.filter((o) => !o.ok);
   const polys = pieces[0];
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, z0 = Infinity, z1 = -Infinity;
   for (const p of polys) for (const v of p.verts) {
@@ -147,6 +156,10 @@ for (const cs of CASES) {
               `${dims.padEnd(22)} ${ok ? 'watertight' : man.bad + ' BAD EDGES' + many}` +
               `${capBottom ? '' : '  NO BOTTOM FACE'}${capTop ? '' : '  NO TOP FACE'}${shape}${note}`);
   if (cs.quarantine ? ok : !ok) bad++;
+  if (oriBad.length) {
+    console.log(`${''.padEnd(19)} ${oriBad.length}/${pieces.length} pieces: ${orientationNote(oriBad[0])}`);
+    bad++;
+  }
 }
 
 /* How many of the bad edges are actually open boundary, and how many are shells meeting
@@ -262,7 +275,25 @@ console.log('\ncsgUnion, the cases fastenerCutter relies on:');
  * spokes cancel and the sum telescopes to that value by Green's theorem, whatever the
  * orientations. It passed at 1e-13 on the fully broken version, for every smoothness. A
  * check that cannot fail on the bug its own comment describes is worse than no check,
- * so it is gone rather than kept as decoration. */
+ * so it is gone rather than kept as decoration.
+ *
+ * A fourth is added here, and it is the general form of the first: the whole cell region
+ * through orientation.js. That matters because the 2D-area test only works on a face
+ * known in advance to be flat and horizontal, and it exists only because somebody already
+ * knew where to look. The generic check has to find it without being told, and only one
+ * of its three tests does. Reverting the fix in annulusStrip and measuring:
+ *
+ *   per-shell signed volume   1340.010167086673 at arcSegs 6 — identical to fifteen
+ *                             digits with the fix in place. Blind, and necessarily so:
+ *                             the cap is planar and Green's theorem telescopes it, which
+ *                             is the same reason the deleted assertion could not fail.
+ *   directed-edge balance     zero imbalance. Also blind: the strip is a combinatorially
+ *                             valid triangulation whichever way its triangles land, so
+ *                             every spoke is still traversed once each way.
+ *   coplanar folds            12 at arcSegs 6, 12 at 24. This is the one that bites.
+ *
+ * So the fold count is asserted alongside the area sign rather than instead of it. If
+ * they ever disagree, the area test is the one that knows what it is looking at. */
 console.log('\nrim cap tiling, at each smoothness:');
 for (const n of [6, 8, 12, 24]) {
   const H = 4.25;
@@ -274,9 +305,11 @@ for (const n of [6, 8, 12, 24]) {
   let flipped = 0;
   for (const p of top) if (G.polyArea2D(p.verts.map((v) => [v[0], v[1]])) < -1e-12) flipped++;
   const wantTris = cell.length + 4 * n;
-  const ok = flipped === 0 && top.length === wantTris;
+  const ori = checkOrientation(polys);
+  const ok = flipped === 0 && top.length === wantTris && ori.ok;
   console.log(`  arcSegs ${String(n).padStart(2)}   ${String(top.length).padStart(3)} of ${wantTris} tris   ` +
-              (flipped ? `${flipped} INSIDE OUT (${(100 * flipped / top.length).toFixed(0)}%)` : 'all outward'));
+              (flipped ? `${flipped} INSIDE OUT (${(100 * flipped / top.length).toFixed(0)}%)` : 'all outward') +
+              `   region ${orientationNote(ori)}`);
   if (!ok) bad++;
 }
 
@@ -378,5 +411,152 @@ console.log('\nthe puzzle joint, off the built mesh:');
   }
 }
 
-console.log(bad ? `\n${bad} case(s) FAILED` : '\nall plates watertight');
+/* The orientation check itself, on meshes broken on purpose.
+ *
+ * Two of its three tests have a real defect in this repository to bite on — a shell built
+ * backwards (snapTopClip, below) and a fold (annulusStrip, above). The third, directed-edge
+ * balance, has none: nothing here has ever had a patch wound against its neighbours. An
+ * unexercised assertion is how this project shipped three tests that measured nothing, so
+ * it is exercised here instead of taken on trust.
+ *
+ * The table asserts the MISSES as firmly as the hits, because "implement both and say what
+ * each buys" is only worth anything if the buying is written down somewhere it can fail.
+ * A wholly reversed shell leaves every edge balanced, so the winding count reads zero on
+ * it; a single reversed face barely moves the enclosed volume, so the volume test reads
+ * clean on that. Neither substitutes for the other, and this is where that stops being a
+ * claim in a comment.
+ *
+ * An octahedron rather than a box: every pair of adjacent faces meets at an angle, so the
+ * fold count stays out of the first two rows and the three tests can be told apart. */
+console.log('\nthe orientation check itself, on meshes broken on purpose:');
+{
+  const V = [[1,0,0], [-1,0,0], [0,1,0], [0,-1,0], [0,0,1], [0,0,-1]];
+  const F = [[0,2,4], [2,1,4], [1,3,4], [3,0,4], [2,0,5], [1,2,5], [3,1,5], [0,3,5]];
+  const octa = () => F.map((f) => G.makePoly(f.map((i) => V[i].slice())));
+
+  const allReversed = octa().map((p) => G.makePoly(p.verts.slice().reverse()));
+  const oneReversed = octa();
+  oneReversed[0] = G.makePoly(oneReversed[0].verts.slice().reverse());
+  /* Split one face into three about its centroid and reverse one of the three. The
+     reversed piece is coplanar with its two siblings, so this is a fold as well as a
+     winding break — that is what a fold IS, and the row asserts both. */
+  const folded = octa();
+  {
+    const t = folded.shift().verts;
+    const m = [0, 1, 2].map((k) => (t[0][k] + t[1][k] + t[2][k]) / 3);
+    folded.push(G.makePoly([m, t[1], t[0]]));          // reversed
+    folded.push(G.makePoly([t[1], t[2], m]));
+    folded.push(G.makePoly([t[2], t[0], m]));
+  }
+  const PROBES = [
+    ['intact',                 octa(),        0, 0, 0],
+    ['every face reversed',    allReversed,   1, 0, 0],
+    ['one face reversed',      oneReversed,   0, 3, 0],
+    ['one coplanar face folded back', folded, 0, 3, 2],
+  ];
+  for (const [label, polys, wInv, wWind, wFold] of PROBES) {
+    const r = checkOrientation(polys);
+    const got = [r.inverted.length, r.wind, r.folds];
+    const ok = got[0] === wInv && got[1] === wWind && got[2] === wFold;
+    console.log(`  ${label.padEnd(32)} volume ${r.volume.toFixed(4).padStart(8)}   ` +
+                `inverted ${got[0]}  wound-twice ${got[1]}  folds ${got[2]}   ` +
+                `${ok ? 'as expected' : `EXPECTED ${wInv}/${wWind}/${wFold}`}`);
+    if (!ok) bad++;
+  }
+}
+
+/* Everything else a user can download, checked for orientation.
+ *
+ * The plate cases above are the big meshes and they were never the problem. The loose
+ * parts were: snapTopClip — the U-clip you print and press into a joint — was inside out
+ * from the day it was written, -8.84 mm³ of enclosed volume, watertight, zero bad edges,
+ * and nothing in this project looked at a loose part at all. It came out of profilePrism,
+ * which emits a CCW (u, z) profile in whatever frame mapUV lays down and had no idea the
+ * frame could be left-handed; the bins' scoop and label pass its mirror and were fine,
+ * which is why nobody noticed.
+ *
+ * So the rule this section encodes is coverage, not cleverness: every shape the export
+ * buttons can produce gets built here, including the combinations of connector, insertion
+ * direction and key housing that change WHICH part is produced. The key branch mirrors
+ * connectorPart() in src/ui.js — that function is the only answer to "which part", and if
+ * it is ever changed to produce something else, this list has to follow it. */
+console.log('\nloose parts and samples, orientation only:');
+{
+  const report = (label, polys, quarantine) => {
+    const r = checkOrientation(polys);
+    const note = quarantine
+      ? (r.ok ? '  NOW CLEAN — take it out of quarantine' : `  known: ${quarantine}`)
+      : '';
+    /* Say when a shell is open, because the volume printed beside it excludes those and
+       would otherwise read as a verdict on the whole part. Not asserted: whether a loose
+       part is watertight is checkManifold's question, and the one part where it currently
+       matters — the top-insert snap sample, whose rim is cut open at each junction on
+       purpose — needs that argument settled before a number here can mean anything. */
+    const open = r.open ? `, ${r.open} open` : '';
+    console.log(`  ${label.padEnd(26)} ${String(r.tris).padStart(6)} tris  ` +
+                `${String(r.shells).padStart(3)} shells${open.padEnd(9)}  ` +
+                `${r.volume.toFixed(3).padStart(11)} mm3  ${orientationNote(r)}${note}`);
+    if (quarantine ? r.ok : !r.ok) bad++;
+  };
+  const H = 4.25;
+  const CONNECTORS = ['dovetail', 'puzzle', 'bowtie', 'puzzlekey', 'snap', 'hclip', 'none'];
+  const KEYED = ['bowtie', 'puzzlekey', 'snap', 'hclip'];
+
+  for (const conn of CONNECTORS)
+    for (const keyInsert of ['bottom', 'top'])
+      for (const keyMount of ['floor', 'wall']) {
+        if (!KEYED.includes(conn)) continue;          // no loose part to print
+        const cfg = Object.assign({}, G.DEFAULTS, { connector: conn, keyInsert, keyMount });
+        const label = `key ${conn}/${keyInsert}/${keyMount}`;
+        /* A top-inserted snap takes the sprung U-clip, not a flat key. They are not
+           variants of one shape, so both routes have to be built. */
+        if (conn === 'snap' && keyInsert === 'top') {
+          const prm = Object.assign({ legT: 1.0, legLen: 1.35, legC: 1.4, barb: 0.18,
+                                      bridgeW: 1.7, bridgeD: 0.85, wall: 0.6 }, { clr: cfg.key.clr });
+          report(label, G.snapTopClip(prm, H));
+          continue;
+        }
+        const kd = conn === 'hclip' ? Object.assign(G.hclipPrm(cfg.hclip), { depth: 2.3 })
+          : keyMount === 'wall' ? Object.assign({}, G.DEFAULTS.keySlim) : Object.assign({}, cfg.key);
+        if (keyInsert === 'top' && (conn === 'hclip' || keyMount === 'wall')) kd.depth = 2.0;
+        report(label, G.buildKey(conn === 'hclip' ? 'snap' : conn, kd, kd.depth - 0.15));
+      }
+
+  /* The pocket the U-clip drops into, on all four seam edges. It is here rather than in
+     a plate case because no plate case above selects keyInsert 'top' — those
+     configurations leak, for reasons that have nothing to do with orientation, and adding
+     them would import that argument into this one. Building the pocket directly covers
+     the fix without it.
+     Its barb lip was inside out on exactly two of the four edges: the (depth, along)
+     frame `map` puts down is right-handed on -x and +y and mirrored on the other two, and
+     the wedge's winding was written out by hand for one of them. One 8-triangle shell of
+     -0.072 mm³ per site, on half the sites of every top-snap plate. */
+  const sp = { legT: 1.0, legLen: 1.35, legC: 1.4, barb: 0.18,
+               bridgeW: 1.7, bridgeD: 0.85, wall: 0.6, clr: 0.15 };
+  for (const edge of ['+x', '-x', '+y', '-y'])
+    report(`snap pocket ${edge}`, G.snapTopPocket(edge, 42, 21, sp, H));
+
+  const tileCfg = Object.assign({}, G.DEFAULTS, {
+    drawerW: G.DEFAULTS.pitch, drawerD: G.DEFAULTS.pitch,
+    marginMode: 'custom', mLeft: 0, mRight: 0, mFront: 0, mBack: 0 });
+  report('test tile', G.buildTestTile(tileCfg).polys);
+
+  for (const conn of CONNECTORS)
+    for (const keyInsert of ['bottom', 'top']) {
+      const cfg = Object.assign({}, G.DEFAULTS, { connector: conn, keyInsert });
+      /* The puzzle strip carries six coplanar slivers on the underside of two of its four
+         tiles, areas 5.2e-5 to 5.5e-4 mm², each a triangle facing the opposite way to the
+         cap it sits in. They come out of csgSubtract, not out of the fit sample: cutting
+         one tile with one puzzle cutter reproduces one of them at clearance 0.25 and none
+         at 0.20 or 0.30. It is the sliver-spur class ENGINE.md records under the puzzle
+         notch ceiling, at a hundredth of the size, and the repair for it lives inside
+         healCsgSeams, which is load-bearing enough that changing it to chase 5e-5 mm² is
+         not a thing to do while closing an orientation gap. Named so the number is on
+         record and cannot be mistaken for the check being approximate. */
+      report(`fit sample ${conn}/${keyInsert}`, G.buildFitSample(cfg, H).polys,
+             conn === 'puzzle' ? 'csgSubtract sliver spurs on the tile underside' : null);
+    }
+}
+
+console.log(bad ? `\n${bad} case(s) FAILED` : '\nall plates watertight and every shell facing outwards');
 process.exit(bad ? 1 : 0);

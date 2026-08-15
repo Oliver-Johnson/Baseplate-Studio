@@ -1736,6 +1736,20 @@ function profilePrism(profile, v0, v1, mapUV) {
   // profile: list of [u, z], normalized to CCW; mapUV(u, v) -> [x, y]
   const ar = profile.reduce((acc, p, i) => { const q = profile[(i+1)%profile.length]; return acc + p[0]*q[1] - q[0]*p[1]; }, 0);
   if (ar < 0) profile = profile.slice().reverse();
+  /* Normalising the profile to CCW is only half the job, and the missing half shipped
+     the snap U-clip inside out for the life of the feature: signed volume -8.84 mm³,
+     watertight, zero bad edges, so nothing in either audit could see it.
+
+     A CCW profile in (u, z) only faces outwards if the frame mapUV lays down is
+     right-handed in the order this function emits — u across, z up, v along the sweep.
+     The bins' scoop and label pass (u, v) => [v, u], which is right-handed and correct;
+     snapTopClip passes the identity (u, v) => [u, v], which is its mirror, and every
+     face came out reversed. The caller cannot reasonably be expected to know which of
+     the two it wrote, so measure it here: sweeping from v1 to v0 instead of v0 to v1
+     reverses the sides and both caps together, which is exactly the correction needed. */
+  const o = mapUV(0, 0), eu = mapUV(1, 0), ev = mapUV(0, 1);
+  const hand = (ev[0]-o[0])*(eu[1]-o[1]) - (ev[1]-o[1])*(eu[0]-o[0]);
+  if (hand < 0) { const t = v0; v0 = v1; v1 = t; }
   const polys = [];
   const n = profile.length;
   for (let i = 0; i < n; i++) {
@@ -1806,18 +1820,23 @@ function snapTopPocket(edge, e, s, prm, H) {
   // barb-lip wedge: 45° underside so it prints without support
   const wpts = (z, d) => [map(d, wedge.s0), map(d, wedge.s1)];
   const [A0, A1] = wpts(0, wedge.d0), [B0, B1] = wpts(0, wedge.d1);
-  const tri = [
-    [[...A0, wedge.z1], [...B0, wedge.z0], [...B0, wedge.z1]],
-    [[...B1, wedge.z1], [...B1, wedge.z0], [...A1, wedge.z1]],
-  ];
-  for (const t of tri) { const p = makePoly(t); if (p) polys.push(p); }
+  /* The boxes above are laid out in (depth, along) and handed to extrudePoly, which
+     normalises whatever winding `map` produced. The wedge is written out vertex by
+     vertex and had no such protection: `map` puts down a right-handed (d, t, z) frame on
+     the -x and +y edges and its mirror on +x and -y, so half of every top-snap plate
+     carried the barb lip inside out — one 8-triangle shell of -0.072 mm³ per site,
+     watertight, invisible to a total-volume check because it sits in a pile of
+     overlapping shells that sum positive regardless. Measure the frame and reverse to
+     suit, the same correction profilePrism makes for the same reason. */
+  const o0 = map(0, 0), od = map(1, 0), ot = map(0, 1);
+  const hand = (od[0]-o0[0])*(ot[1]-o0[1]) - (od[1]-o0[1])*(ot[0]-o0[0]);
+  const face = (vs) => { const p = makePoly(hand < 0 ? vs.slice().reverse() : vs); if (p) polys.push(p); };
+  face([[...A0, wedge.z1], [...B0, wedge.z0], [...B0, wedge.z1]]);
+  face([[...B1, wedge.z1], [...B1, wedge.z0], [...A1, wedge.z1]]);
   // wedge slope + top + back faces
-  let p = makePoly([[...A0, wedge.z1], [...A1, wedge.z1], [...B1, wedge.z0], [...B0, wedge.z0]]);
-  if (p) polys.push(p);
-  p = makePoly([[...B0, wedge.z0], [...B1, wedge.z0], [...B1, wedge.z1], [...B0, wedge.z1]]);
-  if (p) polys.push(p);
-  p = makePoly([[...A0, wedge.z1], [...B0, wedge.z1], [...B1, wedge.z1], [...A1, wedge.z1]]);
-  if (p) polys.push(p);
+  face([[...A0, wedge.z1], [...A1, wedge.z1], [...B1, wedge.z0], [...B0, wedge.z0]]);
+  face([[...B0, wedge.z0], [...B1, wedge.z0], [...B1, wedge.z1], [...B0, wedge.z1]]);
+  face([[...A0, wedge.z1], [...B0, wedge.z1], [...B1, wedge.z1], [...A1, wedge.z1]]);
   return polys;
 }
 // the printed U-clip: cross-section in (across, z), extruded along the seam
@@ -2883,7 +2902,7 @@ const DEFAULTS = {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { computeLayout, pieceConnectors, buildPiece, buildTestTile, buildFitSample, bowtieKey, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
+  module.exports = { computeLayout, pieceConnectors, buildPiece, buildTestTile, buildFitSample, bowtieKey, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
     // shared mesh primitives — also used by the bins tool
     makePoly, triangulateRing, earTriangulate, roundedSquareRing, clampZ, profilePrism,
     skeletonCellRegion, directCellRegion, polyArea2D };
