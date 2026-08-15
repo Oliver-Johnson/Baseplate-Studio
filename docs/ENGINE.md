@@ -84,7 +84,9 @@ reverted on its own and `test/plate-audit.js` re-run against it.
    the ring, and a fan from a point outside a convex loop only stays inside the annulus
    as far as that point's **tangent** to the loop. Past the tangent the triangle turns
    over. **21% of every cell rim faced downwards at the shipped arcSegs 6, rising to 33%
-   at 24.** Watertightness cannot see it, and neither can enclosed volume.
+   at 24.** Watertightness cannot see it, and neither can enclosed volume, and neither
+   can a directed-edge check. All three are measured against the reverted fix in §5a; the
+   only thing that catches it is a fold test, and that is now in the audit.
 
    Be careful about what this cost. It is tempting — I did it — to call this the root
    cause on the grounds that `csgSubtract` builds its BSP from these very planes, so a
@@ -134,6 +136,19 @@ All empirically confirmed, all from real corruption:
 - **Cutters poking below z = 0** leave inverted fragments. `clampZ(polys, 0)` on
   `buildPiece` output is mandatory and already in place.
 - **Wrong outline winding into `extrudePoly`** produces inside-out shells. Normalise CCW.
+- **A helper that emits faces in a frame the caller chose cannot assume the frame is
+  right-handed.** `profilePrism` normalises its profile to CCW in (u, z) and then emits
+  sides and caps as though (u, z, v) were right-handed. The bins' scoop and label pass
+  `(u, v) => [v, u]`, which is, and are fine. `snapTopClip` passes the identity, which is
+  its mirror — so every face of the printed U-clip came out reversed. Watertight, zero
+  bad edges, −8.84 mm³ of enclosed volume, for the life of the feature.
+  `snapTopPocket`'s barb wedge had the same fault from the other end: its `map` is
+  right-handed on the `-x` and `+y` seams and mirrored on `+x` and `-y`, and the wedge's
+  five faces were written out by hand for one of the two, so half the sites on every
+  top-snap plate carried an inside-out lip. Both now measure the frame — the sign of
+  `e_v × e_u` from three probes of the mapping — and reverse to suit. **Anything that
+  hands vertices to `makePoly` in an order fixed at authoring time has this waiting in
+  it**, and nothing in either audit could see it until `test/orientation.js`.
 - **An outline that doubles back on itself**, even by a fraction of a millimetre with no
   area between the two passes. See the note under §1 on the puzzle notch. A *reflex*
   outline is fine — that one was blamed for years and it was never the problem — but a
@@ -278,6 +293,64 @@ is one edit away from a change to the fit. Nothing else in the file would notice
 0.3 mm slacker is exactly as watertight and prints exactly as well, right up to the point
 where the pieces will not hold together. If you touch `puzzleShape`, that section is what
 tells you whether you touched the joint as well as the mesh.
+
+## 5a. Orientation is a separate question, and it needs three checks
+
+`checkManifold` counts how many triangles touch an edge. That number is blind to which
+way any of them faces, so a mesh can be watertight, report zero bad edges, and still be
+wrong. It let two defects ship. `annulusStrip` capped every cell rim with a fifth of its
+triangles facing downwards for the life of the project (§2a.3). `snapTopClip` — a part a
+user prints and presses into a joint — was inside out from the day it was written, at
+−8.84 mm³ (§2).
+
+`test/orientation.js` runs three tests, used by both audits. They are genuinely
+independent; **none of them implies another**, and it is worth knowing which one bites,
+because they call for different fixes.
+
+| test | catches | misses |
+|---|---|---|
+| **signed volume, per closed shell** | a shell built entirely backwards — `snapTopClip`, the carved bins' reflex fillet | anything where the flipped area is a fraction of one shell; anything planar |
+| **directed-edge balance** — every edge traversed as often one way as the other | a patch whose winding disagrees with its neighbours' | a *wholly* inverted shell (reverse every triangle and every edge is still balanced); `annulusStrip` |
+| **coplanar folds** — two triangles on a two-manifold edge, same plane, opposite normals | a surface doubling back on itself — `annulusStrip`, CSG sliver spurs | nothing else; it is narrow on purpose |
+
+The middle row is the one to be careful about. It is the textbook orientation test and it
+is easy to assume it covers the rim cap. **It does not.** Reverting the `annulusStrip`
+fix and measuring: signed volume `1340.010167086673` at arcSegs 6, identical to fifteen
+digits with the fix in place, and zero directed-edge imbalance, at every smoothness. Both
+are blind for the same underlying reason — the strip is a *combinatorially valid*
+triangulation that folds back on itself in space, and the cap is planar, so Green's
+theorem telescopes the signed areas to outline-minus-ring whatever the orientations. This
+is the same trap that killed the deleted rim-cap assertion further down this section.
+Only the fold count moves: 12 at arcSegs 6, 12 at 24.
+
+Two things the checks must **not** treat as defects, and do not:
+
+- **Volume on an open shell is meaningless.** The divergence theorem needs a closed
+  surface; on an open one the tetrahedra do not cancel and the number is arbitrary. A
+  top-insert hclip pocket reads −359 mm³ inside a 27 mm³ bounding box. Volume is asserted
+  only on shells every edge of which is used an even number of times.
+- **Abutting shells are not inverted shells.** `baseMode: 'bosses'` and the puzzle lobe
+  apex at arcSegs 6 both put two correctly-wound shells face to face or edge to edge.
+  Their shared edges come out balanced 2 and 2, and the fold test only looks at edges used
+  by exactly two triangles, so it never sees them. Measured clean on every quarantined
+  case.
+
+Two orientation defects are quarantined by name rather than fixed, on the same terms as
+the leaks:
+
+- **The carved bins' reflex fillet**, in `test/bin-audit.js`. One inside-out closed shell
+  of 212 triangles per reflex corner, −214.259 mm³ (−282.322 on the taller `bigL-5x4`), so
+  every L, U, T, staircase and notched footprint carries at least one. It is a sign error
+  in `sweptSector`: that helper builds an annular sector as `outer` CCW then `inner`
+  reversed, which only traces anticlockwise while `outer` is the larger radius. Convex
+  corners pass `[CR, CR - t]` and are right; the reflex fillet passes `[CR, CR + t + OVER]`
+  and reverses the loop, with nothing downstream renormalising it.
+- **The puzzle fit sample**, in `test/plate-audit.js`. Six coplanar slivers on the
+  undersides of two of its four tiles, 5.2e-5 to 5.5e-4 mm² each. They come out of
+  `csgSubtract`, not out of the sample: one tile minus one puzzle cutter reproduces one at
+  clearance 0.25 and none at 0.20 or 0.30. It is the sliver-spur class described under the
+  puzzle notch ceiling below, at a hundredth of the size, and its repair lives inside
+  `healCsgSeams`.
 
 A warning about writing checks for this file. The rim-cap check originally asserted two
 things and claimed they were complementary: no triangle inverted, and the signed areas
