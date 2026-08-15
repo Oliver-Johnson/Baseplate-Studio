@@ -25,6 +25,17 @@ These rules were expensive to learn. Trust them.
   single non-self-overlapping solid. Two shells that overlap ask the tree whether a point
   inside both is in or out, and it has no answer.
 
+  This has a degenerate form that is much harder to spot, because it hides inside a
+  single shell: **a cutter outline that is not a simple polygon.** The puzzle notch's
+  outline walked along the neck flank, overshot the point where the lobe circle crosses
+  it, and came back along the same line — a spur of exactly zero area. Every measurement
+  of the *shape* said it was fine: identical enclosed area to the last bit, identical
+  bounding box. But `extrudePoly` gives that spur two side quads lying on top of each
+  other facing opposite ways, so the extrusion is a shell that overlaps itself, and the
+  tree has the same no-answer as before. It cost 30 edges used once and 40 used three
+  times on a 9x9 plate for the life of the feature. If you write an outline that fuses a
+  straight run into an arc, work out where they actually meet.
+
 - **Overlapping closed shells instead of union.** Regions overlap by `BLOAT = 0.05`. Tabs,
   bosses, pocket cups, bin feet, lips and dividers are separate shells fused by the
   slicer. **Never CSG-union shells together.**
@@ -80,10 +91,12 @@ reverted on its own and `test/plate-audit.js` re-run against it.
    wrong-facing plane makes the tree answer "outside" for solid material millimetres
    away. Measured, it is worth 6–17%: applying only this fix to the old code takes
    magnets 7480 → 6947, screws 14304 → 13483, dovetail 4338 → 3605. Reverting only this
-   fix from the current code leaves dovetail at 118 and magnets+screws at 8, everything
-   else watertight — and the quarantined puzzle case slightly *better*, at 62 not 78. Fix
-   it because an inside-out triangle is wrong on its own terms, not because it was the
-   bug.
+   fix from the current code leaves dovetail at 118, hclip at 40 and magnets+screws at 8,
+   everything else — the puzzle joint included — still watertight. (An earlier version of
+   this paragraph said "everything else watertight" and put the puzzle at 62. The hclip
+   40 was there all along and went unread; the puzzle number was real but is now moot,
+   since that case no longer leaks under the ablation or without it.) Fix it because an
+   inside-out triangle is wrong on its own terms, not because it was the bug.
 
 4. **The result was read out of the solid's own tree — an optimisation, and untested.**
    Textbook csg.js returns `a.allPolygons()`, but `a`'s tree was built by splitting `a`'s
@@ -121,6 +134,10 @@ All empirically confirmed, all from real corruption:
 - **Cutters poking below z = 0** leave inverted fragments. `clampZ(polys, 0)` on
   `buildPiece` output is mandatory and already in place.
 - **Wrong outline winding into `extrudePoly`** produces inside-out shells. Normalise CCW.
+- **An outline that doubles back on itself**, even by a fraction of a millimetre with no
+  area between the two passes. See the note under §1 on the puzzle notch. A *reflex*
+  outline is fine — that one was blamed for years and it was never the problem — but a
+  non-simple one is a self-overlapping cutter wearing a disguise.
 
 Three related traps in the supporting code:
 
@@ -201,9 +218,37 @@ very different bugs both show up as "bad edges":
 `baseMode: 'bosses'` is entirely the second kind: corner bosses of adjacent cells abut on
 the cell boundary instead of overlapping by `BLOAT`, so every shared face is counted
 twice, and no edge is ever used once. Bloating the bosses would fix it, at the cost of
-changing their footprint. `connector: 'puzzle'` is the first kind and is a genuine hole —
-30 edges used once on a 9x9 plate. Both are far better than they were (2964 and 5033),
-neither is fixed.
+changing their footprint. Far better than it was (2964 and 8332), still not fixed.
+
+`connector: 'puzzle'` used to be listed here as the first kind, and it is **no longer
+open anywhere**. It is worth reading how, because it needed two unrelated fixes and the
+lesson generalises: **an even count and an odd count on the same case are two separate
+bugs, and clearing one tells you nothing about the other.**
+
+- The holes — 30 edges used once, 40 used three times — were the cutter's outline
+  doubling back on itself; see §1. The reflex outline it had been blamed on for years was
+  never the problem.
+- What that left was 24 edges used four times: cancelling slivers on the notch's cavity
+  ceiling where it runs under the socket's corner arc. Those were repaired in
+  `healCsgSeams` rather than in the shape. The arc's facet planes are near-tangent to one
+  another, so `a`'s tree dices the ceiling into micron slivers and the weld folds a
+  couple of them into spurs — a face that is real surface everywhere except for one
+  out-and-back excursion, which no single-face test could see.
+
+What is quarantined now is **`connector: 'puzzle'` at arcSegs 6 or 8**, and it is the
+second kind: exactly one edge per notch, always used 4, never once. The lobe's far pole
+points along the seam, the boundary between two cell regions runs along that same line,
+and both regions cut the same notch — so both carry the apex vertex and the vertical edge
+either side of it. Two closed shells sharing an edge, the bosses bug in miniature.
+
+Deterministic, not luck: measured across 6/8/12/24 at six drawer sizes, 6 and 8 carry one
+per notch and 12 and 24 carry none, with no size dependence either way. It is quarantined
+rather than fixed because **every fix costs joint geometry**, which is worse than the
+defect. Sliding the joint 0.09 mm along the seam gets the apex out of the overlap band
+and lands the lobe on the socket's flat wall at x = 2.15 instead, opening five real
+boundary edges. Reshaping the lobe so no vertex sits at the pole changes the notch's
+reach. If you take this on, the rule to aim at is the one the dovetail obeys by accident:
+**a cutter straddling a region boundary must cross it with a face, not a vertex.**
 
 Run the headless audits:
 
@@ -225,6 +270,14 @@ all. It also asserts **enclosed volume** on the minimum CSG and union cases, and
 matters more than it looks: `healCsgSeams` optimises connectivity directly, so
 "watertight" is a metric it can satisfy by construction. Volume is the independent one,
 and it is what showed that the screw counterbore had never really been cut.
+
+It also measures the **puzzle joint off the built mesh** — the throat, the reach and the
+lobe of the cavity against the same three on the tab. That is there because the fix for
+the notch's holes was a change to the notch's outline, and a change to a cutter's outline
+is one edit away from a change to the fit. Nothing else in the file would notice: a joint
+0.3 mm slacker is exactly as watertight and prints exactly as well, right up to the point
+where the pieces will not hold together. If you touch `puzzleShape`, that section is what
+tells you whether you touched the joint as well as the mesh.
 
 A warning about writing checks for this file. The rim-cap check originally asserted two
 things and claimed they were complementary: no triangle inverted, and the signed areas
