@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gridfinity Baseplate Too Big for Your Printer? How to Split It — Drawerforge</title>
-<meta name="description" content="Your drawer needs a Gridfinity baseplate larger than your print bed. How many cells each printer can take, why printing it diagonally does not help, how to split it well, and how to join the pieces.">
+<meta name="description" content="Your drawer needs a Gridfinity baseplate larger than your print bed. How many cells each printer can take, why printing it diagonally doesn't help, how to split it well, and how to join the pieces.">
 <link rel="canonical" href="https://drawerforge.co.uk/guide/split/">
 <link rel="alternate" hreflang="en" href="https://drawerforge.co.uk/guide/split/">
 <link rel="alternate" hreflang="x-default" href="https://drawerforge.co.uk/guide/split/">
@@ -12,10 +12,10 @@
 <meta property="og:url" content="https://drawerforge.co.uk/guide/split/">
 <meta property="og:site_name" content="Drawerforge">
 <meta property="og:title" content="Gridfinity Baseplate Too Big for Your Printer? How to Split It">
-<meta property="og:description" content="How many cells each printer bed takes, why rotating diagonally does not help, and how to split and join a large baseplate.">
+<meta property="og:description" content="How many cells each printer bed takes, why rotating diagonally doesn't help, and how to split and join a large baseplate.">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Gridfinity Baseplate Too Big for Your Printer? How to Split It">
-<meta name="twitter:description" content="How many cells each printer bed takes, why rotating diagonally does not help, and how to split and join a large baseplate.">
+<meta name="twitter:description" content="How many cells each printer bed takes, why rotating diagonally doesn't help, and how to split and join a large baseplate.">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"HowTo",
 "name":"How to split a Gridfinity baseplate to fit your printer",
@@ -24,7 +24,7 @@
 "tool":[{"@type":"HowToTool","name":"3D printer"},{"@type":"HowToTool","name":"Drawerforge baseplate generator"}],
 "step":[
 {"@type":"HowToStep","name":"Work out how many cells your bed takes","url":"https://drawerforge.co.uk/guide/split/#bed","text":"Divide each bed dimension by the 42 mm pitch and round down. A 256 mm bed takes six cells, because seven would need 294 mm."},
-{"@type":"HowToStep","name":"Skip the diagonal trick","url":"https://drawerforge.co.uk/guide/split/#rotation","text":"Rotating a rectangular plate on the bed never gains a whole extra cell, so it is not worth attempting."},
+{"@type":"HowToStep","name":"Skip the diagonal trick","url":"https://drawerforge.co.uk/guide/split/#rotation","text":"Rotating a rectangular plate on the bed never gains a whole extra cell, so it isn't worth attempting."},
 {"@type":"HowToStep","name":"Choose where the cuts go","url":"https://drawerforge.co.uk/guide/split/#where","text":"Put cuts on grid lines between cells so the seam falls in the wall between bins, where nothing rests across it."},
 {"@type":"HowToStep","name":"Join the pieces","url":"https://drawerforge.co.uk/guide/split/#joining","text":"Pick a connector that suits the seam, then print each piece and assemble the plate in the drawer."}]}
 </script>
@@ -423,7 +423,7 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
 }
 </style>
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Will the seams be visible or catch on things?","acceptedAnswer":{"@type":"Answer","text":"The seam sits in the wall between cells, where the bins already leave a gap. Bins bridge across it and hide it. A well-fitting joint is not noticeable in use."}},{"@type":"Question","name":"Is a split plate weaker than one piece?","acceptedAnswer":{"@type":"Answer","text":"In the drawer, it barely matters — the plate rests on a flat floor and is contained by the drawer walls, so it is never asked to resist bending. Staggering the joints removes the one real weakness, a continuous seam across the full width."}},{"@type":"Question","name":"Can I print the pieces in different colours?","acceptedAnswer":{"@type":"Answer","text":"Yes, and it looks deliberate rather than accidental if you stagger the joints. Each piece is a separate STL."}},{"@type":"Question","name":"What if one piece still doesn't fit after splitting?","acceptedAnswer":{"@type":"Answer","text":"Add another cut. The cut map lets you click any grid line to place one by hand, and it warns when a piece exceeds your bed rather than letting you discover it in the slicer."}}]}
+{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Will the seams be visible or catch on things?","acceptedAnswer":{"@type":"Answer","text":"The seam sits in the wall between cells, where the bins already leave a gap. Bins bridge across it and hide it. A well-fitting joint isn't noticeable in use."}},{"@type":"Question","name":"Is a split plate weaker than one piece?","acceptedAnswer":{"@type":"Answer","text":"In the drawer, it barely matters — the plate rests on a flat floor and is contained by the drawer walls, so it's never asked to resist bending. Staggering the joints removes the one real weakness, a continuous seam across the full width."}},{"@type":"Question","name":"Can I print the pieces in different colours?","acceptedAnswer":{"@type":"Answer","text":"Yes, and it looks deliberate rather than accidental if you stagger the joints. Each piece is a separate STL."}},{"@type":"Question","name":"What if one piece still doesn't fit after splitting?","acceptedAnswer":{"@type":"Answer","text":"Add another cut. The cut map lets you click any grid line to place one by hand, and it warns when a piece exceeds your bed rather than letting you discover it in the slicer."}}]}
 </script>
 </head>
 <body data-carry-all>
@@ -441,9 +441,10 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
 <article class="doc">
 
 <p class="lede">Any drawer worth organising needs a baseplate bigger than a consumer print
-bed. A 306&nbsp;×&nbsp;380&nbsp;mm drawer wants a plate more than twice the area a
-256&nbsp;mm bed can take. So it gets printed in pieces and joined — and the interesting
-question is not <em>whether</em> to split it, but <em>where</em>.</p>
+bed. A 306&nbsp;×&nbsp;380&nbsp;mm drawer wants a 294&nbsp;×&nbsp;378&nbsp;mm plate —
+1.75 times the area a 256&nbsp;mm bed can take in one piece. So it gets printed in pieces
+and joined, and the interesting question isn't <em>whether</em> to split it, but
+<em>where</em>.</p>
 
 <h2 id="bed">How many cells your printer can take</h2>
 
@@ -463,8 +464,8 @@ question is not <em>whether</em> to split it, but <em>where</em>.</p>
 </table>
 
 <p>Leave a little margin on top of these if your joint adds a protruding tab — the
-generator accounts for that automatically, but it is why a piece that looks like it should
-just fit sometimes does not.</p>
+generator accounts for that automatically, but it's why a piece that looks like it should
+just fit sometimes doesn't.</p>
 
 <h2 id="rotation">Why printing it diagonally doesn't help</h2>
 
@@ -496,7 +497,7 @@ diagonal only helps for something long and <em>thin</em>, and a baseplate piece 
 </ul>
 
 <p>For a 306&nbsp;×&nbsp;380&nbsp;mm drawer on a 256&nbsp;mm bed, the fewest-plates search
-finds a three-plate solution where the obvious split needs four. That is an entire print
+finds a three-plate solution where the obvious split needs four. That's an entire print
 saved by moving a cut.</p>
 
 <h2 id="joining">Joining the pieces</h2>
@@ -510,7 +511,7 @@ need joining. The choice depends mostly on how you can assemble them:</p>
   assembly into the drawer.</li>
   <li><strong>Separate keys</strong> bridge the seam from underneath. Stronger, but they
   need assembling face-down and flipping, which is awkward for a big plate.</li>
-  <li><strong>Top-inserted keys</strong> exist for exactly the case where you cannot lower
+  <li><strong>Top-inserted keys</strong> exist for exactly the case where you can't lower
   an assembled plate in — a deep drawer, or one with a lip. Lay the pieces in place and
   drop a key into each junction from above.</li>
 </ul>
@@ -523,11 +524,11 @@ an order, and the generator prints it in the README bundled with your export.</p
 
 <h3>Will the seams be visible or catch on things?</h3>
 <p>The seam sits in the wall between cells, where the bins already leave a gap. Bins bridge
-across it and hide it. A well-fitting joint is not noticeable in use.</p>
+across it and hide it. A well-fitting joint isn't noticeable in use.</p>
 
 <h3>Is a split plate weaker than one piece?</h3>
 <p>In the drawer, it barely matters — the plate rests on a flat floor and is contained by
-the drawer walls, so it is never asked to resist bending. Staggering the joints removes
+the drawer walls, so it's never asked to resist bending. Staggering the joints removes
 the one real weakness, a continuous seam across the full width.</p>
 
 <h3>Can I print the pieces in different colours?</h3>
