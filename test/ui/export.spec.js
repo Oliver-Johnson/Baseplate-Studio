@@ -7,7 +7,9 @@
  * because a modal you cannot close is worse than a panel you can ignore.
  */
 'use strict';
+const path = require('path');
 const fs = require('fs');
+const { pathToFileURL } = require('url');
 const { test, expect } = require('@playwright/test');
 const H = require('./helpers.js');
 // the library the pages themselves use, so reading a zip back costs no dependency
@@ -255,3 +257,77 @@ test('the baseplates dialog keeps up with a build running behind it', async ({ p
     .toContainText(/KB|MB/);
   await client.send('Emulation.setCPUThrottlingRate', { rate: 1 });
 });
+
+/* The bins map writes an inline grid-template-columns to size itself beside the 3D
+   preview. An inline style beats the media query that collapses that grid below
+   1280 px, so on a phone it pinned a 320 px preview alongside the map and hung the
+   card off the right of the screen. It now asks the element which layout it is in. */
+for (const [width, tracks] of [[1440, 2], [1100, 1], [375, 1]]) {
+  test(`the bins stage is ${tracks} column(s) wide at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await H.openBins(page);
+    await expect
+      .poll(() => page.evaluate(() =>
+        getComputedStyle(document.querySelector('.stagetop'))
+          .gridTemplateColumns.trim().split(/\s+/).length))
+      .toBe(tracks);
+  });
+}
+
+/* Measured at 375 px, the tools were 11 px text and 31 px controls throughout. These
+   are the two numbers that matter on a phone, asserted against the rendered page so
+   that a future stylesheet cannot quietly walk them back. The guide pages are in here
+   because they share the stylesheet and were the one place 11 px survived the first
+   pass — a claim about "the site" has to be tested on the site. */
+const pageUrl = (rel) => pathToFileURL(path.join(H.ROOT, rel)).href;
+for (const [name, rel, tool] of [
+  ['baseplates', 'index.html', true],
+  ['bins', 'bins/index.html', true],
+  ['guide', 'guide/index.html', false],
+  ['guide/split', 'guide/split/index.html', false],
+  ['guide/drawer-sizes', 'guide/drawer-sizes/index.html', false],
+]) {
+  test(`${name} stays legible and tappable at 375 px`, async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 800 });
+    if (tool) {
+      await (name === 'bins' ? H.openBins : H.openPlates)(page);
+      if (name === 'bins') {
+        await page.locator('#fillRest').click();   // so the dialog has rows to audit
+        await page.waitForTimeout(400);
+      }
+      // every panel open, so nothing escapes the audit by being collapsed
+      await page.evaluate(() =>
+        document.querySelectorAll('section.p.closed').forEach((s) => s.classList.remove('closed')));
+      await page.locator('#openExport').click();
+      await page.waitForTimeout(300);
+    } else {
+      await page.goto(pageUrl(rel));
+      await page.waitForTimeout(300);
+    }
+
+    const bad = await page.evaluate(() => {
+      const small = [], tiny = [];
+      for (const e of document.querySelectorAll('body *')) {
+        if (e.closest('svg') || e.tagName === 'SCRIPT' || e.tagName === 'STYLE') continue;
+        const r = e.getBoundingClientRect();
+        if (!r.width || !r.height) continue;
+        const cs = getComputedStyle(e);
+        if (cs.visibility === 'hidden') continue;
+        const owns = [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+        if (owns && parseFloat(cs.fontSize) < 12)
+          small.push(`${e.tagName}#${e.id || '-'} ${cs.fontSize}`);
+        /* Checkboxes are excluded on purpose: every one of them is a 36x20 switch
+           inside a .tog label, and the label is the thing a finger hits. Anchors are
+           in when they are navigation or are dressed as buttons — a.ghost is the
+           "back to baseplates" link, which is a button in everything but the tag. */
+        const control = /^(BUTTON|SELECT|TEXTAREA)$/.test(e.tagName) ||
+                        (e.tagName === 'INPUT' && e.type !== 'checkbox') ||
+                        (e.tagName === 'A' && (!!e.closest('nav') || e.classList.contains('ghost')));
+        if (control && r.height < 40) tiny.push(`${e.tagName}#${e.id || '-'} ${r.height.toFixed(1)}px`);
+      }
+      return { small, tiny };
+    });
+    expect(bad.small, 'text below 12px').toEqual([]);
+    expect(bad.tiny, 'tap targets below 40px').toEqual([]);
+  });
+}

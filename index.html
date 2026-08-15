@@ -109,6 +109,12 @@ button.act.on{background:var(--amber);box-shadow:0 0 0 2px rgba(0,0,0,.35) inset
 button.ghost{background:transparent;color:var(--cyan);border:1px solid var(--cyan);border-radius:6px;
   padding:8px 12px;cursor:pointer;font-size:12.5px}
 button.ghost:disabled{opacity:.4;cursor:default}
+/* "back to baseplates" is a link, because it goes somewhere, but it is a button in
+   every other respect — including needing to be a real size to tap. Without this it
+   inherited none of the button padding and stood 19 px tall. */
+a.ghost{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;
+  background:transparent;color:var(--cyan);border:1px solid var(--cyan);border-radius:6px;
+  padding:8px 12px;font-size:12.5px}
 .stagecard{background:var(--panel);border:1px solid var(--line);border-radius:8px;margin-bottom:14px}
 .stagecard h3{font-size:11px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase;
   padding:10px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center}
@@ -311,6 +317,61 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
 .exrow .meta{display:block;font-family:var(--mono);font-size:11.5px;color:var(--dim);margin-top:3px}
 .exrow button{white-space:nowrap}
 .exnote{font-size:12px;color:var(--dim);line-height:1.5}
+/* ---- small screens --------------------------------------------------------
+   Measured at 375 px, most of this interface was 11 px text and 31 px controls —
+   readable on a desktop monitor at arm's length, not on a phone in a workshop. Text
+   goes to 12 px or more and every control to a 40 px target. Scoped to the width
+   where the layout is already one column, so the desktop rail keeps its density. */
+@media(max-width:980px){
+  header .privacy{font-size:12px}
+  header nav a{font-size:12px;padding:0 16px;min-height:40px;display:flex;align-items:center}
+  section.p>h2{font-size:12px;padding:13px}
+  section.p>h2 .n{font-size:12px}
+  .stagecard h3{font-size:12px}
+  .stagecard h3 .tail{font-size:12px}
+  label.f{font-size:12px}
+  .hint{font-size:12px}
+  .tog{font-size:13px;min-height:40px}
+  /* every control a finger has to hit */
+  input,select,button{min-height:40px}
+  input,select{padding:9px 10px}
+  .seg button{font-size:13px}
+  button.ghost,a.ghost{font-size:13px}
+  a.ghost{min-height:40px}
+  table.pieces th{font-size:12px}
+  table.pieces td{font-size:13px}
+  table.pieces button{font-size:12px;padding:5px 12px}
+  /* Six columns of piece detail do not fit a phone. Tightening the gutters gets most
+     of the way; the scroll is the honest fallback, because the alternative is what was
+     happening before — the last column, which holds the STL button, silently cut off
+     at the edge of the card with no way to reach it. */
+  table.pieces th,table.pieces td{padding:8px 8px}
+  .stagecard table.pieces{display:block;overflow-x:auto}
+  /* the guides have tables of their own, under a different class, and they were the
+     one place 11 px text survived this pass */
+  article.doc table.doc th{font-size:12px}
+  article.doc table.doc th,article.doc table.doc td{padding:7px 8px}
+  article.doc table.doc{display:block;overflow-x:auto}
+  #warnings .w{font-size:12.5px}
+  #status{font-size:12px}
+  #threehint{font-size:12px}
+  .previewbtn{font-size:13px;min-height:40px}
+  footer{font-size:13px}
+  footer .mono{font-size:12px}
+  .kofi b{font-size:13px}
+  .kofi i{font-size:12px}
+  .kofi button{min-width:40px;font-size:20px}
+  .exrow .nm{font-size:13.5px}
+  .exrow .meta{font-size:12px}
+  .exgroup{font-size:12px}
+  .exsum{font-size:12.5px}
+  .exnote{font-size:12.5px}
+  .exportrow{flex-direction:column;align-items:stretch}
+  button.act.big{width:100%}
+  /* the toggle switch itself stays 36×20 — the whole .tog label is the target, and
+     it is the label that had to grow */
+  .tog input{min-height:20px}
+}
 </style>
 </head>
 <body>

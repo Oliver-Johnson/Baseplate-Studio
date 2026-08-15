@@ -391,8 +391,20 @@ function drawMap() {
   const sc = Math.min(availW / W, availH / H, CELL_PX / S);
   svg.setAttribute('width', Math.round(W * sc));
   svg.setAttribute('height', Math.round(H * sc));
-  if (top) top.style.gridTemplateColumns = wide
-    ? '' : `${Math.round(W * sc) + 30}px minmax(${PREVIEW_MIN}px, 1fr)`;
+  /* Sizing the two columns from the map is only meaningful where there ARE two
+     columns. The stylesheet collapses .stagetop to one column below 1280 px, and an
+     inline style beats a media query — so on a phone this pinned a 320 px preview
+     beside the map and hung the whole card off the right edge of the screen.
+     Clearing the inline style and asking the element how many tracks it ended up with
+     keeps that breakpoint in one place, the stylesheet, instead of repeating the
+     number here where the two could drift apart. */
+  if (top) {
+    top.style.gridTemplateColumns = '';
+    const twoCol = !wide &&
+      getComputedStyle(top).gridTemplateColumns.trim().split(/\s+/).length > 1;
+    if (twoCol)
+      top.style.gridTemplateColumns = `${Math.round(W * sc) + 30}px minmax(${PREVIEW_MIN}px, 1fr)`;
+  }
 
   while (svg.firstChild) svg.removeChild(svg.firstChild);
   const el = (n, a) => { const e = document.createElementNS(SVGNS, n);
