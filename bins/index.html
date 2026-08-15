@@ -1013,11 +1013,44 @@ function healCsgSeams(polys) {
      tell from real surface. That was csgUnion's last six bad edges. Refusing the
      insertion instead is wrong — it leaves a genuine T-junction elsewhere on the same
      face and the volume drifts by 1.2e-5. Dropping the face is exactly right. */
+
+  /* The fold does not have to swallow the whole face, and the version that does not is
+     the harder one to see. A face that is real surface for most of its perimeter can
+     still carry a SPUR — ...P, B, C, B, Q... — where the insertion sent it out to C and
+     straight back. Every edge of a spur is used twice within the one face, so the edge
+     count reads clean and `retraced` says no, because the face's real edges are still
+     odd. It only surfaces later: the centroid fan turns B-C and C-B into two triangles
+     on the same three points facing opposite ways, and those show up as an edge used
+     four times. That is where the puzzle notch's last leaks came from — its cavity
+     ceiling runs under the socket's corner arc, whose facet planes are near-tangent to
+     one another, so a's tree dices the ceiling into slivers a few microns wide and the
+     weld folds a couple of them.
+
+     Unwinding the spur is arithmetic rather than judgement, the same as `retraced`:
+     dropping C removes the undirected edge B-C exactly twice, so no edge's parity moves
+     and a genuine hole is still reported as one, and a path that goes out and back
+     encloses no area, so the volume is untouched. */
+  const unspur = (f) => {
+    let g = f;
+    for (;;) {
+      const keep = [];
+      for (let i = 0; i < g.length; i++)
+        if (g[(i - 1 + g.length) % g.length] !== g[(i + 1) % g.length]) keep.push(g[i]);
+      if (keep.length === g.length) return g;
+      // a spur's two flanks now sit side by side; the duplicate goes with them
+      const dedup = [];
+      for (let i = 0; i < keep.length; i++)
+        if (keep[i] !== keep[(i + 1) % keep.length]) dedup.push(keep[i]);
+      if (dedup.length < 3) return dedup;
+      g = dedup;
+    }
+  };
   {
     const kept = [], kp = [], kd = [];
     for (let fi = 0; fi < faces.length; fi++) {
-      if (retraced(faces[fi])) continue;
-      kept.push(faces[fi]); kp.push(planes[fi]); kd.push(dirty[fi]);
+      const f = unspur(faces[fi]);
+      if (f.length < 3 || retraced(f)) continue;
+      kept.push(f); kp.push(planes[fi]); kd.push(dirty[fi] || f.length !== faces[fi].length);
     }
     faces = kept; planes = kp; dirty.length = 0; dirty.push(...kd);
   }
@@ -1595,14 +1628,40 @@ function puzzleShape(edge, e, s, pz, grow, inward) {
   const g = inward ? -g0 : g0;
   // half-angle where circle meets neck width
   const th = Math.asin(Math.min(0.95, nw / r));
+  /* Where the lobe circle crosses the neck flank. The flank has to STOP here.
+   *
+   * It used to run on to nl*0.55 regardless, and with the shipped proportions that is
+   * 0.24 mm (tab) to 0.33 mm (notch) past the crossing — so the outline walked out along
+   * y = -nw, overshot, and came straight back along the same line to pick up the arc. A
+   * spur of exactly zero area, invisible in every measurement of the shape: the enclosed
+   * area and the bounding box are identical to the last bit either way.
+   *
+   * It is not invisible to the CSG. extrudePoly gives the spur two side quads that lie on
+   * top of each other facing opposite ways, which makes the cutter a self-overlapping
+   * solid rather than the single clean one csgSubtract requires, and a BSP has no answer
+   * for a point that is inside a shell twice. That is where the puzzle notch's holes came
+   * from: 30 edges used once and 40 used three times on a 9x9 plate, on three of the four
+   * pieces. Ablated on its own — spur restored, everything else in place — the same 30
+   * and 40 come straight back.
+   *
+   * Worth saying plainly, because the note on file said otherwise: the reflex outline was
+   * NOT the problem. The shape is exactly as reflex as it was, the neck still meets the
+   * lobe at a corner that turns the wrong way, and a cell region minus this cutter is
+   * watertight. A reflex cutter is fine here; a self-overlapping one is not.
+   *
+   * Guarded rather than assumed, because neckL, neckW and lobeR are all editable and a
+   * long enough neck genuinely does reach past the crossing, in which case the corner is
+   * real and has to stay. */
+  const junction = cd - r * Math.cos(th);
+  const neckD = nl * 0.55;
   const pts = [];
   pts.push([-0.4, -nw]);                                   // start behind edge
-  pts.push([nl * 0.55, -nw]);
+  if (neckD < junction - 1e-6) pts.push([neckD, -nw]);
   for (let k = 0; k <= 18; k++) {                          // lobe arc through the far pole
     const a = -(Math.PI - th) + k * (2 * (Math.PI - th)) / 18;
     pts.push([cd + r * Math.cos(a), r * Math.sin(a)]);
   }
-  pts.push([nl * 0.55, nw]);
+  if (neckD < junction - 1e-6) pts.push([neckD, nw]);
   pts.push([-0.4, nw]);
   // map (depth, lateral) into world
   return pts.map(([dp, lt]) => {

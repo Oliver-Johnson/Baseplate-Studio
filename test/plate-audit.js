@@ -19,10 +19,11 @@
  * carrying a notch inherited it. Three cases were quarantined by name for that, and all
  * three now pass.
  *
- * Three others are quarantined in their place. They are not regressions — every one of
- * them is one to two orders of magnitude better than it was — but they leak, and a
- * summary line reading "all plates watertight" over a configuration a user can select
- * from a dropdown is the kind of reassurance this file exists to stop.
+ * Others were quarantined in their place. They are not regressions — every one of them
+ * is one to two orders of magnitude better than it was — but they leak, and a summary
+ * line reading "all plates watertight" over a configuration a user can select from a
+ * dropdown is the kind of reassurance this file exists to stop. The puzzle notch has
+ * since come off that list; the two boss cases have not.
  *
  * `quarantine: '<reason>'` makes the audit fail BOTH if a healthy case regresses AND if
  * a quarantined one starts passing and nobody took it off the list. Red forever teaches
@@ -56,14 +57,34 @@ const CASES = [
   { name: '9x9 hclip', drawerW: 400, drawerD: 400, connector: 'hclip' },
   { name: '3x3 magnets above', drawerW: 126, drawerD: 126, magnets: true, magnetSide: 'top' },
   { name: '3x3 magnets+screws', drawerW: 126, drawerD: 126, magnets: true, screws: true },
+  /* Quarantined for most of this file's life, at 78 bad edges and then 5033 before that:
+     30 used once and 40 used three times, a genuine open boundary on 3 of the 4 pieces.
+     The reason on file was that the notch presents a reflex outline to the cutter. It
+     does, and that was not the problem — a cell region minus this cutter is watertight
+     with the reflex corner untouched. The outline was NON-SIMPLE: the neck flank ran a
+     third of a millimetre past the point where the lobe circle crosses it and came back
+     along itself, so extrudePoly gave the cutter two coincident side quads facing
+     opposite ways and the BSP was being asked about points inside a shell twice. See
+     puzzleShape. */
+  { name: '9x9 puzzle', drawerW: 400, drawerD: 400, connector: 'puzzle' },
 
   /* --- quarantined: real, measured, not regressions, still leaking --- */
 
-  /* Genuine open boundary: 30 edges used once and 40 used three times, on 3 of the 4
-     pieces. The puzzle notch is a lobed cavity cut at the piece edge, so unlike the
-     dovetail's convex trapezoid it presents a reflex outline to the cutter. Was 5033. */
-  { name: '9x9 puzzle', drawerW: 400, drawerD: 400, connector: 'puzzle',
-    quarantine: 'puzzle notch leaks' },
+  /* The same joint at the smoothness the tool actually ships, which is the case above
+     minus its luck — except that it is not luck, it is deterministic. One edge per
+     notch, always used 4, never once: the lobe's far pole points at the seam, the
+     boundary between two cell regions is on that same line, and both regions cut the
+     same notch, so both carry the apex vertex and the vertical edge either side of it.
+     Two closed shells sharing an edge, exactly like the bosses below.
+
+     It is here rather than fixed because every fix costs joint geometry. Sliding the
+     joint 0.09 mm along the seam to get the apex out of the overlap band does clear it
+     — and lands the lobe on the socket's flat wall at x = 2.15 instead, which opens
+     five REAL boundary edges. Reshaping the lobe so no vertex sits at the pole moves the
+     notch's reach. Measured across 6/8/12/24 at six drawer sizes: 6 and 8 carry one such
+     edge per notch, 12 and 24 carry none, with no size dependence either way. */
+  { name: '9x9 puzzle @6', drawerW: 400, drawerD: 400, connector: 'puzzle', arcSegs: 6,
+    quarantine: 'lobe apex sits on a region boundary' },
   /* Benign, but it has to be named rather than waved through: corner bosses of adjacent
      cells ABUT face to face on the cell boundary instead of overlapping by BLOAT, so
      every shared face is counted twice. All counts are 4 and 6, never 1 — no boundary
@@ -273,6 +294,88 @@ for (const n of [6, 8, 12, 24]) {
   const man = G.checkManifold(r.polys || r);
   console.log(`  arcSegs ${String(n).padStart(2)}   ${man.bad ? String(man.bad).padStart(4) + ' BAD EDGES' : 'watertight'}`);
   if (man.bad) bad++;
+}
+
+/* The puzzle joint, measured off the BUILT MESH.
+ *
+ * Watertightness was bought by changing the notch outline, and a change to a cutter's
+ * outline is one edit away from a change to the fit. Nothing above would notice: a
+ * jigsaw joint 0.3 mm slacker in the throat is exactly as watertight and prints exactly
+ * as well, right up to the point where the pieces will not hold together.
+ *
+ * So the numbers come out of the finished triangle soup rather than out of puzzleShape,
+ * and they are read off two surfaces that cannot be confused with anything else near
+ * them: the notch cavity is the only thing with a downward-facing horizontal face at the
+ * cut height, and the male tab the only thing with an upward-facing one at the tab
+ * height. Everything else at that height is a side wall, a socket or a cell floor.
+ *
+ * What is asserted is the FIT — throat, reach and lobe of the cavity against the same
+ * three on the tab — because that is the thing a user feels. The absolute sizes are
+ * asserted too, against the parameters rather than against remembered numbers, so this
+ * still means something if cfg.puzzle is ever retuned. */
+console.log('\nthe puzzle joint, off the built mesh:');
+{
+  const cfg = Object.assign({}, G.DEFAULTS, {
+    drawerW: 400, drawerD: 400, marginMode: 'custom',
+    mLeft: 0, mRight: 0, mFront: 0, mBack: 0,
+    magnets: false, screws: false, arcSegs: 12, connector: 'puzzle',
+  });
+  const L = G.computeLayout(cfg);
+  const built = {};
+  for (const pc of L.pieces) built[pc.id] = G.buildPiece(cfg, L, pc);
+
+  // every vertex of every horizontal triangle at height z facing the given way
+  const faceAt = (polys, z, up) => {
+    const out = [];
+    for (const t of G.polysToTriangles(polys)) {
+      if (!t.every((v) => Math.abs(v[2] - z) < 1e-6)) continue;
+      const nz = (t[1][0]-t[0][0])*(t[2][1]-t[0][1]) - (t[1][1]-t[0][1])*(t[2][0]-t[0][0]);
+      if (Math.abs(nz) > 1e-12 && (nz > 0) === up) out.push(...t.map((v) => [v[0], v[1]]));
+    }
+    return out;
+  };
+  /* Reduced to (depth into the piece, offset along the seam) about one joint site, and
+     windowed to that site so a neighbouring one 42 mm away cannot contribute. */
+  const shape = (pts, dep, lat) => {
+    const P = pts.map((q) => [dep(q), lat(q)])
+                 .filter((p) => p[0] > -1 && p[0] < 14 && Math.abs(p[1]) < 8);
+    if (P.length < 3) return null;
+    const reach = Math.max(...P.map((p) => p[0]));
+    const lobe = Math.max(...P.map((p) => Math.abs(p[1])));
+    // the straight neck runs from behind the seam to the lobe junction, ~0.55 deep
+    const throat = 2 * Math.max(...P.filter((p) => p[0] < 0.5).map((p) => Math.abs(p[1])));
+    return { throat, reach, lobe };
+  };
+
+  const pz = cfg.puzzle;
+  const zCut = Math.max(cfg.bottomPad, 2.6) - 0.4;         // notch ceiling
+  const zTab = Math.max(1.2, Math.max(cfg.bottomPad, 2.6) - 0.65);
+  const notch = shape(faceAt(built.A2.polys, zCut, false), (q) => q[1], (q) => q[0] - 42);
+  const tab = shape(faceAt(built.A1.polys, zTab, true),
+                    (q) => q[1] - built.A1.D, (q) => q[0] - 42);
+  if (!notch || !tab) {
+    console.log('  NO JOINT SURFACE FOUND — the measurement, not the joint, is broken');
+    bad++;
+  } else {
+    /* The tab's flank and far pole are both sampled points on its outline, so these are
+       exact; the widest point of the lobe need not be sampled, so that one is compared
+       within the sagitta of a 19-point arc on r ≈ 4.6, which is 0.02 mm. */
+    const want = [
+      ['throat  (neckW + 2 grow)', notch.throat, pz.neckW + 2*pz.clr, tab.throat, pz.neckW, 2*pz.clr, 1e-9],
+      ['reach   (neck + lobe)   ', notch.reach, pz.neckL + pz.lobeR*1.55 + pz.clr,
+                                   tab.reach, pz.neckL + pz.lobeR*1.55, pz.clr, 1e-9],
+      ['lobe    (radius)        ', notch.lobe, pz.lobeR + pz.clr, tab.lobe, pz.lobeR, pz.clr, 0.021],
+    ];
+    for (const [label, nv, nWant, tv, tWant, gap, tol] of want) {
+      const ok = Math.abs(nv - nWant) <= tol && Math.abs(tv - tWant) <= tol &&
+                 Math.abs((nv - tv) - gap) <= 2 * tol;
+      console.log(`  ${label}  notch ${nv.toFixed(4)} of ${nWant.toFixed(4)}` +
+                  `   tab ${tv.toFixed(4)} of ${tWant.toFixed(4)}` +
+                  `   clearance ${(nv - tv).toFixed(4)} of ${gap.toFixed(4)}` +
+                  `${ok ? '' : '   FIT CHANGED'}`);
+      if (!ok) bad++;
+    }
+  }
 }
 
 console.log(bad ? `\n${bad} case(s) FAILED` : '\nall plates watertight');

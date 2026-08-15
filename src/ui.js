@@ -457,11 +457,15 @@ function computePrintPlan() {
     return { id: pc.id, w: m.W + m.protrusion.l + m.protrusion.r,
              d: m.D + m.protrusion.f + m.protrusion.b, h: m.H, qty: 1, stackable: true };
   });
+  /* The plan reserves bed space for exactly the keys the download contains, which
+     means asking keysNeeded rather than counting junctions again here. It used to
+     count them here, unfiltered, and a wall-housed key skips any seam that overlaps
+     by a single cell — so the plan laid out clips the STL does not contain, and the
+     3MF plate carried them too. Two counts of the same thing is one too many. */
   if (KEYED.includes(state.connector)) {
     const kd = activeKeyDims();
-    const nKeys = layout.seams.reduce((a, s) => a + s.junctions.length, 0);
-    if (nKeys) items.push({ id: 'key', w: kd.len, d: kd.wEnd,
-                            h: kd.depth - 0.15, qty: nKeys, stackable: false });
+    items.push({ id: 'key', w: kd.len, d: kd.wEnd, h: kd.depth - 0.15,
+                 qty: keysNeeded(), stackable: false });
   }
   printPlan = { plates: packPlates(items, state.bedW, state.bedD, gap,
     { stack, zGap, bedH: state.bedH || 1e9 }), merged: items, zGap };
@@ -556,9 +560,7 @@ function activeKeyShape() {
 }
 function keysArray() {
   const kd = activeKeyDims();
-  const wallish = state.keyMount === 'wall' || state.connector === 'hclip';
-  const nKeys = layout.seams.reduce((a, s) => a + s.junctions.filter(j =>
-    !wallish || Math.abs(j - Math.round(j)) <= 0.25).length, 0) || 1;
+  const nKeys = keysNeeded();
   let polys = [];
   const cols = Math.ceil(Math.sqrt(nKeys));
   for (let k = 0; k < nKeys; k++) {
@@ -601,10 +603,17 @@ function downloadKeys() {
   const k = keysStl();
   saveBlob(stlBinary(k.polys, k.mesh), k.name);
 }
-/* How many keys the assembly needs, counted the same way the key STL lays them out —
-   anything housed in a wall skips a seam that overlaps by a single cell, because there
-   is no wall junction there to sink one into. Top-inserted snap clips force that count
-   whatever the housing says, since they enter through the wall by definition. */
+/* How many keys the assembly needs — anything housed in a wall skips a seam that
+   overlaps by a single cell, because there is no wall junction there to sink one into.
+   Top-inserted snap clips force that count whatever the housing says, since they enter
+   through the wall by definition.
+
+   keysNeeded is the ONLY answer to "how many keys": the STL lays out this many, the
+   print plan reserves this many and the 3MF plate carries this many. It is a single
+   function because it was once three expressions — the plan counted every junction, the
+   STL filtered, and a staggered split with wall housing therefore shipped a plan with
+   more clips on it than the file had in it. test/ui/keys.spec.js drives a layout where
+   the two counts differ and holds them together. */
 function keyCount(wallOnly) {
   const wallish = wallOnly || state.keyMount === 'wall' || state.connector === 'hclip';
   return layout.seams.reduce((a, s) => a + s.junctions.filter(j =>
