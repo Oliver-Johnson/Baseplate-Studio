@@ -96,9 +96,16 @@ function inject(html) {
  * verified is worse than no date, since a lastmod a crawler catches lying is a reason
  * to stop trusting all of them.
  */
+/* Where a built page is served. Exported because the sitemap is no longer the only
+   thing that needs it — tools/indexnow.js submits these same URLs, and a submitted URL
+   that disagreed with the published one would be rejected as not belonging to the host,
+   silently, long after the push that caused it. */
+const SITE = 'https://drawerforge.co.uk/';
+const urlFor = (out) => SITE + out.replace(/index\.html$/, '');
+
 function sitemap(pages) {
   const rows = pages.map((p) => {
-    const loc = 'https://drawerforge.co.uk/' + p.out.replace(/index\.html$/, '');
+    const loc = urlFor(p.out);
     return '  <url><loc>' + loc + '</loc>' +
       '<changefreq>' + p.changefreq + '</changefreq>' +
       '<priority>' + p.priority + '</priority></url>';
@@ -109,4 +116,4 @@ function sitemap(pages) {
     rows.join(NL) + NL + '</urlset>' + NL;
 }
 
-module.exports = { inject, faqJsonLd, questions, plain, sitemap };
+module.exports = { inject, faqJsonLd, questions, plain, sitemap, urlFor, SITE };

@@ -35,6 +35,9 @@ jobs:
       # The guides quote real numbers. Nothing connected them to the code they came
       # from, so a change to SPEC would leave three pages quietly lying.
       - run: node test/guide-facts.js
+      # The IndexNow key file and the URLs the submitter would send. Every way that
+      # wiring breaks is a 403 in a job's log rather than anything visible on the site.
+      - run: node test/indexnow-check.js
 
   # Everything above tests the geometry and the build. This tests the page: place
   # bins, carve, merge, resize, and assert what the interface actually did. Every
@@ -58,3 +61,40 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+  # Tell the IndexNow engines which pages changed. Bing, Yandex, Seznam, Naver and Yep
+  # use the protocol; Google does not, and crawls on its own schedule regardless.
+  #
+  # After the checks rather than beside them, for two reasons. Nothing should be
+  # announced that has not passed, and GitHub Pages publishes asynchronously after the
+  # push — by the time the suites above have run, the new page is actually being served,
+  # so an engine that comes straight away fetches the new content rather than the old.
+  #
+  # Only the pages that changed are submitted. The protocol asks that unchanged URLs are
+  # not sent, and sending all five on every push would be a standing lie about what is
+  # new that costs whatever credibility the signal has.
+  indexnow:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [check, ui]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # the diff is against the push's own base, not HEAD^
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Submit the pages this push changed
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          # A new branch, a force push or the first push of all reports an all-zero or
+          # unreachable base. Submitting everything is the right answer there: it is the
+          # one case where every page genuinely is new to the index.
+          if [ -z "$BEFORE" ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            echo "no reachable base commit — submitting every page"
+            node tools/indexnow.js --all
+          else
+            git diff --name-only "$BEFORE" "$AFTER" | tee /dev/stderr | xargs node tools/indexnow.js
+          fi
