@@ -3339,7 +3339,10 @@ function readControls() {
   state.magnetSide = $('magnetSide').value;
   const clr = parseFloat($('connClr').value) || 0.2;
   state.tab = Object.assign({}, DEFAULTS.tab, { clr });
-  state.bowtie = Object.assign({}, DEFAULTS.bowtie, { clr: Math.max(0.1, clr - 0.05) });
+  /* No state.bowtie: a bowtie is built from state.key like the other two keyed joints,
+     and DEFAULTS.bowtie is gone. This line survived it by being harmless —
+     Object.assign over undefined yields {} — which is exactly how a parameter block
+     that configures nothing goes on looking like it configures something. */
   state.key = Object.assign({}, DEFAULTS.key, { clr: Math.max(0.1, clr - 0.05) });
   state.hclip = Object.assign({}, DEFAULTS.hclip, { clr: Math.max(0.08, clr - 0.05) });
   state.puzzle = Object.assign({}, DEFAULTS.puzzle, { clr });

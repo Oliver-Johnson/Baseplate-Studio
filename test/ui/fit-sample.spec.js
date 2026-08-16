@@ -20,12 +20,19 @@
  *   throat/mouth  the cavity's width across the seam at two stations, which is where a
  *             clearance change would show up.
  *
- * Both seam orientations are driven, because a keyed pocket is clipped open by a convex
- * prism and the prism's winding came out of the world mapping: it was clockwise on the
- * y-edges for the snap and H-clip and on half the edges for the bowtie, and a clockwise
- * cv makes clipConvexPrismTop keep what it was told to remove. That left the cup sealed
- * under solid plate with no way in — which the coupon would have reproduced faithfully,
- * so equality alone would not have caught it. Hence `openFrom` must never be 'none'.
+ * Both seam orientations are driven, and `openFrom` must never be 'none'. The original
+ * reason for that has since been engineered away: a keyed pocket used to be clipped open
+ * by a convex prism whose winding came out of the world mapping, so it came back
+ * clockwise on the y-edges for the snap and H-clip and on half the edges for the bowtie,
+ * and a clockwise cv made the clipper keep what it had been told to remove. The cup was
+ * left sealed under solid plate with no way in. clipConvexPrismTop is gone now and the
+ * housings are cut by one closed prism per shell, so do not go looking for it.
+ *
+ * The assertion stays regardless, and not out of sentiment. A cavity you cannot reach is
+ * a whole class of defect rather than one bug — the coupon reproduces the plate's
+ * geometry faithfully, so a sealed pocket is sealed identically in both and every
+ * equality check here still passes. Whatever cuts these pockets next, the question
+ * "can the key actually get in" is not answered by any other measurement in this file.
  */
 'use strict';
 const { test, expect } = require('@playwright/test');
