@@ -1655,15 +1655,24 @@ function buildPiece(cfg, layout, piece, onStatus) {
   const keyedConn = ['bowtie', 'snap', 'puzzlekey'].includes(cfg.connector);
   const wallKeys = (keyedConn && cfg.keyMount === 'wall');
   const keyDims = wallKeys ? cfg.keySlim : cfg.key;
-  /* Which of keySiteOps' three housings this configuration builds. src/ui.js
-     activeJoint answers the same question for the loose part and the fit coupon, and
-     hands the answer to buildFitSample rather than working it out again.
+  /* Which of keySiteOps' three housings this configuration builds — from jointKind,
+     like everyone else. src/ui.js activeJoint asks it for the loose part and the fit
+     coupon, and the audit asks it too; this was the fourth copy of the rule and the
+     last one, written out longhand under a comment saying the decision lived elsewhere.
+
+     It was never a live defect. jointKind falls back to the connector's own name where
+     this expression said 'recess', so the two disagree for dovetail, puzzle and none —
+     and every reader of keyKind is inside a loop over `keyed`, which pieceConnectors
+     leaves empty for exactly those three (isTab, and the early return for 'none'). The
+     one thing to keep true, then, is that emptiness: if `keyed` ever carries sites for
+     a tabbed connector, this line starts answering a question it used to duck.
+     Byte-identical output across the 112-config matrix either way.
+
      The snap's clip is one part at one size whatever the housing, so its fit comes from
      the full key's clearance; a flat key takes its own housing's. */
   const keyShape = isHclip ? 'snap' : cfg.keyType;
   const keyPrm = isHclip ? hclipPrm(cfg.hclip) : keyDims;
-  const keyKind = (cfg.connector === 'snap' && topInsert) ? 'snaptop'
-                : ((isHclip || wallKeys) && topInsert) ? 'cup' : 'recess';
+  const keyKind = jointKind(cfg.connector, cfg.keyMount, cfg.keyInsert);
   const keyClr = keyKind === 'snaptop' ? cfg.key.clr
                : isHclip ? cfg.hclip.clr : keyDims.clr;
   if (keyedConn && !wallKeys) pad = Math.max(pad, cfg.key.depth + 0.8);
