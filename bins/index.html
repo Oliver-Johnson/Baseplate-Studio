@@ -869,7 +869,13 @@ function splitPolygon(plane, poly, coplanarFront, coplanarBack, front, back) {
     }
   }
 }
-class Node {
+/* Named BspNode, not Node, and the prefix is load-bearing rather than decorative. This
+   file is SPLICED into the page, so a bare `class Node` at top level shadows the DOM's
+   Node for every script that follows it — `Node.DOCUMENT_POSITION_PRECEDING` reads
+   undefined on both tools, and an assertion comparing against undefined passes while
+   measuring nothing. That is what it did in test/ui/a11y.spec.js, which now says
+   window.Node to route around it. Nothing here needs the name. */
+class BspNode {
   constructor(polys) { this.plane = null; this.front = null; this.back = null; this.polys = []; if (polys) this.build(polys); }
   invert() {
     const stack = [this];
@@ -929,8 +935,8 @@ class Node {
       }
       const front = [], back = [];
       for (const p of ps) splitPolygon(nd.plane, p, nd.polys, nd.polys, front, back);
-      if (front.length) { if (!nd.front) nd.front = new Node(); stack.push([nd.front, front]); }
-      if (back.length) { if (!nd.back) nd.back = new Node(); stack.push([nd.back, back]); }
+      if (front.length) { if (!nd.front) nd.front = new BspNode(); stack.push([nd.front, front]); }
+      if (back.length) { if (!nd.back) nd.back = new BspNode(); stack.push([nd.back, back]); }
     }
   }
 }
@@ -1258,95 +1264,26 @@ function healCsgSeams(polys) {
  * face lying exactly on a face of the solid, and it still earns its keep.
  */
 function csgSubtract(aPolys, bPolys) {
-  const a = new Node(aPolys), b = new Node(bPolys);
+  const a = new BspNode(aPolys), b = new BspNode(bPolys);
   const outside = b.clipPolygons(aPolys);            // a's surface, split only by the cutter
   a.invert();                                        // classify against a's interior
   b.clipTo(a); b.invert(); b.clipTo(a); b.invert();  // b's surface, restricted to inside a
   return healCsgSeams(outside.concat(b.allPolygons().map(flipPoly)));
 }
 function csgUnion(aPolys, bPolys) {
-  const a = new Node(aPolys), b = new Node(bPolys);
+  const a = new BspNode(aPolys), b = new BspNode(bPolys);
   const outside = b.clipPolygons(aPolys);            // a's surface outside b
   b.clipTo(a); b.invert(); b.clipTo(a); b.invert();  // b's surface outside a
   return healCsgSeams(outside.concat(b.allPolygons()));
 }
 
-// remove all material inside convex 2D polygon `cv` (CCW) above z0 — deterministic
-// half-space splitting only; safe through any geometry including cones.
-function clipConvexPrismTop(polys, cv, z0) {
-  let keep = [], work = polys;
-  // peel off parts outside each edge half-plane (those are kept)
-  for (let i = 0; i < cv.length; i++) {
-    const a = cv[i], b = cv[(i + 1) % cv.length];
-    // edge normal pointing OUTWARD (CCW poly): n = (dy, -dx)
-    const nx = b[1] - a[1], ny = a[0] - b[0];
-    const len = Math.hypot(nx, ny) || 1;
-    const plane = { n: [nx/len, ny/len, 0], w: (nx*a[0] + ny*a[1]) / len };
-    const front = [], back = [];
-    for (const p of work) splitPolygon(plane, p, front, back, front, back);
-    keep = keep.concat(front);   // outside this edge -> outside the prism
-    work = back;
-  }
-  // work is now inside the prism in XY: keep only below z0
-  const plane = { n: [0, 0, 1], w: z0 };
-  const below = [], above = [];
-  for (const p of work) splitPolygon(plane, p, above, below, above, below);
-  return keep.concat(below);
-}
-
-/* Convex decomposition of a keyed half-shape footprint (grown), piece-local coords.
- *
- * Every part comes back CCW, because that is what clipConvexPrismTop's contract asks
- * for and this is the only thing that builds one. It did not, and the winding fell out
- * of the world mapping rather than being decided: the depth-and-lateral profile is
- * built once and then mapped into world by a swap for the y-edges and a sign flip for
- * the far side, each of which turns the loop over. So bowtie came back clockwise on
- * '+x' and '-y', the snap and H-clip rects on both y-edges, and the puzzle key's lobe
- * on all four while its waist rect stayed counter-clockwise.
- *
- * A clockwise cv makes clipConvexPrismTop's outward edge normals point inward, so it
- * peels off the material it was told to keep and keeps the material it was told to
- * remove — which is not a subtle defect. A top-inserted key's cup was left sealed under
- * solid plate: every H-clip and snap junction on a HORIZONTAL seam, one side of every
- * bowtie junction on either, and the lobe end of every puzzle key. The cup was built,
- * the plate looked right, and there was no opening to drop the key through.
- */
-function keyHalfConvexParts(type, edge, e, s, prm, grow) {
-  const ccw = (parts) => parts.map(p => polyArea2D(p) < 0 ? p.slice().reverse() : p);
-  const g = (edge === '+x' || edge === '+y') ? -1 : 1;
-  const J = 0.0017, ss = s + J;
-  const rect = (d0, d1, w) => {
-    if (edge === '+x' || edge === '-x') {
-      const x0 = e + g*Math.max(d0, d1)* (g>0?0:1) , dummy=0;
-      const xa = e + g*d0, xb = e + g*d1;
-      const lo = Math.min(xa, xb), hi = Math.max(xa, xb);
-      return [[lo, ss - w], [hi, ss - w], [hi, ss + w], [lo, ss + w]];
-    }
-    const ya = e + g*d0, yb = e + g*d1;
-    const lo = Math.min(ya, yb), hi = Math.max(ya, yb);
-    return [[ss - w, lo], [ss - w, hi], [ss + w, hi], [ss + w, lo]];
-  };
-  if (type === 'bowtie')     // the bowtie half is one trapezoid, convex already
-    return ccw([keyHalf('bowtie', edge, e, s, prm, grow)]);
-  if (type === 'puzzlekey') {
-    // waist rect + the lobe itself (a convex 16-gon)
-    const r = prm.lobeR + grow, cd = prm.len/2 - prm.lobeR;
-    const lobe = [];
-    for (let k = 0; k < 20; k++) {
-      const a = k * 2 * Math.PI / 20;
-      const dp = cd + r * Math.cos(a), lt = r * Math.sin(a);
-      if (edge === '+x' || edge === '-x') lobe.push([e + g*dp, ss + lt]);
-      else lobe.push([ss + lt, e + g*dp]);
-    }
-    return ccw([rect(-0.5, cd, prm.waistW/2 + grow), lobe]);
-  }
-  // snap/hclip dogbone: waist rect + end section (convex part)
-  const endStart = prm.len/2 - prm.endLen;
-  return ccw([
-    rect(-0.5, endStart + 0.1, prm.wMid/2 + grow),
-    rect(endStart, prm.len/2 + grow, prm.wEnd/2 + grow),
-  ]);
-}
+/* clipConvexPrismTop and keyHalfConvexParts lived here and are gone. The clipper removed
+   material above a z-plane inside a convex prism using half-space splitting only, which
+   made it the sanctioned way to cut across the socket cones — and it emitted no floor and
+   no flanks in place of what it took, so every surface it touched came back open. Every
+   top-inserted plate leaked because of it, and its convex decomposition existed only to
+   feed it. keySiteOps now subtracts a closed prism instead; see the note there for what
+   was measured before trusting the BSP through the cone band. */
 
 // clamp a poly soup to the half-space z >= z0 (drops sub-floor cutter leakage)
 function clampZ(polys, z0) {
@@ -1523,7 +1460,7 @@ function fastenerCutter(cfg, magZ0, magZ1, shankTop) {
 function movePolys(polys, dx, dy) {
   return polys.map((p) => ({
     verts: p.verts.map((v) => [v[0] + dx, v[1] + dy, v[2]]),
-    // n copied, not shared: Node.invert replaces a plane's normal, and the template is reused
+    // n copied, not shared: BspNode.invert replaces a plane's normal, and the template is reused
     plane: { n: p.plane.n.slice(), w: p.plane.w + p.plane.n[0]*dx + p.plane.n[1]*dy },
   }));
 }
@@ -1765,20 +1702,13 @@ function pieceConnectors(cfg, layout, piece) {
   return { tabs, notches, ptabs, pnotches, keyed };
 }
 
-// bowtie half footprint on an edge (recess opens across the seam)
-function bowtieHalf(edge, e, s, bw) {
-  // bw: {len, wEnd, wWaist, clr} ; half extends dp = len/2 into this piece
-  const dp = bw.len/2 + bw.clr, wE = bw.wEnd + 2*bw.clr, wW = bw.wWaist + 2*bw.clr;
-  let pts;
-  if (edge === '+x' || edge === '-x') {
-    const g = edge === '+x' ? 1 : -1;
-    pts = [[e + g*0.5, s - wW/2], [e - g*dp, s - wE/2], [e - g*dp, s + wE/2], [e + g*0.5, s + wW/2]];
-  } else {
-    const g = edge === '+y' ? 1 : -1;
-    pts = [[s - wW/2, e + g*0.5], [s - wE/2, e - g*dp], [s + wE/2, e - g*dp], [s + wW/2, e + g*0.5]];
-  }
-  return pts;
-}
+/* bowtieHalf and bowtieKey lived here and are gone, along with the DEFAULTS.bowtie they
+   read. Nothing called either of them: a bowtie key's housing comes from keyHalf('bowtie')
+   and the printed part from keyOutline('bowtie'), both on DEFAULTS.key. The dimensions
+   entry outlived the code by longer than the code outlived its callers, and src/ui.js was
+   still faithfully copying it into state every time the clearance changed. Editing
+   `bowtie.len` to change a bowtie is a mistake the file invited; see "every parameter in
+   DEFAULTS is read by somebody" in test/plate-audit.js, which now fails if it comes back. */
 
 // ---- connector shape library ----
 // puzzle male footprint protruding OUT from edge (grow>0 => female cavity, cut INTO the edge)
@@ -1840,27 +1770,54 @@ function keyHalf(type, edge, e, s, prm, grow) {
     const endStart = prm.len/2 - prm.endLen, tp = prm.taper !== undefined ? prm.taper : 0.8;
     prof = [[-0.5, prm.wMid/2 + grow], [endStart, prm.wMid/2 + grow],
             [endStart + tp, prm.wEnd/2 + grow], [prm.len/2 + grow, prm.wEnd/2 + grow]];
-  } else {    // puzzlekey: waist then lobe (approximated polygonal)
-    const r = prm.lobeR + grow, cd = prm.len/2 - prm.lobeR;
-    prof = [[-0.5, prm.waistW/2 + grow]];
-    const th = Math.asin(Math.min(0.95, (prm.waistW/2 + grow) / r));
-    for (let k = 0; k <= 14; k++) {
-      const a = -(Math.PI/2 - th) + k * (Math.PI - 2*th) / 14;
-      prof.push([cd + r * Math.sin(a + Math.PI/2 - Math.PI/2)*0 + r*Math.cos(a - Math.PI/2 + Math.PI/2)*0, 0]); // placeholder replaced below
-    }
-    // build lobe explicitly instead
-    prof = null;
+  } else {
+    prof = null;   // puzzlekey is not a depth-and-width profile; it is built below
   }
   let pts;
   if (prof) {
     pts = prof.map(([d, w]) => [d, -w]).concat(prof.slice().reverse().map(([d, w]) => [d, w]));
   } else {
-    // puzzle key half: waist to lobe circle
-    const r = prm.lobeR + grow, cd = prm.len/2 - prm.lobeR, ww = prm.waistW/2 + grow;
-    const th = Math.asin(Math.min(0.95, ww / r));
+    /* Puzzle key half: the waist run out to the lobe circle.
+     *
+     * The arc is cut into an ODD number of segments so that no vertex lands on the far
+     * pole. A vertex there sits on the seam's centreline, which is exactly where two cell
+     * regions meet — and both regions cut this same cutter, so both carry the apex and
+     * the vertical edge either side of it: one edge used four times per site, 14 per
+     * plate on every floor-mounted puzzle key and 7 on a wall-mounted one. It is the
+     * defect ENGINE.md quarantines for the puzzle NOTCH at arcSegs 6, and the rule stated
+     * there applies here too — a cutter straddling a region boundary must cross it with a
+     * face, not a vertex.
+     *
+     * There it is quarantined because every fix costs joint geometry. Here it costs
+     * nothing, because the arc is inflated to put the missing depth back (below). 19
+     * segments rather than the smallest odd number that would do: the count decides where
+     * this cutter's facets cross the socket's, and 17 leaves 56 sliver folds in the
+     * top-inserted wall cup at the shipped smoothness where 19 leaves none. Measured over
+     * 17/19/21/25/33 at arcSegs 6 and 12, on all four mount-and-insert combinations.
+     *
+     * Nothing measured any of this before, because the audit's puzzlekey cases were
+     * building a bowtie: keyType and connector are separate fields and only the page ever
+     * kept them in step. */
+    const LOBE_SEGS = 19;
+    const cd = prm.len/2 - prm.lobeR, ww = prm.waistW/2 + grow, r0 = prm.lobeR + grow;
+    /* Inflated so the FACET that spans the pole still reaches cd + r0, since no vertex
+       does any more. Left inscribed, the housing loses r0(1 − cos(Δ/2)) of reach — 20 µm
+       on the slim key, a sixth of its clearance — which is a change to the FIT paid for a
+       change in topology, and this file's own history says those are the ones that get
+       away. Circumscribing there instead keeps the reach at exactly lobeR + grow and
+       makes the housing very slightly larger everywhere else, up to 26 µm at the widest
+       point of the lobe; looser is the harmless direction for a pocket, tighter is not.
+       The half-angle depends on the radius and the radius on the half-angle, so it is
+       iterated; the correction is under 1% and two passes settle it to a tenth of a
+       micron. */
+    let r = r0, th = Math.asin(Math.min(0.95, ww / r));
+    for (let i = 0; i < 2; i++) {
+      r = r0 / Math.cos((Math.PI - th) / LOBE_SEGS);
+      th = Math.asin(Math.min(0.95, ww / r));
+    }
     pts = [[-0.5, -ww]];
-    for (let k = 0; k <= 16; k++) {
-      const a = -(Math.PI - th) + k * (2*(Math.PI - th)) / 16;
+    for (let k = 0; k <= LOBE_SEGS; k++) {
+      const a = -(Math.PI - th) + k * (2*(Math.PI - th)) / LOBE_SEGS;
       pts.push([cd + r * Math.cos(a), r * Math.sin(a)]);
     }
     pts.push([-0.5, ww]);
@@ -1930,23 +1887,36 @@ function snapTopParts(edge, e, s, prm, H) {
   const cavOut = legOut + prm.barb + 0.05;          // barb cavity far wall
   const hw = prm.legLen/2 + c;                      // slot half-width along seam
   const W = prm.wall;
-  const boxes = [];   // each: [d0, d1, s0, s1, z0, z1] in (across-depth, along, z)
+  /* Each: [d0, d1, s0, s1, z0, z1] in (across-depth, along, z). Six boxes that OVERLAP —
+     the same rule the cell regions obey with their BLOAT. Where two of them merely met
+     face to face the shared face was counted twice and the shared edge four times: 7 bad
+     edges per site, 196 on a 9x9 plate, none of them a hole and all of them noise over the
+     ones that were. The walls therefore start below the slab's top rather than on it, and
+     the far wall stops short of the flanks' outer faces rather than reaching them. */
+  const OVER = 0.05;
+  const boxes = [];
   // floor slab under the whole pocket
   boxes.push([legIn - W, cavOut + W, -hw - W, hw + W, zf - 0.6, zf]);
   // near wall (seam side of the leg slot) — stops at the rebate so the bridge seats on it
-  boxes.push([legIn - W, legIn, -hw - W, hw + W, zf, zReb]);
+  boxes.push([legIn - W, legIn, -hw - W, hw + W, zf - OVER, zReb]);
   // side walls (along-seam flanks) full height
-  boxes.push([legIn - W, cavOut + W, -hw - W, -hw, zf, H]);
-  boxes.push([legIn - W, cavOut + W, hw, hw + W, zf, H]);
-  // far wall below the lip (cavity outer)
-  boxes.push([cavOut, cavOut + W, -hw - W, hw + W, zf, H]);
+  boxes.push([legIn - W, cavOut + W, -hw - W, -hw, zf - OVER, H]);
+  boxes.push([legIn - W, cavOut + W, hw, hw + W, zf - OVER, H]);
+  // far wall below the lip (cavity outer), held clear of the flanks' outer faces
+  boxes.push([cavOut, cavOut + W, -hw - W/2, hw + W/2, zf - OVER, H]);
   // the lip itself: protrudes 0.12 past the throat line so the barb must click past
   const lipIn = legOut - 0.12;
   boxes.push([lipIn, cavOut + W, -hw - W, hw + W, zLip1, H]);
   const wedge = { d0: lipIn, d1: cavOut, z0: zLip0, z1: zLip1, s0: -hw, s1: hw };
-  // bridge rebate: opening from the seam to the near wall at the top —
-  // realised by NOT rebuilding material there; envelope clip creates it.
-  const env = [ -0.5, cavOut + W + 0.02, -hw - W - 0.02, hw + W + 0.02, zf - 0.62 ];
+  /* The envelope the plate has to give up for all of this: open to the seam, and just
+     INSIDE the pocket's own skin on the other three sides and underneath, so the boxes
+     above stand 0.05 mm deep in solid plate and the slicer fuses them to it.
+     It used to be 0.02 mm OUTSIDE the skin on all four, which left the whole pocket a
+     free-standing island in a cavity it never touched — visible only as a hairline in the
+     preview, and only because the plate was cut open around it. Once the cut is a real
+     subtraction the sign of that 0.02 is the difference between a pocket welded to the
+     plate and a loose block sitting in a hole. */
+  const env = [ -0.5, cavOut + W - OVER, -hw - W + OVER, hw + W - OVER, zf - 0.6 + OVER ];
   return { boxes, wedge, env, zf };
 }
 function snapTopPocket(edge, e, s, prm, H) {
@@ -2021,11 +1991,29 @@ function snapTopClip(prm, H) {
   return profilePrism(prof2, -w, w, (u, v) => [u, v]);
 }
 
-// top-insert pocket cup at a keyed site: floor slab + U-shaped walls + rim, direct mesh
+/* The pocket a top-inserted key drops into: a floor slab with a U of wall standing on it.
+ *
+ * Two CLOSED extrusions that overlap, not one surface stitched together by hand. The
+ * hand-stitched version was open by 8 to 38 edges depending on the key shape, wound the
+ * wrong way in 5 to 11 places and carried a coplanar fold, and it read −55 mm³ of
+ * enclosed volume for a pocket that displaces about +40. All of that came from the same
+ * habit: it laid the floor slab across the WHOLE outer outline and then stood the walls
+ * on top of the slab's face rather than joining them to its edge, so the wall feet and
+ * the slab's outer rim were T-junctions on faces that no repair pass ever sees —
+ * healCsgSeams runs inside csgSubtract, and nothing here was subtracted.
+ *
+ * The band between the two outlines is a simple polygon and that is the whole trick. Both
+ * outlines run from the seam, into the piece, around the key and back to the seam, so
+ * laying `out` down and returning along `inn` closes a U whose two ends sit on the seam
+ * plane. extrudePoly closes a simple polygon by construction, and the slab underneath is
+ * a second one. They overlap by 0.05 in z, the way every other pair of shells in this
+ * file overlaps, so the slicer fuses them and neither has to know the other exists.
+ *
+ * The solid this makes is the same solid as before, vertex for vertex on every face a
+ * key touches: wall between `inn` and `out` up to zTop, floor at zf, slab down to
+ * zf − 0.6. Only the topology changed.
+ */
 function topPocketCup(type, edge, e, s, prm, clr, zf, zTop) {
-  const polys = [];
-  const inner = keyHalf(type, edge, e, s, prm, clr);
-  const outer = keyHalf(type, edge, e, s, prm, clr + 0.6);
   // trim both polylines flush at the seam plane (drop the -0.5 protrusion)
   const axis = (edge === '+x' || edge === '-x') ? 0 : 1;
   const dirOut = (edge === '+x' || edge === '+y') ? 1 : -1;   // direction pointing out of the piece
@@ -2034,40 +2022,10 @@ function topPocketCup(type, edge, e, s, prm, clr, zf, zTop) {
     if ((q[axis] - e) * dirOut > 1e-9) q[axis] = e;   // clamp only points past the seam
     return q;
   });
-  const inn = clampP(inner), out = clampP(outer);
-  const n = inn.length;   // same topology (same generator)
-  // U-walls between inner & outer (skip the seam-side closing edge: indices 0..n-1 path;
-  // generator returns closed polygon whose first & last points sit on the seam)
-  for (let i = 0; i < n - 1; i++) {
-    let p = makePoly([[inn[i][0], inn[i][1], zf], [inn[i+1][0], inn[i+1][1], zf],
-                      [inn[i+1][0], inn[i+1][1], zTop], [inn[i][0], inn[i][1], zTop]]);
-    if (p) polys.push(p);   // inner wall (faces pocket)
-    p = makePoly([[out[i+1][0], out[i+1][1], zf - 0.6], [out[i][0], out[i][1], zf - 0.6],
-                  [out[i][0], out[i][1], zTop], [out[i+1][0], out[i+1][1], zTop]]);
-    if (p) polys.push(p);   // outer wall
-    // top ring quad
-    p = makePoly([[inn[i][0], inn[i][1], zTop], [inn[i+1][0], inn[i+1][1], zTop],
-                  [out[i+1][0], out[i+1][1], zTop], [out[i][0], out[i][1], zTop]]);
-    if (p) polys.push(p);
-  }
-  // seam-face end caps (between inner & outer at both ends)
-  for (const [ia, ib] of [[0, 0], [n-1, n-1]]) {
-    const p = makePoly([[inn[ia][0], inn[ia][1], zf], [out[ib][0], out[ib][1], zf - 0.6],
-                        [out[ib][0], out[ib][1], zTop], [inn[ia][0], inn[ia][1], zTop]]);
-    if (p) polys.push(p);
-  }
-  // floor slab: outer outline area, top face at zf (pocket floor), bottom at zf-0.6
-  const { pts: fp, tris: ft } = earTriangulate(out);
-  for (const t of ft) {
-    let p = makePoly(t.map(i => [fp[i][0], fp[i][1], zf]));           // up
-    if (p) polys.push(p);
-    p = makePoly([t[2], t[1], t[0]].map(i => [fp[i][0], fp[i][1], zf - 0.6]));  // down
-    if (p) polys.push(p);
-  }
-  // seam-face edge of the floor slab
-  const pA = makePoly([[inn[0][0], inn[0][1], zf], [inn[n-1][0], inn[n-1][1], zf],
-                       [out[n-1][0], out[n-1][1], zf - 0.6], [out[0][0], out[0][1], zf - 0.6]]);
-  if (pA) polys.push(pA);
+  const inn = clampP(keyHalf(type, edge, e, s, prm, clr));
+  const out = clampP(keyHalf(type, edge, e, s, prm, clr + 0.6));
+  const polys = extrudePoly(out.concat(inn.slice().reverse()), zf - 0.05, zTop);
+  polys.push(...extrudePoly(out, zf - 0.6, zf));
   return polys;
 }
 
@@ -2089,8 +2047,25 @@ function topPocketCup(type, edge, e, s, prm, clr, zf, zTop) {
  * activeJoint), for the same reason connectorPart and keysNeeded are: three answers to
  * one question is two too many, and the third is always the one nobody updates.
  *
- * Returns the operations for one site: `cut` polygons to subtract, `add` shells to push
- * in alongside, and `clip` convex prisms to strip from above.
+ * Returns the operations for one site: `cut` — ONE closed cutter solid to subtract — and
+ * `add`, closed shells to stand in the cavity it leaves.
+ *
+ * The top-inserted housings used to return a third thing: convex prisms for
+ * clipConvexPrismTop, which peeled the material above a z-plane off whatever it was
+ * handed. That is where every top-insert plate's holes came from. The clip splits the
+ * surface by the prism's side planes and by the z-plane and then throws the inside-and-
+ * above fragments away, and it emits NOTHING in their place — no floor at z0, no wall up
+ * the prism's flanks. The result is the shape you wanted with the cut left open: 12 edges
+ * on a plain box, 52 on a cell region, 1620 to 7308 on a 9x9 plate. The cup was expected
+ * to close it and never could, being a separate shell 0.05 mm away.
+ *
+ * A closed prism through csgSubtract does the same removal AND closes it, and the reason
+ * that was not done in the first place — ENGINE.md §2's ban on BSP cuts crossing the
+ * socket cones — was measured rather than assumed this time. A cell region minus this
+ * prism, which spans the whole rim cone band, comes back watertight and correctly
+ * oriented at arcSegs 6, 12 and 24, with the volume the cut should remove. §2a already
+ * said the ban had outlived the bugs behind it; this is one of the three features it was
+ * written for, retested.
  */
 function keySiteOps(kind, shape, prm, clr, edge, e, s, H) {
   if (kind === 'snaptop') {
@@ -2103,16 +2078,18 @@ function keySiteOps(kind, shape, prm, clr, edge, e, s, H) {
          [e + g2*env[1], ss2 + env[3]], [e + g2*env[0], ss2 + env[3]]]
       : [[ss2 + env[2], e + g2*env[0]], [ss2 + env[3], e + g2*env[0]],
          [ss2 + env[3], e + g2*env[1]], [ss2 + env[2], e + g2*env[1]]];
-    // ensure CCW for the clipper
-    const ar = rect.reduce((a, p2, i) => { const q = rect[(i+1)%4]; return a + p2[0]*q[1] - q[0]*p2[1]; }, 0);
-    return { cut: [], add: snapTopPocket(edge, e, s, p, H),
-             clip: [{ cv: ar > 0 ? rect : rect.slice().reverse(), z: env[4] }] };
+    return { cut: extrudePoly(rect, env[4], H + 0.5),
+             add: snapTopPocket(edge, e, s, p, H) };
   }
   if (kind === 'cup') {
     const zf = Math.max(1.2, H - 2.25), zTop = H - 0.85;
-    return { cut: [], add: topPocketCup(shape, edge, e, s, prm, clr, zf, zTop),
-             clip: keyHalfConvexParts(shape, edge, e, s, prm, clr + 0.55)
-                     .map(cv => ({ cv, z: zf - 0.55 })) };
+    /* Grown 0.55 against the cup's 0.6, so the cup's outer skin stands 0.05 inside solid
+       plate — the same overlap the cell regions use, and the reason neither shell needs a
+       coplanar face against the other. The cutter follows keyHalf rather than its convex
+       decomposition, so the cavity is parallel to the wall it houses everywhere instead
+       of squaring off across the dogbone's taper. */
+    return { cut: extrudePoly(keyHalf(shape, edge, e, s, prm, clr + 0.55), zf - 0.55, H + 0.5),
+             add: topPocketCup(shape, edge, e, s, prm, clr, zf, zTop) };
   }
   /* Bottom-inserted recess. The depth is prm.depth capped clear of the plate top, which
      is what every configuration was already cutting: 2.3 for the H-clip, 2.0 for both
@@ -2121,7 +2098,7 @@ function keySiteOps(kind, shape, prm, clr, edge, e, s, H) {
      pairing is the whole reason the depth travels on the dimensions. */
   return { cut: extrudePoly(keyHalf(shape, edge, e, s, prm, clr), -0.5,
                             Math.min(prm.depth, H - 0.8)),
-           add: [], clip: [] };
+           add: [] };
 }
 
 // H-clip proportions expressed as a snap (dogbone) profile — proven-clean cut path
@@ -2188,13 +2165,6 @@ function buildKey(type, prm, height) {
       [[-sl/2, -sw/2], [sl/2, -sw/2], [sl/2, sw/2], [-sl/2, sw/2]], -0.5, height + 0.5));
   }
   return polys;
-}
-
-// full bowtie key (both halves), centred at origin along x
-function bowtieKey(bw, height) {
-  const dp = bw.len/2, wE = bw.wEnd, wW = bw.wWaist;
-  const pts = [[-dp, -wE/2], [0, -wW/2], [dp, -wE/2], [dp, wE/2], [0, wW/2], [-dp, wE/2]];
-  return extrudePoly(pts, 0, height);
 }
 
 // triangulate an annular region between outer loop (CCW) and inner loop (CCW)
@@ -2410,17 +2380,24 @@ function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs) {
     }
   }
   polys.push(...annulusStrip(oc, rings[rings.length - 1], cx, cy, H, true));
-  if (pad <= 0.01) {
-    /* No floor pad means the socket runs clean through, so the underside is the same
-       annulus as the top. It used to be left off entirely, which is half of every
-       plate's missing faces. */
-    polys.push(...annulusStrip(oc, rings[0], cx, cy, rings[0][0][2], false));
-  }
   if (pad > 0.01) {
-    // full bottom cap + socket floor disc
-    const { pts: bp, tris: bt } = earTriangulate(clipped);
-    for (const t of bt) {
-      const p = makePoly([t[2], t[1], t[0]].map(i => [bp[i][0], bp[i][1], 0]));
+    /* Full bottom cap, fanned from the region's centre — the same construction as the
+       socket floor disc below it, and for the same reason.
+     *
+     * It was an ear clip, which on a four-corner region is two triangles and a diagonal
+     * and is perfectly well behaved. Give the region a rounded outer corner and it
+     * becomes a thirteen-gon, and ear clipping a thirteen-gon lays a chain of chords
+     * right across the cell — chords that skim the mounting cylinders tangentially, carve
+     * the same corner of a facet twice a few microns apart, and leave the sliver spurs
+     * this file spends healCsgSeams repairing. Measured over outer radii 0 to 5 with
+     * magnets, screws and both: the ear clip leaks at r = 2 and r = 4 and is clean either
+     * side, which is a lottery rather than a property. A fan from an interior point has
+     * no chords: every edge either lies on the outline or runs to one fixed point. */
+    const cc = [0, 0];
+    for (const p of oc) { cc[0] += p[0]/n; cc[1] += p[1]/n; }
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      const p = makePoly([[cc[0], cc[1], 0], [oc[j][0], oc[j][1], 0], [oc[i][0], oc[i][1], 0]]);
       if (p) polys.push(p);
     }
     const fl = rings[0];
@@ -2430,11 +2407,21 @@ function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs) {
       const p = makePoly([c, fl[j], fl[k]]); if (p) polys.push(p);
     }
   } else {
-    const botR = triangulateRing(oc, rings[0].map(v => [v[0], v[1]]));
-    for (const t of botR.tris) {
-      const p = makePoly([t[2], t[1], t[0]].map(i => [botR.pts[i][0], botR.pts[i][1], 0]));
-      if (p) polys.push(p);
-    }
+    /* No floor pad means the socket runs clean through, so the underside is the same
+       annulus as the top. It used to be left off entirely, which is half of every
+       plate's missing faces.
+     *
+     * There used to be a SECOND underside here as well — a triangulateRing keyhole cap
+     * over the same annulus — left behind when annulusStrip took the job over. It looked
+     * harmless because on every shipped plate it emitted nothing at all: the keyhole
+     * merge of a 4-corner outline with the socket ring is the malformed input
+     * earTriangulate gives up on, and giving up silently is exactly what it does. Feed it
+     * an outline with rounded corners and it makes partial progress instead — 37
+     * triangles where the annulus needs 68 — laying a second, incomplete floor on top of
+     * the first. That was the whole of the test tile's 47 boundary edges (42 used three
+     * times where the two caps overlapped, 5 used once where neither reached), and the
+     * tile was the only caller that ever passed a rounded outline in. */
+    polys.push(...annulusStrip(oc, rings[0], cx, cy, rings[0][0][2], false));
   }
   return polys;
 }
@@ -2490,14 +2477,41 @@ function buildPiece(cfg, layout, piece, onStatus) {
   const t = cfg.tab;
   // ---- global outline: rect + rounded outer corners + notch bites ----
   const rr = cfg.cornerRadii || {};
-  const rOf = (k) => Math.max(0, Math.min(rr[k] !== undefined ? rr[k] : cfg.outerRadius, half));
+  /* Capped where the arc would run into the corner socket rather than at half a cell,
+     which is where it used to be capped and is a number with nothing behind it.
+   *
+     Both shapes are rounded squares about the same corner, so this is one dimension: the
+     socket's corner arc comes to (dTop + rTop)·√2 − rTop of the cell corner along the
+     diagonal, and the plate's comes to rc(√2 − 1). Leave WALL between them and solve for
+     rc. On the stock profile that is 4.88 mm, and it is not theoretical — measured across
+     radii 0 to 6 with magnets, with screws and with both, everything up to 5 is watertight
+     and 6 opens 1168 edges on a screwed plate, which is the arc eating the rim it needed
+     to cut through. A drawer with a corner rounder than this wants a margin, not a rounder
+     plate: past the cap the corner cell has no rim left to hold a bin down. */
+  const WALL = 0.2;
+  const rMax = Math.max(0, ((cfg.topCutoff + cfg.socketRadius) * Math.SQRT2
+                            - cfg.socketRadius - WALL) / (Math.SQRT2 - 1));
+  const rOf = (k) => Math.max(0, Math.min(rr[k] !== undefined ? rr[k] : cfg.outerRadius,
+                                          rMax, half));
   const NARC = 10;
-  const round = {
-    ll: piece.col === 0 && piece.row === 0,
-    lr: piece.col === layout.cols-1 && piece.row === 0,
-    ur: piece.col === layout.cols-1 && piece.row === layout.rows-1,
-    ul: piece.col === 0 && piece.row === layout.rows-1,
-  };
+  /* A corner of the WHOLE plate, not of the piece: only the piece that owns it gets the
+     arc, and the other three of its corners stay square so it still butts up against its
+     neighbours.
+   *
+   * This asked `piece.col`, `piece.row`, `layout.cols` and `layout.rows`, none of which
+   * computeLayout has ever produced — it lays pieces out as `band`/`seg` over a grid of
+   * `nx` by `ny` cells. Four `undefined === 0` comparisons meant every flag was false and
+   * cfg.outerRadius and cfg.cornerRadii, both of which the page offers as controls, did
+   * nothing whatever to a downloaded plate. buildTestTile was the only caller that ever
+   * set col and row, so the tile was the only thing in the project with rounded corners.
+   *
+   * Asking the cell extents rather than the band and seg indices is deliberate: with a
+   * staggered split the bands do not share their column cuts, so seg 0 of band 2 is at
+   * the left edge but the LAST seg of that band need not be at the right one. Where a
+   * piece sits in the cell grid always answers this; where it sits in the list does not. */
+  const atL = piece.cellX0 === 0, atR = piece.cellX0 + piece.nx === layout.nx;
+  const atF = piece.cellY0 === 0, atB = piece.cellY0 + piece.ny === layout.ny;
+  const round = { ll: atL && atF, lr: atR && atF, ur: atR && atB, ul: atL && atB };
   function corner(cx, cy, a0, doRound, key) {
     const rc = rOf(key);
     if (!doRound || rc <= 0.01) return [[cx, cy]];
@@ -2528,7 +2542,11 @@ function buildPiece(cfg, layout, piece, onStatus) {
   const cellYi = piece.mF > 0.01 ? 1 : 0;
   const BLOAT = 0.05;
 
-  let allPolys = [];
+  /* Shells, kept apart rather than poured into one soup, because the top-insert pass
+     below has to subtract from each one on its own — a subtraction is only defined
+     against a single closed solid, and this piece is a dozen of them deliberately
+     overlapping. They are concatenated at the end and nothing downstream can tell. */
+  const shells = [];
   let done = 0;
   for (let ix = 0; ix < xs.length-1; ix++) {
     for (let iy = 0; iy < ys.length-1; iy++) {
@@ -2539,7 +2557,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
       const ci = ix - cellXi, cj = iy - cellYi;
       const isCell = ci >= 0 && ci < piece.nx && cj >= 0 && cj < piece.ny;
       if (!isCell) {                                 // margin / corner: plain extrusion
-        for (const p of extrudePoly(clipped, 0, H)) allPolys.push(p);
+        shells.push(extrudePoly(clipped, 0, H));
         continue;
       }
       const cx = gx0 + ci*pitch + half, cy = gy0 + cj*pitch + half;
@@ -2643,7 +2661,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
           cuts.fastener.push(...movePolys(cellFastener, cx + sx*off, cy + sy*off));
       }
       for (const cut of Object.values(cuts)) if (cut.length) region = csgSubtract(region, cut);
-      for (const p of region) allPolys.push(p);
+      shells.push(region);
       done++;
       if (onStatus && done % 8 === 0) onStatus(`cells ${done}`);
     }
@@ -2676,7 +2694,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
         let boss = extrudePoly(world, 0, bossH);
         if (bossFastener)
           boss = csgSubtract(boss, movePolys(bossFastener, ccx + sx*off, ccy + sy*off));
-        for (const p of boss) allPolys.push(p);
+        shells.push(boss);
       }
     }
   }
@@ -2684,30 +2702,56 @@ function buildPiece(cfg, layout, piece, onStatus) {
   // ---- puzzle male tabs (protrude at floor level) ----
   for (const pt of ptabs) {
     const fp = puzzleShape(pt.edge, pt.e, pt.s, cfg.puzzle, 0, false);
-    for (const p of extrudePoly(fp, 0, Math.max(1.2, pad - 0.65))) allPolys.push(p);
+    shells.push(extrudePoly(fp, 0, Math.max(1.2, pad - 0.65)));
   }
 
   // ---- tabs (separate overlapping shells) ----
   for (const tb of tabs) {
     const fp = tabFootprint(tb.edge, tb.e, tb.s, t.wr, t.wt, t.dp, 0.8);
-    for (const p of extrudePoly(fp, 0, t.h)) allPolys.push(p);
+    shells.push(extrudePoly(fp, 0, t.h));
   }
-  // top-insert keyed pockets: BSP-free clip + direct pocket cups, both from keySiteOps
+  /* ---- top-insert keyed pockets ----
+   *
+   * The pocket is cut out of every shell that reaches it and the housing is then stood in
+   * the cavity as further shells. It used to be a clip over the whole finished soup, and
+   * the soup is the reason the clip looked like the only option: a subtraction needs one
+   * closed solid on each side, and the piece at this point is a dozen overlapping ones.
+   * Handing each shell its own subtraction is all it takes, and each one comes back closed.
+   *
+   * The cutters of all the sites a shell reaches go in as one batch. Sites sit on cell
+   * junctions along a seam, so the closest two can be — one on each edge at a corner — is
+   * a full pitch apart against a cutter that reaches about 14 mm, and no two overlap.
+   * That is the same argument the notch and key batches upstairs rest on. */
   if (keyKind !== 'recess') {
-    let ps = allPolys;
+    const box = (polys) => {
+      const b = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+      for (const p of polys) for (const v of p.verts)
+        for (let k = 0; k < 3; k++) {
+          if (v[k] < b[k]) b[k] = v[k];
+          if (v[k] > b[k + 3]) b[k + 3] = v[k];
+        }
+      return b;
+    };
+    const hits = (a, b) => a[0] < b[3] && b[0] < a[3] && a[1] < b[4] && b[1] < a[4] &&
+                           a[2] < b[5] && b[2] < a[5];
+    const sites = [];
     for (const bo of keyed) {
       if (Math.abs(bo.s / pitch - Math.round(bo.s / pitch)) > 0.25 &&
           Math.abs((bo.s - (bo.edge === '+x' || bo.edge === '-x' ? gy0 : gx0)) / pitch -
                    Math.round((bo.s - (bo.edge === '+x' || bo.edge === '-x' ? gy0 : gx0)) / pitch)) > 0.25)
         continue;
       const op = keySiteOps(keyKind, keyShape, keyPrm, keyClr, bo.edge, bo.e, bo.s, H);
-      for (const c of op.clip) ps = clipConvexPrismTop(ps, c.cv, c.z);
-      for (const p of op.add) ps.push(p);
+      sites.push({ cut: op.cut, add: op.add, box: box(op.cut) });
     }
-    allPolys = ps;
+    for (let i = 0; i < shells.length; i++) {
+      const b = box(shells[i]), cut = [];
+      for (const st of sites) if (hits(st.box, b)) cut.push(...st.cut);
+      if (cut.length) shells[i] = csgSubtract(shells[i], cut);
+    }
+    for (const st of sites) shells.push(st.add);
   }
   if (onStatus) onStatus('done');
-  const outPolys = clampZ(allPolys, 0);
+  const outPolys = clampZ([].concat(...shells), 0);
   const protr = { l: 0, r: 0, f: 0, b: 0 };
   for (const tb of tabs) {
     if (tb.edge === '+x') protr.r = t.dp; else if (tb.edge === '-x') protr.l = t.dp;
@@ -2724,8 +2768,11 @@ function buildPiece(cfg, layout, piece, onStatus) {
 
 // 1x1 test tile: single-cell plate, no margins/connectors
 function buildTestTile(cfg) {
-  const layout = { cols: 1, rows: 1 };
-  const piece = { id: 'TEST', col: 0, row: 0, cellX0: 0, cellY0: 0, nx: 1, ny: 1, mL: 0, mR: 0, mF: 0, mB: 0 };
+  /* Shaped like anything computeLayout returns, because buildPiece reads the layout to
+     work out which of the plate's outer corners this piece owns. The tile is the whole
+     plate, so it owns all four. */
+  const layout = { nx: 1, ny: 1, pieces: [], seams: [] };
+  const piece = { id: 'TEST', band: 0, seg: 0, cellX0: 0, cellY0: 0, nx: 1, ny: 1, mL: 0, mR: 0, mF: 0, mB: 0 };
   const c2 = Object.assign({}, cfg, { connector: 'none' });
   return buildPiece(c2, layout, piece);
 }
@@ -2805,7 +2852,12 @@ function jointKind(connector, keyMount, keyInsert) {
 function buildFitSample(cfg, H, joint) {
   H = H || 4.25;
   const clrs = [-0.05, 0, 0.05, 0.1].map(d => Math.max(0.02, joint.clr + d));
-  const tileW = 18, tileD = 8, gapX = 7, seamGap = 1.2;
+  /* 10 deep, not 8. A top-inserted cup's outer wall stands 0.6 further into the tile than
+     the key it houses, and the full-size key is 14 long, so on an 8 mm tile the wall
+     landed 0.25 mm from the back edge — inside the tile's own corner arc. That printed a
+     paper-thin back wall, and it left three boundary edges where the cutter grazed the
+     arc. The coupon has to have room for the deepest housing it can be asked to present. */
+  const tileW = 18, tileD = 10, gapX = 7, seamGap = 1.2;
   const polys = [];
   const rounded = (x0, y0, w, d) => {
     const r = 1.6, pts = [];
@@ -2826,12 +2878,13 @@ function buildFitSample(cfg, H, joint) {
       const edge = side < 0 ? '+y' : '-y';
       const e = side < 0 ? -seamGap/2 : seamGap/2;
       const s = x0 + tileW/2;
-      let cuts = [];
+      let cuts = [], adds = [];
       if (joint.part) {
         const op = keySiteOps(joint.kind, joint.shape, joint.prm, clr, edge, e, s, H);
-        for (const c of op.clip) tile = clipConvexPrismTop(tile, c.cv, c.z);
-        for (const p of op.add) tile.push(p);
-        cuts = op.cut;
+        /* Held back rather than pushed in here: the housing stands in the cavity the cut
+           makes, so it must not be part of the solid the cut is taken out of. The clip it
+           replaces did not care, because a clip took no solid as an argument. */
+        cuts = op.cut; adds = op.add;
       } else if (joint.kind === 'puzzle') {
         /* Against the floor pad the plate actually built, not against the tile height.
            The cavity was cut to H - 1.2 and the tab raised to min(2.0, H - 1.4), which
@@ -2860,6 +2913,7 @@ function buildFitSample(cfg, H, joint) {
         }
       }
       if (cuts.length) tile = csgSubtract(tile, cuts);
+      for (const p of adds) tile.push(p);
       for (const p of clampZ(tile, 0)) polys.push(p);
     }
   });
@@ -3074,7 +3128,6 @@ const DEFAULTS = {
   socketRadius: 4.0, outerRadius: 4.0, tolerance: 'standard',
   connector: 'dovetail',
   splitMode: 'balanced', rowCuts: null, colCuts: null,
-  bowtie: { len: 14, wEnd: 8, wWaist: 5, depth: 2.0, clr: 0.15 },
   key: { len: 14, wEnd: 8, wWaist: 5, wMid: 6.5, endLen: 4, waistW: 4.5, lobeR: 4.2, depth: 2.0, clr: 0.15 },
   keySlim: { len: 13, wEnd: 3.8, wWaist: 2.4, wMid: 3.0, endLen: 3.5, waistW: 2.0, lobeR: 1.85, depth: 2.0, clr: 0.12 },
   keyType: 'bowtie', keyMount: 'floor', keyInsert: 'bottom',
@@ -3090,7 +3143,7 @@ const DEFAULTS = {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { computeLayout, pieceConnectors, buildPiece, buildTestTile, buildFitSample, jointKind, bowtieKey, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, keyHalfConvexParts, topPocketCup, snapTopPocket, clipConvexPrismTop, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
+  module.exports = { computeLayout, pieceConnectors, buildPiece, buildTestTile, buildFitSample, jointKind, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, topPocketCup, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
     // shared mesh primitives — also used by the bins tool
     makePoly, triangulateRing, earTriangulate, roundedSquareRing, clampZ, profilePrism,
     skeletonCellRegion, directCellRegion, polyArea2D };

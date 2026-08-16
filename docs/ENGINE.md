@@ -40,10 +40,19 @@ These rules were expensive to learn. Trust them.
   bosses, pocket cups, bin feet, lips and dividers are separate shells fused by the
   slicer. **Never CSG-union shells together.**
 
-- **`clipConvexPrismTop`** — deterministic sequential half-space splitting, no BSP
-  classification at all. Removes material inside a convex 2D polygon above a z-plane, and
-  is safe through any geometry including cones. This is the escape hatch when a cut must
-  cross curved surfaces.
+- ~~**`clipConvexPrismTop`**~~ — **deleted, and it is worth knowing why it was ever
+  trusted.** It removed material inside a convex 2D polygon above a z-plane by sequential
+  half-space splitting, with no BSP classification at all, and was therefore listed here
+  as the escape hatch for a cut that must cross curved surfaces. It is safe in the sense
+  that it cannot corrupt anything. It is also incapable of producing a closed mesh: it
+  splits the surface by the prism's flanks and by the z-plane, throws away the fragments
+  that are inside and above, and emits **nothing at all** in their place — no floor at the
+  z-plane, no wall up the flanks. A plain box came back with 12 boundary edges, a cell
+  region with 52, a 9x9 top-insert plate with between 1620 and 7308. Every top-insert
+  configuration the tool ships was open for the life of the feature because of it, and the
+  pocket cup was expected to close the hole while being a separate shell 0.05 mm away.
+  A removal that does not close what it opens is not a cutting tool. Subtract a closed
+  prism; see §2 for what that costs near the cones, which is nothing.
 
 - **Coincidence-breaking jitter** (`J = 0.0017` on cutter positions), and keeping cutter
   faces off exactly-coplanar planes.
@@ -123,11 +132,22 @@ All empirically confirmed, all from real corruption:
   rim cone z 2.5–4.25). Symptom: cells progressively lose walls and rims with height;
   slices come back with ~25% open paths. This killed full-height dovetail notches,
   through-slot H-clips (three attempts), and generic top pockets via CSG.
-  **Caveat:** see §2a. Every one of those failures happened while `csgSubtract` was
-  leaving T-junctions in everything it touched and the rim above the cones carried
-  inverted triangles, and the cell region now survives cuts through the cone band
-  cleanly. The rule is kept because it is cheap to obey and nobody has retested the three
-  features it was written for — not because the mechanism is still understood.
+
+  **One of those three has now been retested, and the rule did not hold.** The generic top
+  pocket is a convex prism from below the pocket floor up past the plate top — it spans
+  the whole rim cone band — and a cell region minus that prism comes back watertight,
+  correctly wound, fold-free and at the right volume at arcSegs 6, 12 and 24. It is the
+  box-minus-box class of §1 and it behaves like it. Every top-inserted key housing is
+  built that way now.
+
+  What is left of the rule is a warning rather than a ban. The failures it was written
+  from all happened while `csgSubtract` was leaving T-junctions in everything it touched
+  and the rim above the cones carried inverted triangles (§2a), and neither is true any
+  more. The cone facets are still near-tangent to one another, so a cutter with its own
+  near-tangent facets — the puzzle key's lobe is the one in this file — still dices the
+  crossing into micron slivers, and some of those come back as coplanar folds. If you take
+  a cut through the cones, measure it; do not assume either that it will fail or that it
+  will pass.
 - **Extruding non-planar quads on cones.** Corner-arc faces are conical — a quad spanning
   one is non-planar. **Emit triangles.** The same applies anywhere a face's four corners
   do not share a plane, such as a wall top whose height varies along its length.
@@ -159,7 +179,19 @@ Three related traps in the supporting code:
 - `clipToRect` is textbook Sutherland–Hodgman with **no concave handling**.
 - `earTriangulate` fails **silently** on malformed input — it breaks out of its loop and
   returns a partial triangulation rather than throwing.
-- **A polygon whose vertices have drifted off its stored plane will hang `Node.build`.**
+
+  The version of this that is hard to spot is a call that fails silently for years and is
+  then *rescued* by an input it can make progress on. `directCellRegion` kept a vestigial
+  second underside — a `triangulateRing` keyhole cap over the annulus `annulusStrip`
+  already covers — and on every plate the tool has ever shipped it returned **zero**
+  triangles, because a four-corner outline keyholed against the socket ring is precisely
+  what the ear clipper gives up on. Nothing was wrong, visibly. Hand it an outline with a
+  rounded corner and it makes partial progress instead: 37 triangles where the annulus
+  needs 68, laid on top of the cap that was already there. 47 boundary edges, and the only
+  caller that passed a rounded outline was the test tile, which is a shipped download.
+  **A call whose correctness depends on the ear clipper continuing to fail is not
+  correct.**
+- **A polygon whose vertices have drifted off its stored plane will hang `BspNode.build`.**
   The build takes its splitting plane from one of the polygons it is sorting; if that
   polygon's own vertices no longer classify as coplanar, nothing lands in the node, every
   polygon goes to the same child, and the child makes the same choice forever. It grows a
@@ -217,10 +249,20 @@ construction — was wrong twice over. Overlapping shells do not produce bad edg
 shell is closed on its own, so every edge is still used exactly twice. The 20% was holes,
 and treating it as normal is what let them stay for the life of the project.
 
-Three configurations still leak, and they are **quarantined by name in
+Four configurations still leak, and they are **quarantined by name in
 `test/plate-audit.js` rather than excused here**, so the summary line cannot say
 "watertight" over them. Do not generalise from them to a new tolerance for nonzero
 counts; the whole point of naming them is that the number for everything else is zero.
+
+**A configuration with no case is worse than one with a quarantined case**, and this file
+had four of them. `keyInsert: 'top'` had never been built by the audit in any of its
+housings, and all four were open — 3536 bad edges on the H-clip, 7796 on the puzzle key,
+overwhelmingly use-count 1. See §1 on `clipConvexPrismTop` for why. Worse, three cases
+that *looked* like coverage were not: `9x9 bowtie`, `9x9 puzzlekey` and `9x9 snap` built
+the same bowtie plate three times, because the key's shape comes from `cfg.keyType` and
+only the page ever kept that in step with `cfg.connector`. The puzzle key had never been
+built at all, and had been leaking 14 edges a plate throughout. When you add a case, check
+what it builds, not whether it passes.
 
 Read the edge-use histogram the audit prints before deciding what a leak is, because two
 very different bugs both show up as "bad edges":
@@ -250,19 +292,38 @@ bugs, and clearing one tells you nothing about the other.**
   couple of them into spurs — a face that is real surface everywhere except for one
   out-and-back excursion, which no single-face test could see.
 
-What is quarantined now is **`connector: 'puzzle'` at arcSegs 6 or 8**, and it is the
+What is quarantined now is **`connector: 'puzzle'` at every smoothness**, and it is the
 second kind: exactly one edge per notch, always used 4, never once. The lobe's far pole
 points along the seam, the boundary between two cell regions runs along that same line,
 and both regions cut the same notch — so both carry the apex vertex and the vertical edge
 either side of it. Two closed shells sharing an edge, the bosses bug in miniature.
 
-Deterministic, not luck: measured across 6/8/12/24 at six drawer sizes, 6 and 8 carry one
-per notch and 12 and 24 carry none, with no size dependence either way. It is quarantined
-rather than fixed because **every fix costs joint geometry**, which is worse than the
-defect. Sliding the joint 0.09 mm along the seam gets the apex out of the overlap band
-and lands the lobe on the socket's flat wall at x = 2.15 instead, opening five real
-boundary edges. Reshaping the lobe so no vertex sits at the pole changes the notch's
-reach. If you take this on, the rule to aim at is the one the dovetail obeys by accident:
+**"12 and 24 carry none" was in this paragraph and it was wrong**, and the way it was wrong
+is worth more than the number. At those smoothnesses the two regions happened to subdivide
+their copies of the apex edge at different heights, so the four uses landed on two
+different edges and the count read zero. Changing the floor cap of a padded cell from an
+ear clip to a fan — a change with no connection to the joint at all — made the two agree,
+and the defect appeared at 12 too, at exactly twice the size (the edge is split in half
+there, so 14 rather than 7). It was called "deterministic, not luck" on the strength of a
+sweep over four smoothnesses and six drawer sizes, and the sweep was measuring a
+coincidence that held across all of them. **An edge count that depends on two shells
+disagreeing about where to put a vertex is not evidence of anything.**
+
+It is quarantined rather than fixed because **every fix costs joint geometry**, which is
+worse than the defect. Sliding the joint 0.09 mm along the seam gets the apex out of the
+overlap band and lands the lobe on the socket's flat wall at x = 2.15 instead, opening
+five real boundary edges. Reshaping the lobe so no vertex sits at the pole changes the
+notch's reach, and the audit asserts that reach to 1e-9 against the tab it mates with.
+
+The puzzle **key** had the identical defect from the identical cause — 14 edges a plate on
+every floor mount — and it is fixed rather than quarantined, which is the difference
+between a cutter that shapes a pocket and one that shapes a mating face. `keyHalf` now
+cuts the lobe into an **odd** number of segments so no vertex lands on the pole, and
+inflates the arc by `1/cos(Δ/2)` so the facet that spans the pole still reaches the
+nominal radius. The pocket comes out the same size to the micron and up to 26 µm looser
+elsewhere, which is the harmless direction. A notch that a printed tab has to enter has no
+such slack. If you take the notch on, the rule to aim at is the one the dovetail obeys by
+accident:
 **a cutter straddling a region boundary must cross it with a face, not a vertex.**
 
 Run the headless audits:
@@ -293,6 +354,26 @@ is one edit away from a change to the fit. Nothing else in the file would notice
 0.3 mm slacker is exactly as watertight and prints exactly as well, right up to the point
 where the pieces will not hold together. If you touch `puzzleShape`, that section is what
 tells you whether you touched the joint as well as the mesh.
+
+Two of its sections exist to catch a defect that has no mesh symptom at all:
+
+- **The housing has to be built, not merely closed.** A top-insert plate with the pocket
+  never cut and the cup never added is watertight, correctly wound and passes everything
+  else. So the audit drops a vertical probe down the middle of the first key site on each
+  piece and requires the highest surface over that point to be the pocket floor rather than
+  the plate's top face, and requires the piece to have gained shells against the same plate
+  switched to bottom insert. Reading it as an area does not work: the clip pocket's walls
+  come up flush with the plate top and hand back almost exactly the area its cavity took.
+- **A parameter has to reach something.** Every cfg the cases hand to `core.js` goes in
+  through a Proxy that records which keys were read, and the union has to cover `DEFAULTS`.
+  `cfg.outerRadius` and `cfg.cornerRadii` were dead for the life of the project — tested
+  against `piece.col` and `layout.cols`, which `computeLayout` has never produced, so every
+  corner flag was `undefined === 0` and no exported plate ever had a rounded corner, while
+  the page offered a control for each of the four. `DEFAULTS.bowtie` was dead too, copied
+  into state on every clearance change and read by nothing. Neither could fail a test,
+  because a dead parameter breaks nothing. This is the assertion that a dead one breaks.
+  It proves less than it sounds — a key read and thrown away still counts — but it is
+  precisely the failure that got past everything else.
 
 ## 5a. Orientation is a separate question, and it needs three checks
 
@@ -330,7 +411,7 @@ Two things the checks must **not** treat as defects, and do not:
   top-insert hclip pocket reads −359 mm³ inside a 27 mm³ bounding box. Volume is asserted
   only on shells every edge of which is used an even number of times.
 - **Abutting shells are not inverted shells.** `baseMode: 'bosses'` and the puzzle lobe
-  apex at arcSegs 6 both put two correctly-wound shells face to face or edge to edge.
+  apex both put two correctly-wound shells face to face or edge to edge.
   Their shared edges come out balanced 2 and 2, and the fold test only looks at edges used
   by exactly two triangles, so it never sees them. Measured clean on every quarantined
   case.
@@ -345,12 +426,21 @@ the leaks:
   reversed, which only traces anticlockwise while `outer` is the larger radius. Convex
   corners pass `[CR, CR - t]` and are right; the reflex fillet passes `[CR, CR + t + OVER]`
   and reverses the loop, with nothing downstream renormalising it.
-- **The puzzle fit sample**, in `test/plate-audit.js`. Six coplanar slivers on the
-  undersides of two of its four tiles, 5.2e-5 to 5.5e-4 mm² each. They come out of
-  `csgSubtract`, not out of the sample: one tile minus one puzzle cutter reproduces one at
-  clearance 0.25 and none at 0.20 or 0.30. It is the sliver-spur class described under the
-  puzzle notch ceiling below, at a hundredth of the size, and its repair lives inside
-  `healCsgSeams`.
+- **The top-inserted wall cup for the puzzle key**, in `test/plate-audit.js`. 14 coplanar
+  slivers of about 1e-4 mm² on 2 of the 4 pieces at arcSegs 12, and **none at the arcSegs 6
+  the tool ships**. It is the only key housing whose cutter crosses the socket's *corner*
+  cone: a key site is where four cells meet, the wall mount puts the pocket in the rim
+  rather than in a floor pad, and top insert runs the cutter from below the pocket floor up
+  past the plate top. A lobe arc and a cone arc then cross at a shallow angle, and both are
+  made of near-tangent facets. Sensitive enough to be worth a warning: over segment counts
+  17/19/21/25/33 the same plate ranges from 0 folds to 89, with no monotonicity, which is
+  what a sliver lottery looks like from the outside.
+
+  The puzzle fit sample used to be quarantined here for six slivers of 5.2e-5 to 5.5e-4 mm²
+  on two of its four tiles, and it is clean now. The honest account is that the coupon's
+  tiles went from 8 mm deep to 10 — because a top-insert cup's wall needs the room — and
+  the cutter's planes now graze the tile's corner arc somewhere else. Nothing in
+  `csgSubtract` changed. If it comes back, that is what it is.
 
 A warning about writing checks for this file. The rim-cap check originally asserted two
 things and claimed they were complementary: no triangle inverted, and the signed areas
@@ -393,3 +483,18 @@ currently installed):
   at full density, thick blocks as shell + infill × core.
 - **The socket's corner clearance is not uniform.** Known, documented, deliberately not
   fixed — see [socket-clearance.md](socket-clearance.md).
+- **The plate's outer corner radius has a ceiling, and it is the socket's.** Both the
+  plate's corner and the socket's are rounded squares about the same corner, so the arc
+  eats towards the rim as it grows: on the stock profile they meet at about 5.0 mm and
+  `buildPiece` caps at **4.88**, leaving 0.2 mm of rim. It is not a safety margin invented
+  for tidiness — at 6 mm a screwed plate opens 1168 boundary edges, which is the arc having
+  cut away the very rim the mounting cutter still has to pass through. Past the cap the
+  corner cell has nothing left to hold a bin down; a drawer with a rounder corner than that
+  wants a margin, not a rounder plate. The old cap was half a cell, which is a number with
+  nothing behind it.
+- **`clipToRect` and `earTriangulate` never see the outer corner arc on a plain plate.**
+  Everything they are handed there is a four-cornered rectangle, which is why two separate
+  latent defects — the vestigial `triangulateRing` underside, and the ear clip's chords
+  skimming the mounting cylinders — only surfaced once the radii were connected. If you
+  change what the outline is made of, re-run the audit with magnets *and* screws on: they
+  are the cases with cutters close enough to a cap's triangulation to feel it.
