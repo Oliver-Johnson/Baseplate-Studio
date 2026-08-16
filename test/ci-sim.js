@@ -6,8 +6,20 @@
    Windows; .gitattributes checks every text file out as LF now, so the working tree
    and git's bytes no longer disagree.) */
 const { execSync } = require('child_process');
-const seo = require('../tools/seo.js');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const generated = require('../tools/generated.js');
 const g = (p) => execSync(`git show HEAD:${p}`, { encoding: 'utf8', maxBuffer: 1e8 });
+
+/* The joint diagrams are drawn from core.js's DEFAULTS, so the committed page can only
+   be reproduced by the committed core.js -- requiring the working tree's would let an
+   uncommitted change to a joint dimension slip past the one check whose whole purpose
+   is to read git's bytes rather than the disk's. Node can only require a path, so the
+   blob goes to a temp file. */
+const coreTmp = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cisim-')), 'core.js');
+fs.writeFileSync(coreTmp, g('src/core.js'));
+const CORE = require(coreTmp);
 const MARK = (name) => new RegExp(`[ \\t]*\\r?\\n?/\\*__${name}__\\*/[ \\t]*\\r?\\n?`);
 
 /* The same manifest build.js splices from. This used to be a hand-kept copy that
@@ -24,7 +36,7 @@ for (const t of tools) {
     if (!MARK(m).test(s)) { console.log(`${t.out}: marker ${m} NOT FOUND`); ok = false; }
     s = s.replace(MARK(m), () => g(f));
   }
-  s = seo.inject(s);
+  s = generated(s, CORE);
   const committed = g(t.out);
   const match = s === committed;
   if (!match) ok = false;

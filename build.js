@@ -28,7 +28,7 @@ const checkOnly = process.argv.includes('--check');
 const TOOLS = require('./tools/manifest.js');
 
 const seo = require('./tools/seo.js');
-const joints = require('./tools/joints.js');
+const generated = require('./tools/generated.js');
 /* Everything the build reads is LF, so everything it writes is LF, so the bytes
    written are the bytes git stores are the bytes a checkout produces — on every
    platform. .gitattributes pins the checkout, which normally makes this a no-op; it
@@ -115,12 +115,10 @@ for (const tool of TOOLS) {
   let out = template;
   for (const marker of Object.keys(tool.parts))
     out = out.replace(MARK(marker), () => sources[marker]);
-  out = seo.inject(out);   // FAQ markup generated from the page's own questions
-  /* Joint diagrams, drawn from core.js's own parameters. A hand-drawn joint is a claim
-     about the geometry that nothing checks; a generated one cannot disagree with the
-     part it depicts. */
-  if (out.includes('<!--__JOINTS__-->'))
-    out = out.replace('<!--__JOINTS__-->', joints.gallery(require('./src/core.js')));
+  /* The generated content -- the FAQ markup and the joint diagrams -- is applied by
+     tools/generated.js, which test/ci-sim.js also calls. Two lists of build steps kept
+     in two places is what made ci-sim report a stale page three separate times. */
+  out = generated(out, require('./src/core.js'));
 
   const outPath = path.join(ROOT, tool.out);
   if (checkOnly) {
