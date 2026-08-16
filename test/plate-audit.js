@@ -25,6 +25,14 @@
  * dropdown is the kind of reassurance this file exists to stop. The puzzle notch has
  * since come off that list; the two boss cases have not.
  *
+ * The reassurance can also come from a case that is simply absent, which is worse because
+ * nothing is even claimed. There was no case here for keyInsert 'top' in any of its four
+ * housings, and all four were open by hundreds to thousands of edges; the three keyed
+ * connectors had a case each and built the same bowtie plate three times, because the key
+ * SHAPE comes from cfg.keyType and only the page kept it in step with cfg.connector. Both
+ * are fixed below, and both were found by asking what a case actually builds rather than
+ * whether it passes.
+ *
  * `quarantine: '<reason>'` makes the audit fail BOTH if a healthy case regresses AND if
  * a quarantined one starts passing and nobody took it off the list. Red forever teaches
  * people to ignore a check; silent teaches them it never mattered.
@@ -50,12 +58,59 @@ const CASES = [
   { name: '9x9 no joint', drawerW: 400, drawerD: 400, connector: 'none' },
   { name: '5x4 solid', drawerW: 210, drawerD: 168 },
   { name: '3x3 with margin', drawerW: 140, drawerD: 140, marginMode: 'auto' },
+  /* A hand-placed split, which is the only path that reads cfg.rowCuts and cfg.colCuts —
+     and with the bands cut at different columns, so the pieces do not line up and the two
+     bands' seams meet a piece edge rather than each other. */
+  { name: '4x4 manual split', drawerW: 168, drawerD: 168, splitMode: 'manual',
+    rowCuts: [2], colCuts: [[1], [3]] },
   /* Every remaining connector, because all of them are dropdown options and only
-     dovetail was ever covered. They have to be big enough to split, as above. */
-  { name: '9x9 bowtie', drawerW: 400, drawerD: 400, connector: 'bowtie' },
-  { name: '9x9 puzzlekey', drawerW: 400, drawerD: 400, connector: 'puzzlekey' },
-  { name: '9x9 snap', drawerW: 400, drawerD: 400, connector: 'snap' },
+     dovetail was ever covered. They have to be big enough to split, as above.
+   *
+   * keyType is spelled out beside connector and that is not decoration. buildPiece takes
+   * the key's SHAPE from cfg.keyType and only the page kept the two in step
+   * (`state.keyType = KEY_CONN.includes(state.connector) ? state.connector : 'bowtie'`),
+   * so these three cases used to build one bowtie plate three times: identical piece,
+   * identical 11577 polygons, identical everything. The puzzle key had never been built
+   * by this file at all, and it was leaking 14 edges a plate the whole time. */
+  { name: '9x9 bowtie', drawerW: 400, drawerD: 400, connector: 'bowtie', keyType: 'bowtie' },
+  { name: '9x9 puzzlekey', drawerW: 400, drawerD: 400, connector: 'puzzlekey', keyType: 'puzzlekey' },
+  { name: '9x9 snap', drawerW: 400, drawerD: 400, connector: 'snap', keyType: 'snap' },
   { name: '9x9 hclip', drawerW: 400, drawerD: 400, connector: 'hclip' },
+  /* Top insert, for every connector that offers it — which is what the page offers when
+     the key lives in the WALL (`keyInsertRow` is shown for hclip, or for a keyed
+     connector with keyMount 'wall'), plus the snap, whose housing switches to the clip
+     pocket on keyInsert 'top' whichever mount is selected.
+   *
+   * None of these had a case, and every one of them was non-manifold: 3536 bad edges on
+   * the H-clip, 2658 on the bowtie, 7796 on the puzzle key, 1946 on the snap, and the
+   * histogram was overwhelmingly use-count 1 — open boundary, on a dropdown option that
+   * ships. clipConvexPrismTop cut the material away and closed nothing behind it. */
+  { name: '9x9 hclip top', drawerW: 400, drawerD: 400, connector: 'hclip', keyInsert: 'top',
+    opens: true },
+  { name: '9x9 bowtie wall top', drawerW: 400, drawerD: 400, connector: 'bowtie',
+    keyType: 'bowtie', keyMount: 'wall', keyInsert: 'top', opens: true },
+  /* Watertight, and the only key housing in the file that still folds. It is also the
+     only one whose cutter crosses the socket's CORNER cone: a key site sits where four
+     cells meet, the wall mount puts the pocket in the rim rather than in a floor pad, and
+     top insert makes it run from below the pocket floor up past the plate top. So a lobe
+     arc and a cone arc cross at a shallow angle and csgSubtract dices the crossing into
+     slivers a few microns wide, of which healCsgSeams folds a handful — the class
+     ENGINE.md records under the puzzle notch ceiling, and the same one the puzzle fit
+     coupon is quarantined for further down. 14 coplanar folds, 1e-4 mm² each, on 2 of the
+     4 pieces at arcSegs 12; ZERO at the arcSegs 6 the tool ships. Chasing it means either
+     retuning healCsgSeams, which is load-bearing for everything else, or moving the lobe,
+     which moves the joint. */
+  { name: '9x9 puzzlekey wall top', drawerW: 400, drawerD: 400, connector: 'puzzlekey',
+    keyType: 'puzzlekey', keyMount: 'wall', keyInsert: 'top', opens: true,
+    oriQuarantine: 'lobe arc crosses the socket corner cone' },
+  { name: '9x9 snap wall top', drawerW: 400, drawerD: 400, connector: 'snap',
+    keyType: 'snap', keyMount: 'wall', keyInsert: 'top', opens: true },
+  /* The same housing over a floor pad rather than a wall, so the pocket sits 2.8 mm
+     higher and cuts a different part of the cell. It is reachable: the page hides the
+     insert control when the mount is 'floor' but does not reset it, and buildPiece asks
+     only whether the connector is a snap. */
+  { name: '9x9 snap floor top', drawerW: 400, drawerD: 400, connector: 'snap',
+    keyType: 'snap', keyMount: 'floor', keyInsert: 'top', opens: true },
   { name: '3x3 magnets above', drawerW: 126, drawerD: 126, magnets: true, magnetSide: 'top' },
   { name: '3x3 magnets+screws', drawerW: 126, drawerD: 126, magnets: true, screws: true },
   /* Quarantined for most of this file's life, at 78 bad edges and then 5033 before that:
@@ -67,23 +122,34 @@ const CASES = [
      along itself, so extrudePoly gave the cutter two coincident side quads facing
      opposite ways and the BSP was being asked about points inside a shell twice. See
      puzzleShape. */
-  { name: '9x9 puzzle', drawerW: 400, drawerD: 400, connector: 'puzzle' },
 
   /* --- quarantined: real, measured, not regressions, still leaking --- */
 
-  /* The same joint at the smoothness the tool actually ships, which is the case above
-     minus its luck — except that it is not luck, it is deterministic. One edge per
-     notch, always used 4, never once: the lobe's far pole points at the seam, the
-     boundary between two cell regions is on that same line, and both regions cut the
-     same notch, so both carry the apex vertex and the vertical edge either side of it.
-     Two closed shells sharing an edge, exactly like the bosses below.
+  /* The lobe's far pole points along the seam, the boundary between two cell regions runs
+     down that same line, and both regions cut the same notch — so both carry the apex
+     vertex and the vertical edge either side of it. One edge per notch, always used 4,
+     never once: two closed shells sharing an edge, exactly like the bosses below.
 
-     It is here rather than fixed because every fix costs joint geometry. Sliding the
-     joint 0.09 mm along the seam to get the apex out of the overlap band does clear it
-     — and lands the lobe on the socket's flat wall at x = 2.15 instead, which opens
-     five REAL boundary edges. Reshaping the lobe so no vertex sits at the pole moves the
-     notch's reach. Measured across 6/8/12/24 at six drawer sizes: 6 and 8 carry one such
-     edge per notch, 12 and 24 carry none, with no size dependence either way. */
+     It is here rather than fixed because every fix costs joint geometry. Sliding the joint
+     0.09 mm along the seam to get the apex out of the overlap band does clear it — and
+     lands the lobe on the socket's flat wall at x = 2.15 instead, which opens five REAL
+     boundary edges. Reshaping the lobe so no vertex sits at the pole moves the notch's
+     reach, and the fit section at the foot of this file asserts that reach to 1e-9. (The
+     puzzle KEY has the same defect from the same cause and is fixed rather than
+     quarantined, because its housing is a pocket and a pocket can be inflated back to size
+     — see keyHalf. A notch that mates with a printed tab cannot.)
+
+     BOTH smoothnesses are listed, and the second one is a correction. The note here used
+     to say the count was deterministic — one per notch at arcSegs 6 and 8, none at 12 and
+     24 — and the first half is right while the second was luck. At 12 the two regions
+     happened to subdivide their copies of the apex edge at different heights, so the four
+     uses landed on two different edges and the count read clean. Changing the floor cap
+     of a padded cell from an ear clip to a centre fan, which has nothing to do with the
+     joint, made the two subdivisions agree and the defect appeared at its true size. An
+     edge count that depends on two shells disagreeing about where to put a vertex was
+     never evidence of anything. */
+  { name: '9x9 puzzle', drawerW: 400, drawerD: 400, connector: 'puzzle',
+    quarantine: 'lobe apex sits on a region boundary' },
   { name: '9x9 puzzle @6', drawerW: 400, drawerD: 400, connector: 'puzzle', arcSegs: 6,
     quarantine: 'lobe apex sits on a region boundary' },
   /* Benign, but it has to be named rather than waved through: corner bosses of adjacent
@@ -98,21 +164,31 @@ const CASES = [
 ];
 
 let bad = 0;
+/* Which of DEFAULTS' keys the builders actually look at, collected as they run. See the
+   section at the foot of this file for what it is for. The proxy goes to core.js and
+   nowhere else: Object.assign over it would enumerate every key and report the lot as
+   read, which is the one way this measurement can lie. */
+const readKeys = new Set();
+const watch = (cfg) => new Proxy(cfg, {
+  get(t, k) { if (typeof k === 'string') readKeys.add(k); return t[k]; },
+});
+
 console.log('case              grid    polys   W x D x H (mm)          mesh');
 for (const cs of CASES) {
   const cfg = Object.assign({}, G.DEFAULTS, {
     marginMode: 'custom', mLeft: 0, mRight: 0, mFront: 0, mBack: 0,
     magnets: false, screws: false, arcSegs: 12,
   }, cs);
+  const wcfg = watch(cfg);
   /* EVERY piece, not just the first. Checking pieces[0] alone reported a split
      dovetail plate as watertight: that piece carries 8 tabs and no notches, so it
      never subtracts, while the three pieces holding the notches leaked 3000+ edges
      each. A case that does not build the geometry it names is worse than no case. */
   let L, pieces;
   try {
-    L = G.computeLayout(cfg);
+    L = G.computeLayout(wcfg);
     pieces = L.pieces.map((pc) => {
-      const r = G.buildPiece(cfg, L, pc);
+      const r = G.buildPiece(wcfg, L, pc);
       return r.polys || r;
     });
   } catch (e) {
@@ -152,13 +228,80 @@ for (const cs of CASES) {
   /* An edge used once is a hole; an edge used four times is two shells touching. Both
      count as "bad" and they need completely different fixes, so say which. */
   const shape = ok ? '' : '  ' + boundaryShare(pieces);
-  console.log(`${cs.name.padEnd(19)} ${(L.nx + 'x' + L.ny).padEnd(6)} ${String(polys.length).padStart(6)}  ` +
+  console.log(`${cs.name.padEnd(24)} ${(L.nx + 'x' + L.ny).padEnd(6)} ${String(polys.length).padStart(6)}  ` +
               `${dims.padEnd(22)} ${ok ? 'watertight' : man.bad + ' BAD EDGES' + many}` +
               `${capBottom ? '' : '  NO BOTTOM FACE'}${capTop ? '' : '  NO TOP FACE'}${shape}${note}`);
   if (cs.quarantine ? ok : !ok) bad++;
-  if (oriBad.length) {
-    console.log(`${''.padEnd(19)} ${oriBad.length}/${pieces.length} pieces: ${orientationNote(oriBad[0])}`);
-    bad++;
+  /* Orientation gets its own quarantine key. The two questions are independent — a case
+     can be watertight and folded, or leak and be perfectly wound — so one flag covering
+     both would excuse a defect nobody had looked at. */
+  if (oriBad.length || cs.oriQuarantine) {
+    const oriNote = cs.oriQuarantine
+      ? (oriBad.length ? `  known: ${cs.oriQuarantine}` : '  NOW CLEAN — take it out of quarantine')
+      : '';
+    console.log(`${''.padEnd(24)} ${oriBad.length}/${pieces.length} pieces: ` +
+                `${oriBad.length ? orientationNote(oriBad[0]) : 'oriented'}${oriNote}`);
+    if (cs.oriQuarantine ? !oriBad.length : true) bad++;
+  }
+
+  /* Watertight is not the same as built. A top-insert plate with the pocket never cut and
+     the housing never added is watertight too, and every line above passes on it — which
+     is the failure this project keeps repeating, so the two halves of the housing are
+     asserted here against the same plate switched to bottom insert.
+   *
+   * Material out: the cutter runs past the plate top, so the top face has to LOSE area.
+   * Shells in: the cup or the clip pocket are separate closed shells overlapping the
+   * plate, so the piece has to GAIN connected components. Each catches the other half's
+   * disappearance and neither catches its own, which is the point of having both.
+   *
+   * What it does not catch is a pocket of the wrong size or in the wrong place; the
+   * opened area is printed so a change in one is at least legible, and the coupon at the
+   * foot of this file is what a user actually presses a key into. */
+  if (cs.opens) {
+    /* Straight down the middle of the first key site on each piece: the highest
+       horizontal surface over that point has to be the pocket floor and not the plate's
+       top face. Reading it as a ray rather than as an area is what makes it work for both
+       housings — the clip pocket's own walls come up flush with the plate top and give
+       back very nearly the area its cavity took, so a top-face area only says the
+       material moved, not that a key can get in. */
+    const inTri = (t, px, py) => {
+      const s = (a, b) => (b[0]-a[0])*(py-a[1]) - (b[1]-a[1])*(px-a[0]);
+      const d1 = s(t[0], t[1]), d2 = s(t[1], t[2]), d3 = s(t[2], t[0]);
+      return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
+    };
+    const roofAt = (ps, px, py) => {
+      let z = -Infinity;
+      for (const t of G.polysToTriangles(ps)) {
+        if (Math.abs(t[0][2] - t[1][2]) > 1e-6 || Math.abs(t[0][2] - t[2][2]) > 1e-6) continue;
+        if (t[0][2] > z && inTri(t, px, py)) z = t[0][2];
+      }
+      return z;
+    };
+    const D = 1.0;   // just inside the seam, well within the narrowest waist of any key
+    const probe = (b) => b.edge === '+x' ? [b.e - D, b.s] : b.edge === '-x' ? [b.e + D, b.s]
+                       : b.edge === '+y' ? [b.s, b.e - D] : [b.s, b.e + D];
+    const refCfg = Object.assign({}, cfg, { keyInsert: 'bottom' });
+    const refL = G.computeLayout(refCfg);
+    const ref = refL.pieces.map((pc) => G.buildPiece(refCfg, refL, pc).polys);
+    let probed = 0, opened = 0, solid = 0, drop = 0;
+    L.pieces.forEach((pc, i) => {
+      // the wall-junction filter buildPiece applies: a key needs a cell junction to sit on
+      const site = G.pieceConnectors(wcfg, L, pc).keyed
+        .find((b) => Math.abs(b.s / cfg.pitch - Math.round(b.s / cfg.pitch)) <= 0.25);
+      if (!site) return;
+      probed++;
+      const [px, py] = probe(site);
+      const zH = roofAt(pieces[i], px, py), zR = roofAt(ref[i], px, py);
+      if (zH < z1 - 0.5) { opened++; drop = Math.max(drop, z1 - zH); }
+      if (Math.abs(zR - z1) < 1e-6) solid++;   // the same point is roofed without the housing
+    });
+    const gained = pieces.reduce((s, p) => s + checkOrientation(p).shells, 0) -
+                   ref.reduce((s, p) => s + checkOrientation(p).shells, 0);
+    const good = probed > 0 && opened === probed && solid === probed && gained > 0;
+    console.log(`${''.padEnd(24)} housing: open to the top on ${opened}/${probed} pieces ` +
+                `(${drop.toFixed(2)} mm down to the pocket floor), ${gained} shells added` +
+                `${good ? '' : '   HOUSING NOT BUILT'}`);
+    if (!good) bad++;
   }
 }
 
@@ -480,23 +623,27 @@ console.log('\nthe orientation check itself, on meshes broken on purpose:');
  * direction and key housing that change WHICH part is produced. The key branch mirrors
  * connectorPart() in src/ui.js — that function is the only answer to "which part", and if
  * it is ever changed to produce something else, this list has to follow it. */
-console.log('\nloose parts and samples, orientation only:');
+console.log('\nloose parts and samples, watertight and oriented:');
 {
   const report = (label, polys, quarantine) => {
     const r = checkOrientation(polys);
+    const m = G.checkManifold(polys);
+    const ok = r.ok && m.bad === 0;
     const note = quarantine
-      ? (r.ok ? '  NOW CLEAN — take it out of quarantine' : `  known: ${quarantine}`)
+      ? (ok ? '  NOW CLEAN — take it out of quarantine' : `  known: ${quarantine}`)
       : '';
-    /* Say when a shell is open, because the volume printed beside it excludes those and
-       would otherwise read as a verdict on the whole part. Not asserted: whether a loose
-       part is watertight is checkManifold's question, and the one part where it currently
-       matters — the top-insert snap sample, whose rim is cut open at each junction on
-       purpose — needs that argument settled before a number here can mean anything. */
+    /* Watertightness is asserted here now, not only orientation. It was left out because
+       the one part where it mattered — the top-insert snap sample, whose rim is cut open
+       at each junction — could not meet the bar, and leaving it out cost the test tile:
+       a shipped download with 47 boundary edges that this section printed as `oriented`
+       and passed, because an inside-out triangle is not what was wrong with it. Every
+       part here is closed now, so the bar can be the same bar the plates answer to. */
     const open = r.open ? `, ${r.open} open` : '';
     console.log(`  ${label.padEnd(26)} ${String(r.tris).padStart(6)} tris  ` +
                 `${String(r.shells).padStart(3)} shells${open.padEnd(9)}  ` +
-                `${r.volume.toFixed(3).padStart(11)} mm3  ${orientationNote(r)}${note}`);
-    if (quarantine ? r.ok : !r.ok) bad++;
+                `${r.volume.toFixed(3).padStart(11)} mm3  ` +
+                `${m.bad ? m.bad + ' BAD EDGES, ' : ''}${orientationNote(r)}${note}`);
+    if (quarantine ? ok : !ok) bad++;
   };
   const H = 4.25;
   const CONNECTORS = ['dovetail', 'puzzle', 'bowtie', 'puzzlekey', 'snap', 'hclip', 'none'];
@@ -544,15 +691,14 @@ console.log('\nloose parts and samples, orientation only:');
   for (const conn of CONNECTORS)
     for (const keyInsert of ['bottom', 'top']) {
       const cfg = Object.assign({}, G.DEFAULTS, { connector: conn, keyInsert });
-      /* The puzzle strip carries six coplanar slivers on the underside of two of its four
-         tiles, areas 5.2e-5 to 5.5e-4 mm², each a triangle facing the opposite way to the
-         cap it sits in. They come out of csgSubtract, not out of the fit sample: cutting
-         one tile with one puzzle cutter reproduces one of them at clearance 0.25 and none
-         at 0.20 or 0.30. It is the sliver-spur class ENGINE.md records under the puzzle
-         notch ceiling, at a hundredth of the size, and the repair for it lives inside
-         healCsgSeams, which is load-bearing enough that changing it to chase 5e-5 mm² is
-         not a thing to do while closing an orientation gap. Named so the number is on
-         record and cannot be mistaken for the check being approximate. */
+      /* The puzzle strip used to carry six coplanar slivers on the underside of two of its
+         four tiles, 5.2e-5 to 5.5e-4 mm² each, and was quarantined for them. They are gone,
+         and the honest account of why is that the coupon's tiles went from 8 mm deep to 10
+         (see buildFitSample) and the cutter's planes now graze the tile's corner arc
+         somewhere else. Nothing in csgSubtract changed. This is the sliver-spur class, it
+         is sensitive to geometry at the micron level — the same six were reproducible at
+         clearance 0.25 and absent at 0.20 and 0.30 — and if it reappears, that is what it
+         is rather than a new bug. */
       /* buildFitSample takes the joint rather than re-deriving it, since deriving it
          twice is what made the coupon present the wrong housing in the first place.
          The UI is the authority (activeJoint in src/ui.js); this is a fixture standing
@@ -560,8 +706,13 @@ console.log('\nloose parts and samples, orientation only:');
          second opinion. It covers the subset this loop varies: connector and insertion,
          at the default clearances. */
       const keyed = ['bowtie', 'puzzlekey', 'snap', 'hclip'].includes(conn);
-      const prm = Object.assign({}, cfg.key);
-      if (keyInsert === 'top' && conn === 'hclip') prm.depth = 2.0;
+      /* Mirrors activeKeyDims() in src/ui.js, which is the authority. It used to hand
+         cfg.key to everything, so the H-clip coupon presented a 14 mm key's housing where
+         the tool builds a 3.6 mm one — a fixture that was not standing in for anything. */
+      const prm = conn === 'hclip' ? G.hclipPrm(cfg.hclip)
+        : cfg.keyMount === 'wall' ? Object.assign({}, G.DEFAULTS.keySlim)
+        : Object.assign({}, cfg.key);
+      if (keyInsert === 'top' && (conn === 'hclip' || cfg.keyMount === 'wall')) prm.depth = 2.0;
       const joint = keyed
         ? { kind: G.jointKind(conn, cfg.keyMount, keyInsert),
             shape: conn === 'hclip' ? 'snap' : conn, prm,
@@ -572,20 +723,91 @@ console.log('\nloose parts and samples, orientation only:');
             part: G.buildKey(conn === 'hclip' ? 'snap' : conn, prm, prm.depth - 0.15) }
         : { kind: conn, pad: 0,
             clr: conn === 'puzzle' ? cfg.puzzle.clr : cfg.tab.clr };
-      /* hclip/top is the one configuration whose coupon is genuinely open, and it only
-         became visible here once the coupon started building the right housing at all:
-         before that it presented a bottom recess and never exercised the cup. The cause
-         is pre-existing and documented -- clipConvexPrismTop removes material above z0
-         inside the prism and emits neither a cap at z0 nor side walls, leaning on the
-         pocket cup to close it, and the cup's floor slab overlaps rather than seals. It
-         is the same reason every top-insert PLATE leaks, which is a separate argument
-         from orientation and is not one to settle inside a merge. */
-      report(`fit sample ${conn}/${keyInsert}`, G.buildFitSample(cfg, H, joint).polys,
-             conn === 'puzzle' ? 'csgSubtract sliver spurs on the tile underside'
-             : (conn === 'hclip' && keyInsert === 'top')
-               ? 'clipConvexPrismTop leaves the cup open — same cause as top-insert plates'
-               : null);
+      /* hclip/top was quarantined here as `clipConvexPrismTop leaves the cup open`, and
+         it is out: the clip is gone, the housing is a subtraction with a closed cutter
+         and the cup is two closed extrusions instead of a stitched surface. The same
+         change is what closed every top-insert plate above. */
+      report(`fit sample ${conn}/${keyInsert}`, G.buildFitSample(cfg, H, joint).polys);
     }
+}
+
+/* The corner radii, on the plate's corners and on no others.
+ *
+ * cfg.outerRadius and cfg.cornerRadii reached nothing at all until now — buildPiece asked
+ * `piece.col` and `layout.cols` against a layout that has only ever produced `band` and
+ * `seg`, so every flag was `undefined === 0` and every exported plate had square corners
+ * while the page offered a radius per corner and a hint about matching your drawer. That
+ * is not a defect any of the checks above can see: a square plate is exactly as watertight
+ * as a rounded one, and the DEFAULTS sweep at the foot of this file cannot see it either,
+ * because the field is read and then discarded.
+ *
+ * So the shape is asserted, on a split plate where three of each piece's four corners must
+ * stay square or the pieces will not butt together. A square corner has a vertex sitting on
+ * it; a rounded one has none, and has the two arc ends instead, which is what pins the
+ * radius to the number asked for rather than merely to something. */
+console.log('\nrounded outer corners, on the plate and nowhere else:');
+{
+  const radii = { ll: 2, lr: 0, ur: 6, ul: 4 };
+  const cfg = Object.assign({}, G.DEFAULTS, {
+    drawerW: 168, drawerD: 168, marginMode: 'custom', mLeft: 0, mRight: 0, mFront: 0, mBack: 0,
+    magnets: false, screws: false, arcSegs: 12, connector: 'none',
+    splitMode: 'manual', rowCuts: [2], colCuts: [[2], [2]], cornerRadii: radii });
+  const L = G.computeLayout(cfg);
+  // the cap the socket forces on a corner arc; 6 is asked for above and must come back capped
+  const rMax = ((cfg.topCutoff + cfg.socketRadius) * Math.SQRT2 - cfg.socketRadius - 0.2)
+               / (Math.SQRT2 - 1);
+  for (const pc of L.pieces) {
+    const r = G.buildPiece(cfg, L, pc);
+    const at = (x, y) => r.polys.some((p) => p.verts.some(
+      (v) => Math.abs(v[0] - x) < 1e-6 && Math.abs(v[1] - y) < 1e-6));
+    const owns = { ll: pc.cellX0 === 0 && pc.cellY0 === 0,
+                   lr: pc.cellX0 + pc.nx === L.nx && pc.cellY0 === 0,
+                   ur: pc.cellX0 + pc.nx === L.nx && pc.cellY0 + pc.ny === L.ny,
+                   ul: pc.cellX0 === 0 && pc.cellY0 + pc.ny === L.ny };
+    const corner = { ll: [0, 0], lr: [r.W, 0], ur: [r.W, r.D], ul: [0, r.D] };
+    const inward = { ll: [1, 1], lr: [-1, 1], ur: [-1, -1], ul: [1, -1] };
+    const notes = [];
+    let good = true;
+    for (const k of ['ll', 'lr', 'ur', 'ul']) {
+      const rc = Math.min(radii[k], rMax);
+      const [cx, cy] = corner[k], [sx, sy] = inward[k];
+      const round = owns[k] && rc > 0.01;
+      const square = at(cx, cy);
+      // the two ends of the arc, one along each edge
+      const ends = round && at(cx + sx*rc, cy) && at(cx, cy + sy*rc);
+      if (square === round || (round && !ends)) { good = false; notes.push(k); }
+    }
+    console.log(`  piece ${pc.id}  cells (${pc.cellX0},${pc.cellY0})+${pc.nx}x${pc.ny}  ` +
+                `rounded ${['ll', 'lr', 'ur', 'ul'].filter((k) => owns[k] && radii[k] > 0.01).join(',') || 'none'}` +
+                `${good ? '' : `   WRONG AT ${notes.join(',')}`}`);
+    if (!good) bad++;
+  }
+  console.log(`  a 6 mm corner is capped to ${rMax.toFixed(2)} mm, where the arc would ` +
+              `otherwise eat the corner socket's rim`);
+}
+
+/* Every parameter in DEFAULTS is read by somebody.
+ *
+ * Two of the defects this file now covers were the same shape, and neither could fail a
+ * test, because there is no assertion a dead parameter breaks. `cfg.outerRadius` and
+ * `cfg.cornerRadii` were consulted through `piece.col` and `layout.cols`, which
+ * computeLayout has never produced — four `undefined === 0` comparisons, and no plate this
+ * project has ever exported had a rounded corner, while the page offered a control for it
+ * and a hint about matching your drawer. `DEFAULTS.bowtie` was copied into state on every
+ * clearance change and read by nothing at all; a bowtie's dimensions come from
+ * `DEFAULTS.key`. Editing either one changed nothing and said nothing.
+ *
+ * So every cfg the cases above hand to core.js goes in through a Proxy that records which
+ * keys were looked at, and the union has to cover DEFAULTS. It proves less than it sounds:
+ * a key read and then ignored still counts, and a key only some configuration reaches needs
+ * a case here that reaches it — which is why the manual-split case exists. But it is the
+ * exact failure that got past everything else, and it costs one object wrapper. */
+console.log('\nevery parameter in DEFAULTS is read by somebody:');
+{
+  const unread = Object.keys(G.DEFAULTS).filter((k) => !readKeys.has(k));
+  console.log(`  ${Object.keys(G.DEFAULTS).length} keys, ${readKeys.size} read` +
+              (unread.length ? `   NEVER READ: ${unread.join(', ')}` : '   none dead'));
+  if (unread.length) bad++;
 }
 
 console.log(bad ? `\n${bad} case(s) FAILED` : '\nall plates watertight and every shell facing outwards');
