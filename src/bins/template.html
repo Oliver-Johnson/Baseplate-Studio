@@ -55,6 +55,15 @@
       <label class="f"><b>Drawer width (mm)</b><input id="drawerW" type="number" step="0.5" value="306"></label>
       <label class="f"><b>Drawer depth (mm)</b><input id="drawerD" type="number" step="0.5" value="380"></label>
     </div>
+    <!-- The same grid, counted rather than measured. Someone who already owns baseplates
+         knows the cells and not the millimetres, and was left doing 4 × 42 in their head
+         before they could start. These write the millimetre fields above, which stay the
+         thing the tool and the shared link are built on. -->
+    <div class="row">
+      <label class="f"><b>or grid width (cells)</b><input id="gridX" type="number" step="1" min="1" value="7"></label>
+      <label class="f"><b>or grid depth (cells)</b><input id="gridY" type="number" step="1" min="1" value="9"></label>
+    </div>
+    <div class="hint">Count the cells of the baseplate you already have and these fill the millimetres in — 4 × 6 cells is a 168 × 252 mm drawer. Measure the real drawer where you can: the leftover millimetres are what tell you whether the last bin fits.</div>
     <div class="row">
       <label class="f"><b>Usable height (mm)</b><input id="drawerH" type="number" step="0.5" value="84"></label>
       <label class="f"><b>Baseplate height (mm)</b><input id="plateH" type="number" step="0.05" value="4.25"></label>
@@ -93,8 +102,12 @@
 </section>
 
 
-<section class="p" id="s-bin">
-  <h2 class="ph"><button type="button" aria-expanded="true" aria-controls="b-bin"><span class="n">03</span> <span id="binPanelTitle">New bins</span> <span class="caret">▾</span></button></h2>
+<!-- Loads closed. Open, it is six rows of settings for a bin nobody has placed yet —
+     which on a phone was the entire first screen, with the drawer map below the fold.
+     Selecting a bin opens it, because that is the moment the settings describe
+     something real. -->
+<section class="p closed" id="s-bin">
+  <h2 class="ph"><button type="button" aria-expanded="false" aria-controls="b-bin"><span class="n">03</span> <span id="binPanelTitle">New bins</span> <span class="caret">▾</span></button></h2>
   <div class="body" id="b-bin">
     <div class="row" id="sizeRow">
       <label class="f"><b>Width (cells)</b><input id="u" type="number" step="1" min="1" value="1"></label>
@@ -160,7 +173,10 @@
 </section>
 
 <section class="p" id="s-warn">
-  <h2 class="ph"><button type="button" aria-expanded="true" aria-controls="b-warn"><span class="n">04</span> Checks <span class="caret">▾</span></button></h2>
+  <!-- The count rides in the header because the header is the part you can see with the
+       panel scrolled past: four errors about a bin that cannot be printed used to have
+       no representation anywhere but inside this body. -->
+  <h2 class="ph"><button type="button" aria-expanded="true" aria-controls="b-warn"><span class="n">04</span> Checks <span id="warnBadge" style="color:var(--red);display:none"></span> <span class="caret">▾</span></button></h2>
   <div class="body" id="b-warn"><div id="warnings"></div></div>
 </section>
 
@@ -172,18 +188,24 @@
 <div class="stagecard" id="s-layout">
   <h3>Drawer layout</h3>
   <div style="padding:10px 14px 0"><div class="seg" id="layerTabs"></div></div>
-  <div class="row" style="padding:8px 14px 0">
-    <button class="ghost" id="addLayer">Add a layer on top</button>
-    <button class="ghost" id="delLayer">Remove this layer</button>
-  </div>
   <!-- The map and the preview both start with a label describing an empty drawer;
        drawMap and showScene rewrite it from the real state on every draw, so it says
        what is actually there rather than what the markup guessed. -->
   <div id="fillwrap"><svg id="fillmap" role="img" aria-label="Drawer layout map, loading"></svg></div>
+  <!-- The map has a front and a back and said so nowhere but the last sentence of a
+       paragraph of help below it. The cut map on the baseplates page has carried this
+       marker from the start; the two maps share the convention, so they share the
+       label. It is static because it is always true. -->
+  <div class="hint" style="text-align:center;padding:2px 14px 0">▾ front of drawer</div>
   <div class="covbar"><i id="covfill" style="width:0%"></i></div>
   <div class="body">
+    <!-- Errors, under the map, where the baseplates page puts them. The Checks panel
+         still carries the full list; this is the half you must not be able to miss,
+         and it is next to the thing it is talking about. Empty and hidden when the
+         layout is sound, so a good design pays nothing for it. -->
+    <div class="exfit bad" id="mapChecks" style="display:none"><div id="mapChecksList"></div></div>
     <div class="mono" id="coverage">—</div>
-    <div class="hint">Drag across empty cells to place a bin. Click one to select it, drag it to move it, or pull a corner grip to resize. A ⚠ marks a bin that will not sit properly where it is — <span class="haskeys">hover it</span><span class="hastouch">tap it</span> for the reason. It stays put either way, in case you are about to place the thing that fixes it. <b>Alt-click</b> a cell inside the selected bin to carve it out, or alt-click a gap to put it back — that is how you make an L or a U. Front of the drawer is at the bottom.</div>
+    <div class="hint">Drag across empty cells to place a bin. Click one to select it, drag it to move it, or pull a corner grip to resize. A ⚠ marks a bin that will not sit properly where it is — <span class="haskeys">hover it</span><span class="hastouch">tap it</span> for the reason. It stays put either way, in case you are about to place the thing that fixes it. <b>Alt-click</b> a cell inside the selected bin to carve it out, or alt-click a gap to put it back — that is how you make an L or a U.</div>
     <div class="row">
       <button class="ghost" id="fillRest">Fill the rest with <span id="fillSize">1×1</span></button>
       <button class="ghost" id="clearAll">Clear all</button>
@@ -192,6 +214,13 @@
       <button class="ghost" id="undoBtn">Undo</button>
       <button class="ghost" id="redoBtn">Redo</button>
       <button class="ghost" id="dupBtn">Duplicate</button>
+    </div>
+    <!-- Layers are edited from the tabs above the map; these two live below it because
+         they were 44 px of controls for a second layer standing between the top of the
+         page and the drawer, on a phone where the map was already below the fold. -->
+    <div class="row">
+      <button class="ghost" id="addLayer">Add a layer on top</button>
+      <button class="ghost" id="delLayer">Remove this layer</button>
     </div>
     <div class="hint haskeys">Keys: <b>Del</b> removes the selected bin, <b>arrows</b> nudge it, <b>shift+arrows</b> resize it, <b>Ctrl+D</b> duplicates, <b>Ctrl+Z</b> / <b>Ctrl+Shift+Z</b> undo and redo.</div>
   </div>
