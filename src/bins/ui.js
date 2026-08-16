@@ -1099,6 +1099,7 @@ function refresh() {
   drawPlan();
   updateExportTail();
   showScene();
+  rememberState();
 }
 
 /* ---------- print plan ----------------------------------------------------
@@ -1722,6 +1723,39 @@ function descriptor() {
   return o;
 }
 const encodeDesc = (o) => Object.entries(o).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
+/* Keep the address bar holding the current design, so a reload does not throw it away.
+ *
+ * The tool has no accounts and no server, which is the point of it — but it also meant
+ * a refresh, a crashed tab or a mistyped URL lost a drawer someone had spent twenty
+ * minutes laying out, with a "Copy settings link" button they had to have known to
+ * press first. The state was already serialisable: this writes the same string that
+ * button copies, so persistence and sharing cannot drift apart.
+ *
+ * replaceState rather than pushState: the design is not a sequence of pages, and a
+ * history entry per edit would turn the back button into an undo nobody asked for and
+ * make leaving the page take fifty presses. It does not fire hashchange, so nothing
+ * here can feed back into loadFromHash.
+ *
+ * The hashReady guard is honest belt-and-braces, and worth saying so plainly: as the
+ * init order stands, nothing CAN write before loadFromHash has run — the only callers
+ * are recomputeLayout/refresh, both of which run after it, and the write is debounced
+ * behind them anyway. Removing the guard breaks no test, because there is no test that
+ * can distinguish it. It stays because the failure it prevents is silent and expensive:
+ * a save landing before the load would replace a link someone had just followed with
+ * this page's defaults, and neither they nor the person who sent it would ever know
+ * they were looking at a different drawer. If you reorder init, this is the line that
+ * stops that being your problem.
+ */
+let hashSaveT = 0, hashReady = false;
+function rememberState() {
+  if (!hashReady) return;
+  clearTimeout(hashSaveT);
+  hashSaveT = setTimeout(() => {
+    try { history.replaceState(null, '', '#' + encodeDesc(descriptor())); }
+    catch (err) { /* some browsers refuse replaceState on file:// — a lost URL is not
+                     worth an exception that stops the rest of the page working */ }
+  }, 400);
+}
 function shareLink() {
   return location.origin + location.pathname + '#' + encodeDesc(descriptor());
 }
@@ -1868,6 +1902,7 @@ if (pendingNotes) {                       // applied after the layout so indices
   } catch (err) { /* a mangled link should not stop the tool loading */ }
 }
 readControls();
+hashReady = true;                         // loadFromHash has had its say; ours may start
 initThree();
 initMap();
 drawLayerTabs();
