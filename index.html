@@ -528,6 +528,10 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
 </style>
 </head>
 <body>
+<!-- The skip link goes to the stage rather than to <main>, because <main> starts at
+     the settings rail and landing there skips nothing — the rail is the forty controls
+     the link exists to get past. The landmark and the shortcut have different jobs. -->
+<a class="skip" href="#stage">Skip to the cut map</a>
 <header>
   <h1>DRAWER<span class="tm">FORGE</span></h1>
   <p>Gridfinity baseplates cut to your drawer — measured, split for your printer, joined, and ready to print. Start with the space you have; everything else follows.</p>
@@ -538,20 +542,22 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
     <a id="navGuide" href="guide/">Guide</a>
   </nav>
 </header>
-<div class="app">
+<main class="app">
 <div class="rail">
 
 <section class="p" id="s-drawer">
-  <h2><span class="n">01</span> Drawer &amp; grid <span class="caret">▾</span></h2>
-  <div class="body">
+  <h2 class="ph"><button type="button" aria-expanded="true" aria-controls="b-drawer"><span class="n">01</span> Drawer &amp; grid <span class="caret">▾</span></button></h2>
+  <div class="body" id="b-drawer">
     <div class="row">
-      <label class="f"><b>Drawer width (mm)</b><input id="drawerW" type="number" step="0.5" value="306"></label>
-      <label class="f"><b>Drawer depth (mm)</b><input id="drawerD" type="number" step="0.5" value="380"></label>
+      <label class="f"><b>Drawer width (mm)</b><input id="drawerW" type="number" step="0.5" min="1" max="2000" value="306" aria-describedby="errDrawerW">
+        <span class="hint" id="errDrawerW" style="color:var(--red)" hidden></span></label>
+      <label class="f"><b>Drawer depth (mm)</b><input id="drawerD" type="number" step="0.5" min="1" max="2000" value="380" aria-describedby="errDrawerD">
+        <span class="hint" id="errDrawerD" style="color:var(--red)" hidden></span></label>
     </div>
     <div class="hint">Internal dimensions. Measure at the tightest point and subtract 1–2&nbsp;mm so the assembly slides in.</div>
     <label class="f"><b>Leftover space (margins)</b>
       <select id="marginMode">
-        <option value="auto">Fill with solid margin, aligned…</option>
+        <option value="auto">Fill with solid margin (alignment below)</option>
         <option value="none">Leave as gap (plate = grid only)</option>
         <option value="custom">Custom per side…</option>
       </select>
@@ -572,13 +578,15 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
         <option value="solid">Solid — the sturdy default</option>
         <option value="skeleton">Skeleton — hollowed underneath, lighter and faster</option>
       </select></label>
-    <div class="hint" id="plateStyleHint">Skeleton keeps the socket, the rim and the wall band, and leaves out the bulk beneath. Cells carrying a joint stay solid, and it turns off entirely with magnets or screws, which need that material.</div>
+    <!-- filled in by readControls: the hint has to describe the style you picked, not
+         the one you did not. It also carries the only gloss of "socket" on this page. -->
+    <div class="hint" id="plateStyleHint"></div>
   </div>
 </section>
 
 <section class="p" id="s-printer">
-  <h2><span class="n">02</span> Printer <span class="caret">▾</span></h2>
-  <div class="body">
+  <h2 class="ph"><button type="button" aria-expanded="true" aria-controls="b-printer"><span class="n">02</span> Printer <span class="caret">▾</span></button></h2>
+  <div class="body" id="b-printer">
     <label class="f"><b>Preset</b>
       <select id="bedPreset">
         <option value="256,256,256">256 × 256 × 256 (Elegoo CC/CC2, Bambu X1/P1)</option>
@@ -589,16 +597,19 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
         <option value="custom">Custom…</option>
       </select></label>
     <div class="row3">
-      <label class="f"><b>Bed width</b><input id="bedW" type="number" value="256"></label>
-      <label class="f"><b>Bed depth</b><input id="bedD" type="number" value="256"></label>
-      <label class="f"><b>Height (Z)</b><input id="bedH" type="number" value="256"></label>
+      <label class="f"><b>Bed width</b><input id="bedW" type="number" min="20" max="2000" value="256" aria-describedby="errBedW"></label>
+      <label class="f"><b>Bed depth</b><input id="bedD" type="number" min="20" max="2000" value="256" aria-describedby="errBedD"></label>
+      <label class="f"><b>Height (Z)</b><input id="bedH" type="number" min="20" max="2000" value="256" aria-describedby="errBedH"></label>
     </div>
+    <span class="hint" id="errBedW" style="color:var(--red)" hidden></span>
+    <span class="hint" id="errBedD" style="color:var(--red)" hidden></span>
+    <span class="hint" id="errBedH" style="color:var(--red)" hidden></span>
   </div>
 </section>
 
 <section class="p" id="s-split">
-  <h2><span class="n">03</span> Split <span class="caret">▾</span></h2>
-  <div class="body">
+  <h2 class="ph"><button type="button" aria-expanded="true" aria-controls="b-split"><span class="n">03</span> Split <span class="caret">▾</span></button></h2>
+  <div class="body" id="b-split">
     <div class="seg" id="splitSeg">
       <button data-v="balanced" class="on">Balanced</button>
       <button data-v="staggered">Staggered</button>
@@ -610,8 +621,8 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
 </section>
 
 <section class="p" id="s-conn">
-  <h2><span class="n">04</span> Connectors <span class="caret">▾</span></h2>
-  <div class="body">
+  <h2 class="ph"><button type="button" aria-expanded="true" aria-controls="b-conn"><span class="n">04</span> Connectors <span class="caret">▾</span></button></h2>
+  <div class="body" id="b-conn">
     <label class="f"><b>Type</b>
       <select id="connector">
         <option value="dovetail">Dovetail tabs — drop-in, no extra filament</option>
@@ -624,7 +635,8 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
       </select></label>
     <div id="connHintDove" class="hint">Tabs on one piece drop into open-bottomed pockets on its neighbour. Assemble on a flat surface, then lower the whole plate into the drawer. Placed at every wall junction along each seam.</div>
     <div id="connHintPuzzle" class="hint" style="display:none">Jigsaw lobes printed on one piece lock into matching cavities on its neighbour — the strongest in-plane joint. Adds a ~2.6&nbsp;mm solid floor that the lobes live in; assembles by lowering pieces together.</div>
-    <div id="connHintBow" class="hint" style="display:none">Recesses are cut into the underside of both pieces; printed keys bridge each seam. Adds a solid floor to house the keys — the keys STL is in Export and in the ZIP.</div>
+    <div id="connHintBow" class="hint" style="display:none">Bowtie-shaped recesses are cut into the underside of both pieces; printed keys bridge each seam. The waisted middle is what stops the seam pulling apart. The simplest of the loose-key joints and the easiest to press home — pick it unless a seam is long enough to creep sideways. Adds a solid floor to house the keys; the keys STL is in Export and in the ZIP.</div>
+    <div id="connHintPkey" class="hint" style="display:none">The same idea with a jigsaw profile: the lobes grip along the seam as well as across it, so a long run cannot slide lengthways the way a row of bowties can. Stiffer to press in, and worth that on seams past three or four cells. Adds a solid floor to house the keys; the keys STL is in Export and in the ZIP.</div>
     <div id="connHintSnap" class="hint" style="display:none">Dog-bone recesses under both pieces take a sprung key: the slot through its middle lets it compress, so it clicks in and holds. Adds a solid floor. Keys STL in Export.</div>
     <div id="connHintHclip" class="hint" style="display:none">Tiny H-shaped keys (≈3.6 × 3.8 mm) sink into pockets in the grid walls at each junction, pressed in from beneath during face-down assembly. No floor, almost no filament, invisible from above. Keys STL in Export.</div>
     <label class="f" id="keyInsertRow" style="display:none"><b>Key insertion</b>
@@ -645,8 +657,8 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
 </section>
 
 <section class="p" id="s-mag">
-  <h2><span class="n">05</span> Magnets &amp; screws <span class="caret">▾</span></h2>
-  <div class="body">
+  <h2 class="ph"><button type="button" aria-expanded="true" aria-controls="b-mag"><span class="n">05</span> Magnets &amp; screws <span class="caret">▾</span></button></h2>
+  <div class="body" id="b-mag">
     <label class="tog"><input id="magnets" type="checkbox"> Magnet pockets (4 per cell)</label>
     <div class="row3" id="magRow" style="display:none">
       <label class="f"><b>Ø (mm)</b><input id="magnetD" type="number" step="0.5" value="6"></label>
@@ -664,19 +676,20 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
         <option value="solid">Solid floor — full 2.8 mm base under everything</option>
         <option value="bosses">Corner pockets only — bosses at each position, saves filament</option>
       </select></label>
-    <div class="hint">Corner pockets match the light-weight style of other generators: small rounded bosses at each cell corner instead of a full floor. Gravity-fit drawers need neither magnets nor screws.</div>
+    <div class="hint">A solid floor puts 2.8&nbsp;mm of plastic under the whole plate. Corner pockets put a small rounded boss under each magnet or screw position instead, leaving the rest open underneath: much less filament and a much shorter print, at some cost in stiffness. Gravity-fit drawers need neither magnets nor screws.</div>
   </div>
 </section>
 
 <section class="p closed" id="s-prof">
-  <h2><span class="n">06</span> Socket profile <span class="caret">▾</span></h2>
-  <div class="body">
+  <h2 class="ph"><button type="button" aria-expanded="false" aria-controls="b-prof"><span class="n">06</span> Socket profile <span class="caret">▾</span></button></h2>
+  <div class="body" id="b-prof">
     <label class="f"><b>Bin fit</b>
       <select id="tolerance"><option value="standard">Standard (spec 0.25 mm)</option><option value="tight">Tight (−0.1 mm)</option><option value="loose">Loose (+0.1 mm)</option></select></label>
     <div class="row">
-      <label class="f"><b>Grid pitch (mm)</b><input id="pitch" type="number" step="0.5" value="42"></label>
+      <label class="f"><b>Grid pitch (mm)</b><input id="pitch" type="number" step="0.5" min="5" max="200" value="42" aria-describedby="errPitch"></label>
       <label class="f"><b>Corner radius</b><input id="outerRadius" type="number" step="0.5" value="4"></label>
     </div>
+    <span class="hint" id="errPitch" style="color:var(--red)" hidden></span>
     <label class="tog"><input id="perCorner" type="checkbox"> Set each plate corner separately</label>
     <div class="row" id="cornerRow" style="display:none">
       <label class="f"><b>Front-left / Front-right</b><div class="row"><input id="rFL" type="number" step="0.5" value="4"><input id="rFR" type="number" step="0.5" value="4"></div></label>
@@ -692,17 +705,21 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
 </section>
 
 </div>
-<div class="stage">
+<div class="stage" id="stage" tabindex="-1">
 
+<!-- The map and the preview both start with a label describing a page that has not
+     computed anything yet; drawMap and drawPieceTable rewrite them from the real state
+     on every draw, so they say what is actually there rather than what the markup
+     guessed. -->
 <div class="stagecard">
   <h3>Cut map — click grid lines to split <span class="tail" id="mapTail"></span></h3>
-  <div id="mapwrap"><svg id="cutmap"></svg></div>
+  <div id="mapwrap"><svg id="cutmap" role="img" aria-label="Cut map, loading"></svg></div>
   <div id="warnings"></div>
 </div>
 
 <div class="stagecard">
   <h3>Preview <span class="tail"><label class="tog"><input type="checkbox" id="explode"> exploded</label></span></h3>
-  <div id="threewrap"><canvas id="three"></canvas><div id="status"></div><div id="threehint">drag rotate · wheel zoom · shift-drag pan</div></div>
+  <div id="threewrap"><canvas id="three" role="img" aria-label="3D preview of the baseplate, loading"></canvas><div id="status"></div><div id="threehint">drag rotate · wheel zoom · shift-drag pan</div></div>
 </div>
 
 <div class="stagecard">
@@ -737,11 +754,11 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
 </div>
 
 </div>
-</div>
+</main>
 <footer>
   <div><b>Drawerforge</b> is free and open. Gridfinity was created by <a href="https://www.youtube.com/c/ZackFreedman" rel="noopener">Zack Freedman</a> (Voidstar Lab) as an open standard — this tool implements the published baseplate profile and adds drawer-first workflow, split control, and printable connectors.</div>
   <div style="margin-top:10px">Got your grid sorted? <a id="toBins" href="bins/">Design the bins that go in it →</a> Your drawer dimensions carry across.</div>
-  <div style="margin-top:10px">Hey — thank you for using the tool! If you'd like to raise any issues or feature suggestions/requests, please raise them <a id="ghLink" href="https://github.com/Oliver-Johnson/Baseplate-Studio/issues" rel="noopener">on GitHub</a>. If it's saved you some time and you fancy it, you can also <a id="kofiLink" href="https://ko-fi.com/oliver_johnson" rel="noopener">buy me a coffee</a>.</div>
+  <div style="margin-top:10px">Issues and feature requests <a href="https://github.com/Oliver-Johnson/Baseplate-Studio/issues" rel="noopener">on GitHub</a>. If it saved you time you can <a href="https://ko-fi.com/oliver_johnson" rel="noopener">buy me a coffee</a>.</div>
   <div class="mono" style="margin-top:8px">All geometry is computed locally in your browser — nothing is uploaded. STL/3MF output is mm scale. v1.2</div>
 </footer>
 
@@ -756,6 +773,7 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   <div class="sheetbody">
     <div class="exsum" id="exDesign">—</div>
     <div class="exfit" id="exFit">—</div>
+    <div class="exnote">Two formats: a <b>3MF</b> is a whole print plate with every part already arranged on the bed, so it opens in your slicer ready to slice; an <b>STL</b> is one part on its own, for when you would rather arrange them yourself.</div>
     <div class="exfiles" id="exFiles"></div>
     <div class="exnote">STLs are millimetre-scale and print flat as oriented, no supports. Print the test tile first and check a bin seats in it before committing to the full plates.</div>
   </div>
@@ -3169,8 +3187,84 @@ const PIECE_COLORS = ['#4fc3e8','#e8b34f','#7fd8a5','#e88a8a','#b18ae8','#7fb5e8
 const numIds = ['drawerW','drawerD','bedW','bedD','bedH','mLeft','mRight','mFront','mBack',
   'pitch','outerRadius','bottomPad','topCutoff','magnetD','magnetH',
   'screwHoleD','screwHeadD','screwHeadDepth'];
+
+/* The fields that carry a real-world size, and the range one can be.
+ *
+ * Nothing downstream defends itself against a number that cannot exist, and it should
+ * not have to. A drawer width of -50 produced a piece 50 mm wide in the negative
+ * direction: a pieces row reading "-50.0 × 211.0 … fits", an SVG rect the browser
+ * rejected with a console error, "building 0/2…" that was never going to finish, and
+ * the Download button offered as the primary action for a plate that could never be
+ * built. A blank field did the same. So the clamp happens here, before computeLayout
+ * sees anything, and the message says what is actually wrong — the checks below reason
+ * about the clamped value, which is why they answered a negative width with "Drawer
+ * smaller than one 42 mm cell", a true statement about a different problem.
+ *
+ * The typed value is left alone. Rewriting the field as you type takes the caret with
+ * it and puts "306" out of reach behind "30", so state gets the clamp and the field
+ * keeps what you wrote with the reason underneath it. `min` and `max` go on the markup
+ * as well, so the browser's own validity — which reported `valid` for -50 — agrees. */
+const LIMITS = {
+  drawerW: { min: 1, max: 2000, label: 'Drawer width' },
+  drawerD: { min: 1, max: 2000, label: 'Drawer depth' },
+  bedW: { min: 20, max: 2000, label: 'Bed width' },
+  bedD: { min: 20, max: 2000, label: 'Bed depth' },
+  bedH: { min: 20, max: 2000, label: 'Bed height' },
+  // pitch divides into the drawer to get the cell count, so a zero here is not a bad
+  // plate, it is an infinite one — Math.floor(x / 0) is Infinity and the grid loops
+  // never come back
+  pitch: { min: 5, max: 200, label: 'Grid pitch' },
+};
+/* id -> the message that goes under it. Rebuilt from scratch on every read, so a field
+   that has come good stops complaining without anything having to remember it once did. */
+const fieldErrors = new Map();
+/* Named one field at a time rather than derived from the id: the build audits the
+   template by literal, and $('errDrawerW') is what it looks for. */
+const ERR_FIELDS = [
+  ['drawerW', 'errDrawerW'], ['drawerD', 'errDrawerD'],
+  ['bedW', 'errBedW'], ['bedD', 'errBedD'], ['bedH', 'errBedH'], ['pitch', 'errPitch'],
+];
+const ERR_EL = { errDrawerW: () => $('errDrawerW'), errDrawerD: () => $('errDrawerD'),
+  errBedW: () => $('errBedW'), errBedD: () => $('errBedD'), errBedH: () => $('errBedH'),
+  errPitch: () => $('errPitch') };
+
+function readNumber(id) {
+  const lim = LIMITS[id];
+  const raw = $(id).value.trim();
+  const v = parseFloat(raw);
+  if (!lim) return isFinite(v) ? v : 0;
+  if (!isFinite(v)) {
+    fieldErrors.set(id, `${lim.label} is blank — enter a measurement in millimetres.`);
+    return lim.min;
+  }
+  if (v < lim.min) {
+    fieldErrors.set(id, `${lim.label} must be at least ${lim.min} mm.`);
+    return lim.min;
+  }
+  if (v > lim.max) {
+    fieldErrors.set(id, `${lim.label} must be ${lim.max} mm or less — check the figure is in millimetres.`);
+    return lim.max;
+  }
+  return v;
+}
+/* The invalid state is set on the element rather than through a class, because the
+   stylesheet is shared with the bins tool and is not this change's to edit. Colour is
+   not carrying it on its own: aria-invalid says it to a screen reader and the message
+   below the field says it in words. */
+function showFieldErrors() {
+  for (const [id, errId] of ERR_FIELDS) {
+    const msg = fieldErrors.get(id) || '';
+    const out = ERR_EL[errId]();
+    $(id).setAttribute('aria-invalid', msg ? 'true' : 'false');
+    $(id).style.borderColor = msg ? 'var(--red)' : '';
+    out.textContent = msg;
+    out.hidden = !msg;
+  }
+}
+
 function readControls() {
-  for (const id of numIds) state[id] = parseFloat($(id).value) || 0;
+  fieldErrors.clear();
+  for (const id of numIds) state[id] = readNumber(id);
   state.alignX = $('alignX').value; state.alignY = $('alignY').value;
   const mm = $('marginMode').value;
   state.marginMode = mm === 'custom' ? 'custom' : 'auto';
@@ -3202,7 +3296,11 @@ function readControls() {
   $('screwRow').style.display = state.screws ? '' : 'none';
   $('connHintDove').style.display = state.connector === 'dovetail' ? '' : 'none';
   $('connHintPuzzle').style.display = state.connector === 'puzzle' ? '' : 'none';
-  $('connHintBow').style.display = (state.connector === 'bowtie' || state.connector === 'puzzlekey') ? '' : 'none';
+  // Bowtie and puzzle key shared one hint, so picking between them meant reading the
+  // same paragraph twice and being told nothing about the difference. They differ in
+  // one thing that matters — whether the key grips along the seam — so they say so.
+  $('connHintBow').style.display = state.connector === 'bowtie' ? '' : 'none';
+  $('connHintPkey').style.display = state.connector === 'puzzlekey' ? '' : 'none';
   $('connHintSnap').style.display = state.connector === 'snap' ? '' : 'none';
   $('connHintHclip').style.display = state.connector === 'hclip' ? '' : 'none';
   const hasKeys = KEY_CONN.includes(state.connector);
@@ -3214,6 +3312,26 @@ function readControls() {
   $('baseModeRow').style.display = (state.magnets || state.screws) ? '' : 'none';
   $('cornerRow').style.display = $('perCorner').checked ? '' : 'none';
   $('cornerHint').style.display = $('perCorner').checked ? '' : 'none';
+  $('plateStyleHint').textContent = plateStyleHint();
+  showFieldErrors();
+}
+
+/* The hint under Plate style was static, so with "Solid" selected the first word
+   underneath it was "Skeleton" — it described the option you had not picked. It also
+   sits on the first screen and is the first use of four terms nothing has defined:
+   skeleton, socket, rim, wall band. The socket is the one you cannot guess from the
+   word, so it is glossed here, once, in whichever hint is showing. The pitch is read
+   from the state rather than written as 42, because panel 06 can move it. */
+function plateStyleHint() {
+  const socket = `the socket, the ${state.pitch} mm recess a bin's foot drops into`;
+  return state.plateStyle === 'skeleton'
+    ? `Skeleton keeps ${socket}, along with the rim round the outside of the plate and ` +
+      'the band of wall between neighbouring cells, and leaves out the bulk underneath — ' +
+      'lighter, and quicker to print. Cells carrying a joint stay solid, ' +
+      'and it turns off entirely with magnets or screws, which need that material.'
+    : `Solid backs ${socket} with material all the way down to the drawer floor. ` +
+      'The sturdy default: the heaviest and slowest to print, and the only style that ' +
+      'works with magnets, screws, or a joint that needs a floor to house its keys.';
 }
 
 // ---------- layout & validation ----------
@@ -3245,17 +3363,56 @@ function pieceFits(pc) {
   return w <= state.bedW + 1e-6 && d <= state.bedD + 1e-6;
 }
 
+/* How big a job this tool will take on in one go.
+   There was no ceiling at all. A drawer of 9999 × 9999 mm — one stray keystroke away
+   from 999 — gave a 238 × 238 grid, 1600 pieces, and a build that started working
+   through them one real CSG at a time with nothing on the page to say it would not
+   finish. Both numbers are well past any drawer: MAX_CELLS is a 1.26 m square of grid
+   at the spec pitch, MAX_PIECES more separate prints than anyone is going to run. */
+const MAX_CELLS = 900, MAX_PIECES = 60;
+const overCap = () => !!layout &&
+  (layout.nx * layout.ny > MAX_CELLS || layout.pieces.length > MAX_PIECES);
+
+/* `err` marks a check that stops the build. `stop` is the narrower kind that also
+   takes the Download button away: there is no design at all, so the dialog would have
+   nothing to describe. A piece that overflows the bed is an `err` but not a `stop` —
+   the design exists, the dialog explains the overflow in a sentence the checks cannot,
+   and the test tile and joint sample in there are exactly what you want next. */
 function warningsList() {
   const out = [];
-  if (layout.nx < 1 || layout.ny < 1 || state.drawerW < state.pitch || state.drawerD < state.pitch)
-    out.push({ err: true, t: `Drawer smaller than one ${state.pitch} mm cell — nothing to generate.` });
+  // first, and above everything: these say what is wrong with what you typed, which
+  // nothing below can — every check after this one is reasoning about the clamped value
+  for (const msg of fieldErrors.values()) out.push({ err: true, stop: true, t: msg });
+  if (layout.nx * layout.ny > MAX_CELLS)
+    out.push({ err: true, stop: true, t: `A ${layout.nx} × ${layout.ny} grid is ` +
+      `${layout.nx * layout.ny} cells, past the ${MAX_CELLS} this tool will build in one ` +
+      'go — and far larger than a drawer. Check the measurements are in millimetres.' });
+  else if (layout.pieces.length > MAX_PIECES)
+    out.push({ err: true, stop: true, t: `This split makes ${layout.pieces.length} pieces, ` +
+      `past the ${MAX_PIECES} this tool will build in one go. A larger printer bed, or ` +
+      'fewer cuts on the map, brings it back down.' });
+  // suppressed when the drawer fields are already complaining: "smaller than one cell"
+  // is true of the clamped value and useless as a diagnosis of a blank or negative one
+  if (!fieldErrors.has('drawerW') && !fieldErrors.has('drawerD') &&
+      (layout.nx < 1 || layout.ny < 1 || state.drawerW < state.pitch || state.drawerD < state.pitch))
+    out.push({ err: true, stop: true, t: `Drawer smaller than one ${state.pitch} mm cell — nothing to generate.` });
   for (const pc of layout.pieces) if (!pieceFits(pc))
     out.push({ err: true, t: `Piece ${pc.id} (${(pc.mL+pc.nx*state.pitch+pc.mR).toFixed(0)} × ${(pc.mF+pc.ny*state.pitch+pc.mB).toFixed(0)} mm) exceeds the ${state.bedW} × ${state.bedD} bed — add a cut through it.` });
   if (layout.pieces.some(pc => pc.nx*pc.ny === 1))
     out.push({ t: 'A piece is a single cell — printable, but consider moving a cut for a sturdier layout.' });
+  /* One axis at a time. It fired on either and then printed both, so a drawer narrower
+     than a single cell reported "Leftover space is large (-92 × 40 mm)" — the -92 being
+     width the drawer does not have. And it stopped a step short of the advice: the
+     guide has a section on exactly this, so the warning links to it rather than leaving
+     "double-check the measurement" as the whole of what the tool knows. */
   const remX = state.drawerW - layout.nx*state.pitch, remY = state.drawerD - layout.ny*state.pitch;
-  if (remX > state.pitch * 0.75 || remY > state.pitch * 0.75)
-    out.push({ t: `Leftover space is large (${remX.toFixed(0)} × ${remY.toFixed(0)} mm) — nearly another cell. Double-check the drawer measurement.` });
+  const spare = [];
+  if (remX > state.pitch * 0.75) spare.push(`${remX.toFixed(0)} mm across the width`);
+  if (remY > state.pitch * 0.75) spare.push(`${remY.toFixed(0)} mm across the depth`);
+  if (spare.length)
+    out.push({ t: `Leftover space is large — ${spare.join(' and ')}, nearly another whole cell. ` +
+      'Re-measure before you print; if the drawer really is that size, ' +
+      '<a href="guide/drawer-sizes/#leftover">the guide covers what to do with the remainder</a>.' });
   const keyedC = KEY_CONN.includes(state.connector);
   if ((keyedC && state.keyMount === 'floor' || state.connector === 'puzzle') && layout.pieces.length > 1) {
     const padV = state.connector === 'puzzle' ? 2.6 : state.key.depth + 0.8;
@@ -3276,9 +3433,17 @@ function warningsList() {
     out.push({ t: 'No margin selected: the plate will sit loose by the leftover amount. The drawer walls still contain it.' });
   return out;
 }
+const hasErrors = () => warningsList().some(w => w.err);
 function drawWarnings() {
-  const el = $('warnings');
-  el.innerHTML = warningsList().map(w => `<div class="w${w.err ? ' err' : ''}">${w.t}</div>`).join('');
+  const ws = warningsList();
+  $('warnings').innerHTML = ws.map(w => `<div class="w${w.err ? ' err' : ''}">${w.t}</div>`).join('');
+  /* The Download button stops being the primary action when there is nothing behind it.
+     It was enabled through all of this: type -50 into the drawer width and the page
+     said "resolve the errors above to generate" and offered you the download in the
+     same breath. See warningsList for why this is `stop` and not `err`. */
+  const stop = ws.some(w => w.stop);
+  $('openExport').disabled = stop;
+  $('openExport').title = stop ? 'Fix the errors under the cut map first' : '';
 }
 
 // ---------- interactive cut map ----------
@@ -3296,58 +3461,67 @@ function drawMap() {
   svg.setAttribute('width', w); svg.setAttribute('height', h);
   let s = '';
   const gx0 = layout.mL, gy0 = layout.mF;
+  /* Past the cap the map draws the drawer and nothing inside it. A 238 × 238 grid is
+     around fifteen thousand SVG elements — it is not a picture of anything, and
+     generating it is most of what made a mistyped drawer size feel like a hang. */
+  const capped = overCap();
+  if (!capped) {
 
-  // piece fills
-  layout.pieces.forEach((pc, i) => {
-    const x0 = pc.cellX0 === 0 ? 0 : gx0 + pc.cellX0 * pitch;
-    const x1 = pc.cellX0 + pc.nx === layout.nx ? Wmm : gx0 + (pc.cellX0 + pc.nx) * pitch;
-    const y0 = pc.cellY0 === 0 ? 0 : gy0 + pc.cellY0 * pitch;
-    const y1 = pc.cellY0 + pc.ny === layout.ny ? Dmm : gy0 + (pc.cellY0 + pc.ny) * pitch;
-    const col = PIECE_COLORS[i % PIECE_COLORS.length];
-    const bad = !pieceFits(pc);
-    s += `<rect x="${X(x0)}" y="${Y(y1)}" width="${(x1-x0)*sc}" height="${(y1-y0)*sc}" fill="${col}" opacity="${bad?0.28:0.16}"/>`;
-    s += `<text class="plabel${bad?' bad':''}" x="${X((x0+x1)/2)}" y="${Y((y0+y1)/2)-2}" text-anchor="middle">${pc.id}</text>`;
-    s += `<text class="psub" x="${X((x0+x1)/2)}" y="${Y((y0+y1)/2)+11}" text-anchor="middle">${pc.nx}×${pc.ny}</text>`;
-  });
+    // piece fills
+    layout.pieces.forEach((pc, i) => {
+      const x0 = pc.cellX0 === 0 ? 0 : gx0 + pc.cellX0 * pitch;
+      const x1 = pc.cellX0 + pc.nx === layout.nx ? Wmm : gx0 + (pc.cellX0 + pc.nx) * pitch;
+      const y0 = pc.cellY0 === 0 ? 0 : gy0 + pc.cellY0 * pitch;
+      const y1 = pc.cellY0 + pc.ny === layout.ny ? Dmm : gy0 + (pc.cellY0 + pc.ny) * pitch;
+      const col = PIECE_COLORS[i % PIECE_COLORS.length];
+      const bad = !pieceFits(pc);
+      s += `<rect x="${X(x0)}" y="${Y(y1)}" width="${(x1-x0)*sc}" height="${(y1-y0)*sc}" fill="${col}" opacity="${bad?0.28:0.16}"/>`;
+      s += `<text class="plabel${bad?' bad':''}" x="${X((x0+x1)/2)}" y="${Y((y0+y1)/2)-2}" text-anchor="middle">${pc.id}</text>`;
+      s += `<text class="psub" x="${X((x0+x1)/2)}" y="${Y((y0+y1)/2)+11}" text-anchor="middle">${pc.nx}×${pc.ny}</text>`;
+    });
 
-  // grid lines + hit targets
-  for (let i = 1; i < layout.nx; i++) {
-    const xm = gx0 + i * pitch;
-    s += `<line class="gridline" x1="${X(xm)}" y1="${Y(gy0)}" x2="${X(xm)}" y2="${Y(gy0 + layout.ny*pitch)}"/>`;
-  }
-  for (let j = 1; j < layout.ny; j++) {
-    const ym = gy0 + j * pitch;
-    s += `<line class="gridline" x1="${X(gx0)}" y1="${Y(ym)}" x2="${X(gx0 + layout.nx*pitch)}" y2="${Y(ym)}"/>`;
-  }
-  // active cuts: rows
-  const bandStarts = [0, ...layout.rowCuts];
-  for (const rc of layout.rowCuts) {
-    const ym = gy0 + rc * pitch;
-    s += `<line class="cutline" x1="${X(0)}" y1="${Y(ym)}" x2="${X(Wmm)}" y2="${Y(ym)}"/>`;
-  }
-  // active cuts: columns per band
-  layout.colCuts.forEach((cuts, b) => {
-    const yA = gy0 + bandStarts[b] * pitch;
-    const yB = b + 1 < bandStarts.length ? gy0 + bandStarts[b+1] * pitch
-                                         : gy0 + layout.ny * pitch;
-    const y0 = b === 0 ? 0 : yA;
-    const y1 = b + 1 < bandStarts.length ? yB : Dmm;
-    for (const c of cuts)
-      s += `<line class="cutline" x1="${X(gx0 + c*pitch)}" y1="${Y(y0)}" x2="${X(gx0 + c*pitch)}" y2="${Y(y1)}"/>`;
-  });
-  // hit targets — horizontal (whole-plate row cuts)
-  for (let j = 1; j < layout.ny; j++) {
-    const ym = gy0 + j * pitch;
-    s += `<line class="hitline" data-row="${j}" x1="${X(0)}" y1="${Y(ym)}" x2="${X(Wmm)}" y2="${Y(ym)}"/>`;
-  }
-  // hit targets — vertical, per band segment
-  layout.colCuts.forEach((cuts, b) => {
-    const yA = bandStarts[b], yB = b + 1 < bandStarts.length ? bandStarts[b+1] : layout.ny;
+    // grid lines + hit targets
     for (let i = 1; i < layout.nx; i++) {
       const xm = gx0 + i * pitch;
-      s += `<line class="hitline" data-band="${b}" data-col="${i}" x1="${X(xm)}" y1="${Y(gy0 + yA*pitch)}" x2="${X(xm)}" y2="${Y(gy0 + yB*pitch)}"/>`;
+      s += `<line class="gridline" x1="${X(xm)}" y1="${Y(gy0)}" x2="${X(xm)}" y2="${Y(gy0 + layout.ny*pitch)}"/>`;
     }
-  });
+    for (let j = 1; j < layout.ny; j++) {
+      const ym = gy0 + j * pitch;
+      s += `<line class="gridline" x1="${X(gx0)}" y1="${Y(ym)}" x2="${X(gx0 + layout.nx*pitch)}" y2="${Y(ym)}"/>`;
+    }
+    // active cuts: rows
+    const bandStarts = [0, ...layout.rowCuts];
+    for (const rc of layout.rowCuts) {
+      const ym = gy0 + rc * pitch;
+      s += `<line class="cutline" x1="${X(0)}" y1="${Y(ym)}" x2="${X(Wmm)}" y2="${Y(ym)}"/>`;
+    }
+    // active cuts: columns per band
+    layout.colCuts.forEach((cuts, b) => {
+      const yA = gy0 + bandStarts[b] * pitch;
+      const yB = b + 1 < bandStarts.length ? gy0 + bandStarts[b+1] * pitch
+                                           : gy0 + layout.ny * pitch;
+      const y0 = b === 0 ? 0 : yA;
+      const y1 = b + 1 < bandStarts.length ? yB : Dmm;
+      for (const c of cuts)
+        s += `<line class="cutline" x1="${X(gx0 + c*pitch)}" y1="${Y(y0)}" x2="${X(gx0 + c*pitch)}" y2="${Y(y1)}"/>`;
+    });
+    // hit targets — horizontal (whole-plate row cuts)
+    for (let j = 1; j < layout.ny; j++) {
+      const ym = gy0 + j * pitch;
+      s += `<line class="hitline" data-row="${j}" x1="${X(0)}" y1="${Y(ym)}" x2="${X(Wmm)}" y2="${Y(ym)}"/>`;
+    }
+    // hit targets — vertical, per band segment
+    layout.colCuts.forEach((cuts, b) => {
+      const yA = bandStarts[b], yB = b + 1 < bandStarts.length ? bandStarts[b+1] : layout.ny;
+      for (let i = 1; i < layout.nx; i++) {
+        const xm = gx0 + i * pitch;
+        s += `<line class="hitline" data-band="${b}" data-col="${i}" x1="${X(xm)}" y1="${Y(gy0 + yA*pitch)}" x2="${X(xm)}" y2="${Y(gy0 + yB*pitch)}"/>`;
+      }
+    });
+
+  } else {
+    s += `<text x="${X(Wmm/2)}" y="${Y(Dmm/2)}" text-anchor="middle" font-size="13" fill="var(--red)">too large to draw — see the checks below</text>`;
+  }
 
   // outline + dimension lines
   s += `<rect x="${X(0)}" y="${Y(Dmm)}" width="${Wmm*sc}" height="${Dmm*sc}" fill="none" stroke="var(--ink)" stroke-width="1.4"/>`;
@@ -3365,6 +3539,19 @@ function drawMap() {
   svg.innerHTML = s;
   $('mapTail').textContent = `${layout.nx} × ${layout.ny} cells · ${layout.pieces.length} piece${layout.pieces.length>1?'s':''}`;
   $('gridSummary').innerHTML = `Grid: <span class="klabel">${layout.nx} × ${layout.ny}</span> cells (${(layout.nx*state.pitch).toFixed(0)} × ${(layout.ny*state.pitch).toFixed(0)} mm) · margins L ${layout.mL.toFixed(1)} / R ${layout.mR.toFixed(1)} / F ${layout.mF.toFixed(1)} / B ${layout.mB.toFixed(1)} mm`;
+
+  /* To anything that cannot see it the cut map is one image with no alt text — and it
+     is the whole answer to "what did that setting just do". The label is rebuilt here
+     on every draw rather than written once into the markup: a fixed string would
+     describe the starting drawer forever, which is worse than silence because it is
+     confidently wrong. The pieces are not enumerated; the piece table below already
+     lists every one of them as text a screen reader can navigate. */
+  svg.setAttribute('aria-label', capped
+    ? 'Cut map: not drawn — the grid is larger than this tool will build. See the checks below.'
+    : `Cut map: a ${layout.nx} by ${layout.ny} cell grid in a ${Wmm} by ${Dmm} millimetre ` +
+      `drawer, ${splitName()} split into ` +
+      `${layout.pieces.length} piece${layout.pieces.length === 1 ? '' : 's'}. ` +
+      'Front of the drawer is at the bottom.');
 
   svg.querySelectorAll('.hitline').forEach(el => el.addEventListener('click', onMapClick));
 }
@@ -3410,6 +3597,19 @@ function setSplitSeg(v) {
 function drawPieceTable() {
   const tb = $('pieceRows');
   const pitch = state.pitch;
+  const ws = warningsList();
+  const stopped = ws.some(w => w.stop);
+  /* The pieces a clamped drawer produces are pieces of a drawer nobody asked for, and
+     listing them under a column headed "Bed fit" with the word "fits" in it is the
+     self-contradiction this whole guard exists to remove — the screen said "resolve the
+     errors above to generate" and "-50.0 × 211.0 … fits" at the same time. */
+  if (stopped) {
+    tb.innerHTML = '<tr><td colspan="6">Nothing to list until the checks above are clear.</td></tr>';
+    $('pieceTail').textContent = 'not building — see the checks above';
+    updatePreviewLabel(true);
+    syncExportDialog();
+    return;
+  }
   tb.innerHTML = layout.pieces.map((pc, i) => {
     const w = pc.mL + pc.nx*pitch + pc.mR, d = pc.mF + pc.ny*pitch + pc.mB;
     const fit = pieceFits(pc);
@@ -3435,10 +3635,39 @@ function drawPieceTable() {
   tb.querySelectorAll('button[data-dl]').forEach(b => b.addEventListener('click', () => downloadPiece(b.dataset.dl)));
   const tot = layout.pieces.length;
   const okc = Object.keys(builds).length;
-  $('pieceTail').textContent = okc < tot ? `building ${okc}/${tot}…` : `${tot} ready`;
+  /* "building 0/2…" used to be permanent whenever a check found an error, because
+     runBuild returns before it starts one — so the count was counting towards a number
+     it would never reach, next to a status line saying the build could not start. */
+  const blocked = ws.some(w => w.err);
+  $('pieceTail').textContent = blocked ? 'not building — see the checks above'
+    : okc < tot ? `building ${okc}/${tot}…` : `${tot} ready`;
+  updatePreviewLabel(blocked);
   // this runs once per piece as the build proceeds, which is exactly the cadence an
   // open dialog needs to keep its readiness line and its file list honest
   syncExportDialog();
+}
+
+/* Same reasoning as the cut map's label: a <canvas> is a blank rectangle to anything
+   that cannot see it, and this one carries the answer to "did that do what I meant".
+   A summary rather than a description of the scene — the shape of each piece is in the
+   piece table, as text.
+
+   Every number in it is read from the state the piece table and the print plan read, and
+   the joint is named through CONNECTOR_NAMES, which is the export dialog's name for it —
+   so the label cannot end up describing a different design from the rest of the page.
+   It is written on every draw, including the ones that have nothing to show: a label
+   set once goes stale, and a stale label is worse than none because it is confident. */
+function updatePreviewLabel(blocked) {
+  const n = layout.pieces.length, built = Object.keys(builds).length;
+  $('three').setAttribute('aria-label', blocked
+    ? '3D preview: nothing to show — see the checks under the cut map.'
+    : built < n
+      ? `3D preview: building, ${built} of ${n} piece${n === 1 ? '' : 's'} so far.`
+      : `3D preview: a ${layout.nx} by ${layout.ny} cell baseplate, ` +
+        `${(layout.nx * state.pitch).toFixed(0)} by ` +
+        `${(layout.ny * state.pitch).toFixed(0)} millimetres, split into ` +
+        `${n} piece${n === 1 ? '' : 's'} and joined with ` +
+        `${CONNECTOR_NAMES[state.connector] || state.connector}.`);
 }
 
 // ---------- async build ----------
@@ -3453,15 +3682,16 @@ async function runBuild() {
   printPlan = null; renderPrintPlan();
   drawPieceTable();
   clearThree();
-  const errs = warningsList().some(w => w.err);
-  if (errs) { $('status').textContent = 'resolve the errors above to generate'; return; }
+  if (hasErrors()) { $('status').textContent = 'resolve the errors above to generate'; return; }
   for (const pc of layout.pieces) {
     $('status').textContent = `building ${pc.id}…`;
     await new Promise(r => setTimeout(r, 0));
     if (token !== buildToken) return;
     try {
       const res = buildPiece(state, layout, pc);
-      builds[pc.id] = { polys: res.polys, meta: res };
+      // measured once, here, rather than every time the dialog re-syncs — which is once
+      // per piece as the build proceeds, so it would be quadratic in the piece count
+      builds[pc.id] = { polys: res.polys, meta: res, mat: meshMaterial(res.polys) };
       addPieceToThree(pc, res);
     } catch (e) {
       console.error('build failed for', pc.id, e);
@@ -3774,6 +4004,62 @@ function activeJoint() {
            clr: kind === 'snaptop' ? state.key.clr : prm.clr,
            part: connectorPart().polys };
 }
+/* ---------- material ------------------------------------------------------
+ * How much filament this is — the number that decides whether anyone starts. The bins
+ * tool has said so since it shipped; the baseplates tool, whose jobs are the long ones,
+ * said nothing at all about a twelve-piece print that is days of machine time.
+ *
+ * The approach is ported from volumeMm3 in the bins tool rather than shared with it.
+ * That function works from a bin's own parameters — feet, walls, dividers, lip — and a
+ * baseplate has none of those; what carries across is the reasoning, which is the part
+ * that matters. Raw mesh volume is NOT what a printer uses: the slicer shells a part and
+ * infills the core, so the 2.8 mm slab under a solid plate comes out mostly air at 15%,
+ * while the 1 mm band of wall between two sockets is a couple of perimeters wide and
+ * prints solid whatever you set.
+ *
+ * The shell is measured off the mesh itself, triangle by triangle, because a baseplate's
+ * shape moves with the socket profile, the skeleton, magnets, screws and the joint —
+ * there is no small set of parameters to work from the way there is for a bin. Assumes
+ * 2 perimeters and 4 solid top/bottom layers, and 15% infill, which are the bins tool's
+ * assumptions and its default. Geometry is unaffected either way.
+ */
+const SHELL_T = 0.8, SKIN_T = 0.8, INFILL = 0.15, PLA_DENSITY = 1.24;   // g/cm3
+function meshMaterial(polys) {
+  let raw = 0, shell = 0;
+  for (const p of polys) {
+    const v = p.verts;
+    for (let i = 1; i + 1 < v.length; i++) {
+      const a = v[0], b = v[i], c = v[i + 1];
+      /* Signed volume of the tetrahedron this triangle makes with the origin. Over a
+         closed mesh they sum to the volume enclosed wherever the origin happens to
+         fall, which is why nothing has to be centred first. */
+      raw += (a[0] * (b[1]*c[2] - b[2]*c[1]) - a[1] * (b[0]*c[2] - b[2]*c[0])
+              + a[2] * (b[0]*c[1] - b[1]*c[0])) / 6;
+      const ux = (b[1]-a[1])*(c[2]-a[2]) - (b[2]-a[2])*(c[1]-a[1]);
+      const uy = (b[2]-a[2])*(c[0]-a[0]) - (b[0]-a[0])*(c[2]-a[2]);
+      const uz = (b[0]-a[0])*(c[1]-a[1]) - (b[1]-a[1])*(c[0]-a[0]);
+      const len = Math.hypot(ux, uy, uz);
+      // a face the nozzle lays down flat gets solid layers; a wall gets perimeters
+      shell += (len / 2) * (len && Math.abs(uz) / len > 0.7 ? SKIN_T : SHELL_T);
+    }
+  }
+  raw = Math.abs(raw);
+  return { raw, filament: Math.min(raw, shell + INFILL * Math.max(0, raw - shell)) };
+}
+const massText = (g) => g >= 1000 ? `${(g / 1000).toFixed(1)} kg` : `${Math.round(g)} g`;
+/* Null until every piece exists. Half a total is a number people would act on, and the
+   dialog re-renders on every finished piece, so it would be a different number each
+   time it appeared. */
+function materialGrams() {
+  if (!layout || layout.pieces.some(pc => !builds[pc.id])) return null;
+  let mm3 = layout.pieces.reduce((a, pc) => a + builds[pc.id].mat.filament, 0);
+  // the loose parts are part of the job: keysNeeded is the same count the STL lays out
+  // and the print plan reserves bed space for
+  if (KEYED.includes(state.connector))
+    mm3 += meshMaterial(connectorPart().polys).filament * keysNeeded();
+  return mm3 * PLA_DENSITY / 1000;
+}
+
 // bounding box of a part, for laying copies out and for reserving bed space
 function partExtent(polys) {
   const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
@@ -3861,7 +4147,7 @@ function readmeText() {
   lines.push('');
   lines.push(`Drawer: ${state.drawerW} x ${state.drawerD} mm | Grid: ${layout.nx} x ${layout.ny} cells @ ${state.pitch} mm`);
   lines.push(`Margins: L ${layout.mL.toFixed(1)} R ${layout.mR.toFixed(1)} F ${layout.mF.toFixed(1)} B ${layout.mB.toFixed(1)} mm`);
-  lines.push(`Split: ${state.splitMode} | Pieces: ${layout.pieces.length} in ${rows} row band(s)`);
+  lines.push(`Split: ${splitName()} | Pieces: ${layout.pieces.length} in ${rows} row band(s)`);
   lines.push(`Connectors: ${state.connector}` + (state.connector === 'dovetail' ? ` (clearance ${state.tab.clr} mm/side)` : ''));
   if (state.magnets) lines.push(`Magnets: ${state.magnetD} x ${state.magnetH} mm, from ${state.magnetSide}`);
   if (state.screws) lines.push(`Screws: ${state.screwHoleD} mm holes, ${state.screwHeadD} mm counterbore`);
@@ -3935,6 +4221,13 @@ const exRow = (name, meta, label, onClick, attrs) =>
 
 const CONNECTOR_NAMES = { dovetail: 'dovetail tabs', puzzle: 'puzzle tabs', bowtie: 'bowtie keys',
   puzzlekey: 'puzzle keys', snap: 'snap clips', hclip: 'H-clips', none: 'no connectors' };
+/* The same job as CONNECTOR_NAMES, for the same reason. `plates` is the value on the
+   button labelled "Fewest plates", and it was interpolated straight into user copy —
+   the dialog said "4 piece(s), plates split" and the README in every ZIP said
+   "Split: plates". An internal enum is not a name for anything. */
+const SPLIT_NAMES = { balanced: 'balanced', staggered: 'staggered',
+  plates: 'fewest plates', manual: 'manual' };
+const splitName = () => SPLIT_NAMES[state.splitMode] || state.splitMode;
 
 /* What goes wrong is tested before whether the build has finished, not after. Anything
    the checks call an error stops runBuild, so the pieces never finish and never will —
@@ -3965,24 +4258,54 @@ function bedFitText() {
 
 function renderExportSummary() {
   const pitch = state.pitch;
+  const g = materialGrams();
   $('exDesign').textContent =
     `${layout.nx} × ${layout.ny} cell grid (${(layout.nx * pitch).toFixed(0)} × ${(layout.ny * pitch).toFixed(0)} mm) ` +
     `in a ${state.drawerW} × ${state.drawerD} mm drawer\n` +
-    `${layout.pieces.length} piece(s), ${state.splitMode} split, joined with ${CONNECTOR_NAMES[state.connector] || state.connector}\n` +
-    `margins L ${layout.mL.toFixed(1)} / R ${layout.mR.toFixed(1)} / F ${layout.mF.toFixed(1)} / B ${layout.mB.toFixed(1)} mm`;
+    `${layout.pieces.length} piece(s), ${splitName()} split, joined with ${CONNECTOR_NAMES[state.connector] || state.connector}\n` +
+    `margins L ${layout.mL.toFixed(1)} / R ${layout.mR.toFixed(1)} / F ${layout.mF.toFixed(1)} / B ${layout.mB.toFixed(1)} mm` +
+    (g === null ? '' : `\nabout ${massText(g)} of PLA at 15% infill`);
   const fit = bedFitText();
   $('exFit').className = 'exfit ' + fit.cls;
   $('exFit').textContent = fit.t;
 }
 
+/* Every row's button used to be called either "Download" or "STL", so a dialog with
+   twenty-eight of them in it — 600 × 450 on a 180 mm bed — presented a screen reader
+   with twenty-eight identical controls. The visible label stays short, because the
+   column is narrow and the name is right beside it; the accessible name says which
+   file and in what format. */
 function renderExportFiles() {
   $('exFiles').innerHTML = '';
   const ready = Object.keys(builds).length >= layout.pieces.length;
+
+  /* The tile and the sample go first. The group is called "print these first" and it
+     was last, under everything else and below the fold on any bed small enough to make
+     a lot of plates — advice you have to scroll past the thing it is advice about is
+     not advice. They are also the only two rows that are always available, because
+     neither waits on the pieces being built. */
+  exGroup('Print these first');
+  /* No byte size on this row. It is the one file nothing has built yet, and building a
+     tile purely to measure it would be work done on every open for a number nobody
+     needs — the point of the row is that it is small and quick. */
+  exRow('Bin fit test tile', 'one 1 × 1 cell of the plate · STL',
+        'STL', () => saveBlob(stlBinary(testTilePolys(), 'test-tile'),
+                              'baseplate-test-tile-1x1.stl'),
+        { 'data-ex': 'tile', 'aria-label': 'Download the bin fit test tile (STL)' });
+  if (state.connector !== 'none')
+    exRow('Joint fit sample', 'four tile pairs at graduated clearances · STL',
+          'STL', downloadFitSample,
+          { 'data-ex': 'fit', 'aria-label': 'Download the joint fit sample (STL)' });
+
   if (printPlan) {
     const n = printPlan.plates.length;
     exGroup('Pre-arranged print plates');
-    exRow('Every plate', `${n} plate(s) · 3MF` + (n > 1 ? ' in a ZIP' : ''),
-          'Download', downloadAllPlates, { 'data-ex': 'allplates' });
+    // named as the recommended path, because it is: every part already placed on a bed,
+    // in the order the plan worked out, with nothing left to arrange
+    exRow('Every plate — recommended',
+          `${n} plate(s) · 3MF` + (n > 1 ? ' in a ZIP' : '') + ' · the whole job, arranged',
+          'Download', downloadAllPlates,
+          { 'data-ex': 'allplates', 'aria-label': 'Download every print plate (3MF)' });
     /* Per-plate downloads. The combined export already builds each plate on its own
        before zipping them, so one plate at a time is the same call with the zip left
        off — and it is what you want when one print failed, or when tonight's print is
@@ -3990,36 +4313,28 @@ function renderExportFiles() {
     printPlan.plates.forEach((pl, i) => exRow(`Plate ${i + 1}`,
       `${pl.placed.length} part(s) on a ${state.bedW} × ${state.bedD} mm bed · 3MF`, 'Download',
       async () => saveBlob(await plate3mfBytes(i), `plate-${i + 1}.3mf`),
-      { 'data-ex': 'plate' }));
+      { 'data-ex': 'plate', 'aria-label': `Download plate ${i + 1} (3MF)` }));
   }
 
   exGroup('Meshes');
   exRow('Everything, with a README', 'every piece' +
         (printPlan ? ', the print plates' : '') + ' and the assembly order · ZIP',
-        'Download', downloadEverythingZip, { 'data-ex': 'zip' });
+        'Download', downloadEverythingZip,
+        { 'data-ex': 'zip', 'aria-label': 'Download everything, with a README (ZIP)' });
   for (const pc of layout.pieces) {
     const b = builds[pc.id];
     const btn = exRow(`Piece ${pc.id}`,
           `${pc.nx} × ${pc.ny} cells · ` + (b ? `${DF.bytes(DF.stlBytes(b.polys))} · STL` : 'not built yet'),
-          'STL', () => downloadPiece(pc.id), { 'data-ex': 'piece' });
+          'STL', () => downloadPiece(pc.id),
+          { 'data-ex': 'piece', 'aria-label': `Download piece ${pc.id} (STL)` });
     btn.disabled = !b;   // downloadPiece would otherwise fail silently
   }
   if (KEYED.includes(state.connector)) {
-    exRow(state.connector === 'snap' ? 'Snap clips' : 'Connector keys',
-          `${keysNeeded()} needed, laid out on one plate · STL`, 'STL', downloadKeys,
-          { 'data-ex': 'keys' });
+    const kn = state.connector === 'snap' ? 'Snap clips' : 'Connector keys';
+    exRow(kn, `${keysNeeded()} needed, laid out on one plate · STL`, 'STL', downloadKeys,
+          { 'data-ex': 'keys', 'aria-label': `Download the ${kn.toLowerCase()} (STL)` });
   }
 
-  exGroup('Print these first');
-  /* No byte size on this row. It is the one file nothing has built yet, and building a
-     tile purely to measure it would be work done on every open for a number nobody
-     needs — the point of the row is that it is small and quick. */
-  exRow('Bin fit test tile', 'one 1 × 1 cell of the plate · STL',
-        'STL', () => saveBlob(stlBinary(testTilePolys(), 'test-tile'),
-                              'baseplate-test-tile-1x1.stl'), { 'data-ex': 'tile' });
-  if (state.connector !== 'none')
-    exRow('Joint fit sample', 'four tile pairs at graduated clearances · STL',
-          'STL', downloadFitSample, { 'data-ex': 'fit' });
   if (!ready)
     for (const btn of $('exFiles').querySelectorAll('button[data-ex="zip"],button[data-ex="allplates"],button[data-ex="plate"]'))
       btn.disabled = true;
@@ -4152,8 +4467,19 @@ function loadFromHash() {
 }
 
 // ---------- wiring ----------
-document.querySelectorAll('section.p>h2').forEach(h =>
-  h.addEventListener('click', () => h.parentElement.classList.toggle('closed')));
+/* The handler is on the <button> inside the header, not on the <h2>.
+   A bare heading with a click listener is only a control for a mouse, and because a
+   closed panel's body is display:none there was nothing focusable inside it either —
+   so panel 06, which loads closed, put the socket profile beyond a keyboard entirely.
+   There was no route to it at all, not a slow one.
+   aria-expanded is written from the class rather than kept alongside it, so the two
+   cannot drift: the class is what actually shows the panel. */
+for (const btn of document.querySelectorAll('section.p>h2>button')) {
+  const sec = btn.closest('section.p');
+  btn.addEventListener('click', () => {
+    btn.setAttribute('aria-expanded', String(!sec.classList.toggle('closed')));
+  });
+}
 document.querySelectorAll('#splitSeg button').forEach(b => b.addEventListener('click', () => {
   state.splitMode = b.dataset.v;
   if (b.dataset.v !== 'manual') { state.rowCuts = null; state.colCuts = null; }
@@ -4178,7 +4504,11 @@ recomputeLayout();
 fitThree();
 
 </script>
-<a id="kofi" class="kofi" href="https://ko-fi.com/oliver_johnson" target="_blank" rel="noopener"><span class="cup">☕</span><span><b>Buy me a coffee</b><i>free and open, no ads, no accounts</i></span><button id="kofiX" title="Hide this" aria-label="Hide">×</button></a>
+<!-- The dismiss control is a sibling of the link, not a child of it: a <button> inside
+     an <a> is interactive content inside a link, which is invalid — Chrome does the
+     useful thing with it anyway, but nothing says the next engine has to. It also
+     starts hidden; chrome.js decides when showing it stops being an interruption. -->
+<div id="kofi" class="kofi" hidden><a href="https://ko-fi.com/oliver_johnson" target="_blank" rel="noopener"><span class="cup">☕</span><span><b>Buy me a coffee</b><i>free and open, no ads, no accounts</i></span></a><button type="button" id="kofiX" title="Hide this" aria-label="Hide the tip jar">×</button></div>
 <script>/* Shared page furniture — runs on every page, tools and prose alike. */
 (function () {
   /* Carry the working state across links that ask for it.

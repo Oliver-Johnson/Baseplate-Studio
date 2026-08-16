@@ -5,7 +5,8 @@
  * was not a rough edge: panels 01 and 02 load collapsed, a collapsed panel's body is
  * display:none, and the header was a bare <h2> with a click listener — so the drawer
  * size and the printer bed were not reachable by keyboard at all. Not slow to reach.
- * Absent.
+ * Absent. The baseplates page had the same shape and the same bug in panel 06, the
+ * socket profile, which is why the panel cases below run against both tools.
  *
  * Each assertion is written to fail against the code as it was. Where a test could
  * pass by accident — a label written once into the markup, an aria attribute that
@@ -19,15 +20,21 @@ const H = require('./helpers.js');
 
 const pageUrl = (rel) => pathToFileURL(path.join(H.ROOT, rel)).href;
 
-/* The baseplates page shares this stylesheet and has the same markup shape, but
-   src/template.html and src/ui.js were owned by another change while these were
-   written. Add ['baseplates', 'index.html'] to this list once that lands — the
-   assertions below are page-agnostic on purpose. */
 const OWNED_PAGES = [
+  ['baseplates', 'index.html'],
   ['bins', 'bins/index.html'],
   ['guide', 'guide/index.html'],
   ['guide/split', 'guide/split/index.html'],
   ['guide/drawer-sizes', 'guide/drawer-sizes/index.html'],
+];
+
+/* Both tools have the same rail of collapsing panels, and both ship at least one of
+   them closed, so the panel cases below run against each. The closed panel and the
+   first field inside it differ — bins loads 01 and 02 closed, baseplates loads 06 —
+   and that is the whole of what the two pages disagree about here. */
+const PANEL_TOOLS = [
+  { name: 'bins', open: H.openBins, closed: 's-drawer', field: 'drawerW' },
+  { name: 'baseplates', open: H.openPlates, closed: 's-prof', field: 'tolerance' },
 ];
 
 /* Tab forward until `match` is happy, and say where focus ended up. Bounded, because
@@ -62,32 +69,33 @@ async function tabUntil(page, match, limit = 60) {
    because they reach a button by different routes — Enter fires click on keydown,
    Space on keyup — and a hand-rolled key handler has historically got exactly one
    of them right. */
-for (const key of ['Enter', 'Space']) {
-  test(`a keyboard can reach a collapsed panel header and open it with ${key}`,
+for (const tool of PANEL_TOOLS) for (const key of ['Enter', 'Space']) {
+  test(`${tool.name}: a keyboard can reach a collapsed panel header and open it with ${key}`,
     async ({ page }) => {
-      await H.openBins(page);
+      await tool.open(page);
 
-      // panel 01 has to actually be collapsed, or this test proves nothing
-      await expect(page.locator('#s-drawer')).toHaveClass(/closed/);
-      await expect(page.locator('#drawerW')).toBeHidden();
+      // the panel has to actually be collapsed, or this test proves nothing
+      await expect(page.locator('#' + tool.closed)).toHaveClass(/closed/);
+      await expect(page.locator('#' + tool.field)).toBeHidden();
 
-      const { hit, seen } = await tabUntil(page, (a) => a.section === 's-drawer' && a.inHeader);
+      const { hit, seen } = await tabUntil(page, (a) => a.section === tool.closed && a.inHeader);
       expect(hit,
-        'Tab never stopped on the header of panel 01, so its fields cannot be reached. ' +
+        `Tab never stopped on the header of #${tool.closed}, so its fields cannot be reached. ` +
         'Focus visited: ' + seen.map((s) => s.tag + '#' + s.id).join(' → ')).not.toBeNull();
       expect(hit.expanded).toBe('false');
 
       await page.keyboard.press(key);
-      await expect(page.locator('#s-drawer')).not.toHaveClass(/closed/);
-      await expect(page.locator('#drawerW')).toBeVisible();
+      await expect(page.locator('#' + tool.closed)).not.toHaveClass(/closed/);
+      await expect(page.locator('#' + tool.field)).toBeVisible();
       // and the field is now genuinely usable from where the keyboard already is
       await page.keyboard.press('Tab');
-      await expect(page.locator('#drawerW')).toBeFocused();
+      await expect(page.locator('#' + tool.field)).toBeFocused();
     });
 }
 
-test('aria-expanded tracks the panel, in both directions', async ({ page }) => {
-  await H.openBins(page);
+for (const tool of PANEL_TOOLS)
+test(`${tool.name}: aria-expanded tracks the panel, in both directions`, async ({ page }) => {
+  await tool.open(page);
 
   const read = () => page.evaluate(() =>
     [...document.querySelectorAll('section.p')].map((s) => {
@@ -158,6 +166,53 @@ test('the 3D preview is labelled with what it contains', async ({ page }) => {
   expect(filled).toMatch(/1 bin over 1 layer/i);
   expect(filled).toMatch(/tallest stack [\d.]+ millimetres/i);
 });
+
+/* The same for the baseplates preview, which had neither the role nor a label at all —
+   on the tool the site opens on. Written to fail against a label that merely exists:
+   every fact in it is compared against the page's own model, and both the grid and the
+   joint are moved to check the label moves with them. A label set once and left is the
+   failure mode the bins page has shipped, where an early return skips the update and it
+   reads "loading" for the life of the session. */
+test('the baseplates preview is labelled, and the label follows the design',
+  async ({ page }) => {
+    await H.openPlates(page);
+    const label = () => page.locator('#three').getAttribute('aria-label');
+    const ready = () => page.waitForFunction(
+      () => /ready/.test(document.getElementById('pieceTail').textContent),
+      null, { timeout: 40000 });
+
+    expect(await page.locator('#three').getAttribute('role')).toBe('img');
+
+    const first = await label();
+    const m = await page.evaluate(() =>
+      ({ nx: layout.nx, ny: layout.ny, n: layout.pieces.length }));
+    expect(first).toContain(`${m.nx} by ${m.ny} cell baseplate`);
+    expect(first).toContain(`${m.n} piece`);
+    expect(first, 'fixture: the default joint is dovetail tabs').toMatch(/dovetail tabs/);
+
+    // the joint moves, and the label with it
+    await H.setField(page, 'connector', 'hclip');
+    await ready();
+    const joint = await label();
+    expect(joint, 'the label ignored the joint changing').not.toBe(first);
+    expect(joint).toMatch(/H-clips/);
+
+    // and so does the grid
+    await H.setField(page, 'drawerW', 500);
+    await ready();
+    const bigger = await label();
+    const m2 = await page.evaluate(() => [layout.nx, layout.ny]);
+    expect(m2[0], 'fixture: the drawer must really have gained cells')
+      .toBeGreaterThan(m.nx);
+    expect(bigger).toContain(`${m2[0]} by ${m2[1]} cell baseplate`);
+
+    // and it does not go on describing a design that is no longer possible
+    await H.setField(page, 'drawerW', '');
+    await page.waitForTimeout(900);
+    const gone = await label();
+    expect(gone, 'the label outlived the design').not.toBe(bigger);
+    expect(gone).toMatch(/nothing to show/i);
+  });
 
 /* ---- structure ----------------------------------------------------------- */
 
