@@ -149,6 +149,11 @@ function readControls() {
   $('connHintPkey').style.display = state.connector === 'puzzlekey' ? '' : 'none';
   $('connHintSnap').style.display = state.connector === 'snap' ? '' : 'none';
   $('connHintHclip').style.display = state.connector === 'hclip' ? '' : 'none';
+  /* 'none' has no figure, and correctly shows nothing rather than the last one you
+     looked at. Queried rather than held in a list so that adding a joint to
+     tools/joints.js is enough -- a second list here could silently stop matching. */
+  for (const fig of document.querySelectorAll('.connfig'))
+    fig.style.display = fig.dataset.joint === state.connector ? '' : 'none';
   const hasKeys = KEY_CONN.includes(state.connector);
   $('keyMountRow').style.display = hasKeys ? '' : 'none';
   $('keyMountHint').style.display = hasKeys ? '' : 'none';

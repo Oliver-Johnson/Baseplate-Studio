@@ -28,5 +28,7 @@ module.exports = function generated(html, G) {
   html = seo.inject(html);              // FAQ markup, from the page's own questions
   if (html.includes('<!--__JOINTS__-->'))
     html = html.replace('<!--__JOINTS__-->', joints.gallery(G));
+  if (html.includes('<!--__JOINTFIGS__-->'))
+    html = html.replace('<!--__JOINTFIGS__-->', joints.pickerFigures(G));
   return html;
 };

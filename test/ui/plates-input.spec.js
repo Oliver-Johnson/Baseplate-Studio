@@ -304,3 +304,34 @@ test('the cut map says what it is showing, and keeps saying it', async ({ page }
 });
 
 // (the 3D preview's label is asserted in a11y.spec.js, beside the bins page's)
+
+/* The joint you picked is the joint you are shown.
+ *
+ * Seven connector options were described in prose and pictured nowhere; the 3D preview
+ * renders the whole plate at a scale where a joint is a few pixels across. The figures
+ * are generated from core.js's parameters at build time, so this does not check that
+ * the drawing is right — test/guide-facts.js does that, including that each key spans
+ * the seam rather than lying along it. What it checks is the wiring: that exactly one
+ * is showing, that it is the one named in the dropdown, and that 'none' shows nothing
+ * rather than leaving the last joint you looked at on screen.
+ */
+test('the connector picker shows the joint you chose, and nothing for none', async ({ page }) => {
+  await H.openPlates(page);
+  const shown = async () => page.$$eval('.connfig',
+    (els) => els.filter((e) => e.style.display !== 'none').map((e) => e.dataset.joint));
+
+  for (const kind of ['dovetail', 'puzzle', 'bowtie', 'puzzlekey', 'snap', 'hclip']) {
+    await page.selectOption('#connector', kind);
+    await page.waitForTimeout(120);
+    expect(await shown(), `picked ${kind}`).toEqual([kind]);
+  }
+  await page.selectOption('#connector', 'none');
+  await page.waitForTimeout(120);
+  expect(await shown(), 'none has no joint to draw').toEqual([]);
+
+  /* The figure is decorative: the hint paragraph beside it says the same thing in
+     words, and a screen reader should be given it once rather than twice. */
+  await page.selectOption('#connector', 'snap');
+  await page.waitForTimeout(120);
+  expect(await page.getAttribute('.connfig[data-joint="snap"]', 'aria-hidden')).toBe('true');
+});

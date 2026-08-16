@@ -116,4 +116,16 @@ function gallery(G) {
     '</div>';
 }
 
-module.exports = { all, diagram, gallery, KINDS, LABELS, dovetailTab };
+/* The same six, for the connector picker on the baseplates page. No captions: the hint
+   paragraph beside the dropdown already says the dimensions in words, and a caption
+   would be the same fact twice in the width of a 400 px rail. That is also why the
+   figure is aria-hidden -- the hint is the accessible equivalent, so a screen reader
+   should hear it once, in the better of the two forms. */
+function pickerFigures(G) {
+  const d = all(G);
+  return KINDS.map((k) =>
+    `<div class="connfig" data-joint="${k}" style="display:none" aria-hidden="true">` +
+    `${d[k].svg}</div>`).join('');
+}
+
+module.exports = { all, diagram, gallery, pickerFigures, KINDS, LABELS, dovetailTab };

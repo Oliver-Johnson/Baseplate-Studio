@@ -99,6 +99,8 @@ a{color:var(--cyan)}
 .jointfig svg.joint{display:block;width:100%;background:var(--bg)}
 .jointfig figcaption{padding:9px 12px;font-size:12.5px;color:var(--dim);line-height:1.5}
 .jointfig figcaption b{display:block;color:var(--ink);font-weight:600;margin-bottom:2px}
+.connfig{margin:8px 0 2px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.connfig svg.joint{display:block;width:100%;background:var(--bg)}
 .j-plate{fill:#2b3947}
 .jointfig svg.joint>.j-plate:first-of-type{fill:#334353}
 .j-seam{stroke:var(--bg);stroke-width:.5}
@@ -633,6 +635,11 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
         <option value="hclip">H-clips — tiny keys in the walls, no floor needed</option>
         <option value="none">None — rely on drawer walls</option>
       </select></label>
+    <!-- The joint, drawn. Seven options described in prose and pictured nowhere, while
+         the 3D preview shows the whole plate at a scale where a joint is a few pixels.
+         Generated from core.js's parameters at build time, so the picture cannot
+         disagree with the part; all six ship and the page shows the one you picked. -->
+    <div class="connfig" data-joint="dovetail" style="display:none" aria-hidden="true"><svg class="joint" viewBox="-17 -10 34 20" role="img" aria-label="8 mm at the seam, 11 mm at 1.9 mm deep — it cannot pull straight out"><rect class="j-plate" x="-17" y="-10" width="34" height="10"/><rect class="j-plate" x="-17" y="0" width="34" height="10"/><path class="j-seam" d="M-17 0 L17 0"/><path class="j-cut" d="M-4 0 L-5.5 1.9 L5.5 1.9 L4 0 Z"/></svg></div><div class="connfig" data-joint="puzzle" style="display:none" aria-hidden="true"><svg class="joint" viewBox="-17 -10 34 20" role="img" aria-label="a 6 mm neck opening to a 9.2 mm lobe"><rect class="j-plate" x="-17" y="-10" width="34" height="10"/><rect class="j-plate" x="-17" y="0" width="34" height="10"/><path class="j-seam" d="M-17 0 L17 0"/><path class="j-cut" d="M-3 -0.4 L-3 0.64 L-3.82 1.57 L-4.37 2.68 L-4.59 3.9 L-4.49 5.13 L-4.06 6.3 L-3.33 7.3 L-2.37 8.07 L-1.23 8.56 L0 8.73 L1.23 8.56 L2.37 8.07 L3.33 7.3 L4.06 6.3 L4.49 5.13 L4.59 3.9 L4.37 2.68 L3.82 1.57 L3 0.64 L3 -0.4 Z"/></svg></div><div class="connfig" data-joint="bowtie" style="display:none" aria-hidden="true"><svg class="joint" viewBox="-17 -10 34 20" role="img" aria-label="a 14 x 8 mm bowtie, waisted so it cannot slide out either way"><rect class="j-plate" x="-17" y="-10" width="34" height="10"/><rect class="j-plate" x="-17" y="0" width="34" height="10"/><path class="j-seam" d="M-17 0 L17 0"/><path class="j-part" d="M-4 -7 L-2.5 0 L-4 7 L4 7 L2.5 0 L4 -7 Z"/></svg></div><div class="connfig" data-joint="puzzlekey" style="display:none" aria-hidden="true"><svg class="joint" viewBox="-17 -10 34 20" role="img" aria-label="a 14 x 8.39 mm key with lobed ends"><rect class="j-plate" x="-17" y="-10" width="34" height="10"/><rect class="j-plate" x="-17" y="0" width="34" height="10"/><path class="j-seam" d="M-17 0 L17 0"/><path class="j-part" d="M-3.51 0.5 L-4 1.52 L-4.2 2.62 L-4.09 3.74 L-3.69 4.8 L-3.03 5.71 L-2.15 6.41 L-1.12 6.85 L0 7 L1.12 6.85 L2.15 6.41 L3.03 5.71 L3.69 4.8 L4.09 3.74 L4.2 2.62 L4 1.52 L3.51 0.5 L3.51 -0.5 L4 -1.52 L4.2 -2.62 L4.09 -3.74 L3.69 -4.8 L3.03 -5.71 L2.15 -6.41 L1.12 -6.85 L0 -7 L-1.12 -6.85 L-2.15 -6.41 L-3.03 -5.71 L-3.69 -4.8 L-4.09 -3.74 L-4.2 -2.62 L-4 -1.52 L-3.51 -0.5 Z"/></svg></div><div class="connfig" data-joint="snap" style="display:none" aria-hidden="true"><svg class="joint" viewBox="-17 -10 34 20" role="img" aria-label="a 14 x 8 mm sprung key — the slot lets it compress going in"><rect class="j-plate" x="-17" y="-10" width="34" height="10"/><rect class="j-plate" x="-17" y="0" width="34" height="10"/><path class="j-seam" d="M-17 0 L17 0"/><path class="j-part" d="M-4 -7 L-4 -3.8 L-3.25 -3 L-3.25 3 L-4 3.8 L-4 7 L4 7 L4 3.8 L3.25 3 L3.25 -3 L4 -3.8 L4 -7 Z"/><path class="j-slot" d="M-0.65 -4.34 L0.65 -4.34 L0.65 4.34 L-0.65 4.34 Z"/></svg></div><div class="connfig" data-joint="hclip" style="display:none" aria-hidden="true"><svg class="joint" viewBox="-17 -10 34 20" role="img" aria-label="a 3.6 x 3.8 mm U-clip, pressed in from above once the plate is down"><rect class="j-plate" x="-17" y="-10" width="34" height="10"/><rect class="j-plate" x="-17" y="0" width="34" height="10"/><path class="j-seam" d="M-17 0 L17 0"/><path class="j-part" d="M-1.9 -1.8 L-1.9 -0.9 L-0.9 -0.65 L-0.9 0.65 L-1.9 0.9 L-1.9 1.8 L1.9 1.8 L1.9 0.9 L0.9 0.65 L0.9 -0.65 L1.9 -0.9 L1.9 -1.8 Z"/></svg></div>
     <div id="connHintDove" class="hint">Tabs on one piece drop into open-bottomed pockets on its neighbour. Assemble on a flat surface, then lower the whole plate into the drawer. Placed at every wall junction along each seam.</div>
     <div id="connHintPuzzle" class="hint" style="display:none">Jigsaw lobes printed on one piece lock into matching cavities on its neighbour — the strongest in-plane joint. Adds a ~2.6&nbsp;mm solid floor that the lobes live in; assembles by lowering pieces together.</div>
     <div id="connHintBow" class="hint" style="display:none">Bowtie-shaped recesses are cut into the underside of both pieces; printed keys bridge each seam. The waisted middle is what stops the seam pulling apart. The simplest of the loose-key joints and the easiest to press home — pick it unless a seam is long enough to creep sideways. Adds a solid floor to house the keys; the keys STL is in Export and in the ZIP.</div>
@@ -3359,6 +3366,11 @@ function readControls() {
   $('connHintPkey').style.display = state.connector === 'puzzlekey' ? '' : 'none';
   $('connHintSnap').style.display = state.connector === 'snap' ? '' : 'none';
   $('connHintHclip').style.display = state.connector === 'hclip' ? '' : 'none';
+  /* 'none' has no figure, and correctly shows nothing rather than the last one you
+     looked at. Queried rather than held in a list so that adding a joint to
+     tools/joints.js is enough -- a second list here could silently stop matching. */
+  for (const fig of document.querySelectorAll('.connfig'))
+    fig.style.display = fig.dataset.joint === state.connector ? '' : 'none';
   const hasKeys = KEY_CONN.includes(state.connector);
   $('keyMountRow').style.display = hasKeys ? '' : 'none';
   $('keyMountHint').style.display = hasKeys ? '' : 'none';
