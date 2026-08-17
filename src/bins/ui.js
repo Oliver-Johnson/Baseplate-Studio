@@ -1221,6 +1221,13 @@ let scene, camera, renderer, group, drawerGroup;
    that out until the drawer shell arrived and its tall front panel appeared at the
    back. Same elevation and distance, same view, just from the side you open. */
 let theta = 0.9, phi = 0.95, dist = 600, dragging = null;
+/* Where the camera is looking, on the drawer floor. Orbit alone always swung about the
+   middle of the grid, so a bin in a far corner of a nine-cell drawer could not be
+   brought to the middle of the view to be looked at — you could only get further away.
+   Middle-drag or shift-drag moves this; the baseplates tool has panned on shift-drag
+   from the start and now takes the middle button too, so the two previews answer to the
+   same hands. */
+let panX = 0, panZ = 0, panning = false;
 function initThree() {
   const canvas = $('three');
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -1248,11 +1255,18 @@ function initThree() {
   canvas.addEventListener('pointerdown', (e) => {
     pts.set(e.pointerId, [e.clientX, e.clientY]);
     dragging = [e.clientX, e.clientY];
+    /* Middle button, or shift with the left. preventDefault stops the browser's
+       middle-click autoscroll, which otherwise takes over the drag entirely. */
+    panning = e.button === 1 || e.shiftKey;
+    if (e.button === 1) e.preventDefault();
     canvas.setPointerCapture(e.pointerId);
     if (pts.size === 2) { pinch = gap(); dragging = null; hideTip(); }
   });
+  // the autoscroll cursor appears on the click that FOLLOWS the drag without this
+  canvas.addEventListener('auxclick', (e) => { if (e.button === 1) e.preventDefault(); });
   const lift = (e) => {
     pts.delete(e.pointerId);
+    if (pts.size === 0) panning = false;
     if (pts.size < 2) pinch = null;
     // re-seat on the finger still down, or the model jumps when the other lifts
     dragging = pts.size === 1 ? [...pts.values()][0].slice() : null;
@@ -1272,8 +1286,18 @@ function initThree() {
       return;
     }
     if (dragging) {
-      theta -= (e.clientX - dragging[0]) * 0.01;
-      phi = Math.min(3.11, Math.max(0.03, phi - (e.clientY - dragging[1]) * 0.01));
+      const dx = e.clientX - dragging[0], dy = e.clientY - dragging[1];
+      if (panning) {
+        /* Move the look-at point across the drawer floor, in the plane of the screen:
+           dragging right carries the model right, so the target goes left. Scaled by
+           distance so the model keeps up with the cursor at any zoom. */
+        const k = dist * 0.0011;
+        panX -= (dx * Math.sin(theta) + dy * Math.cos(theta)) * k;
+        panZ += (dx * Math.cos(theta) - dy * Math.sin(theta)) * k;
+      } else {
+        theta -= dx * 0.01;
+        phi = Math.min(3.11, Math.max(0.03, phi - dy * 0.01));
+      }
       dragging = [e.clientX, e.clientY]; render();
       hideTip();
       return;
@@ -1484,10 +1508,10 @@ function render() {
   renderer.setPixelRatio(window.devicePixelRatio || 1);
   renderer.setSize(w, h, false);
   camera.aspect = w / h; camera.updateProjectionMatrix();
-  camera.position.set(dist * Math.sin(phi) * Math.cos(theta),
+  camera.position.set(panX + dist * Math.sin(phi) * Math.cos(theta),
                       30 + dist * Math.cos(phi),
-                      dist * Math.sin(phi) * Math.sin(theta));
-  camera.lookAt(0, 20, 0);
+                      panZ + dist * Math.sin(phi) * Math.sin(theta));
+  camera.lookAt(panX, 20, panZ);
   renderer.render(scene, camera);
 }
 

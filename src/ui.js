@@ -600,7 +600,13 @@ function initThree() {
     pts.set(e.pointerId, [e.clientX, e.clientY]);
     canvas.setPointerCapture(e.pointerId);
     if (pts.size === 2) { pinch = gap(); pmid = mid(); drag = null; }
-    else if (pts.size === 1) drag = { x: e.clientX, y: e.clientY, pan: e.shiftKey };
+    /* Middle button pans as well as shift, which is what most 3D tools do and what the
+       bins preview now does. preventDefault stops the browser's autoscroll taking the
+       drag over. */
+    else if (pts.size === 1) {
+      drag = { x: e.clientX, y: e.clientY, pan: e.shiftKey || e.button === 1 };
+      if (e.button === 1) e.preventDefault();
+    }
   });
   canvas.addEventListener('pointermove', e => {
     if (!pts.has(e.pointerId)) return;
@@ -626,6 +632,7 @@ function initThree() {
     if (pts.size === 1) { const [p] = [...pts.values()]; drag = { x: p[0], y: p[1], pan: false }; }
     if (pts.size === 0) drag = null;
   };
+  canvas.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
   canvas.addEventListener('pointerup', lift);
   canvas.addEventListener('pointercancel', lift);
   canvas.addEventListener('wheel', e => { e.preventDefault(); sph.r = Math.max(60, Math.min(2200, sph.r * (1 + e.deltaY * 0.0011))); }, { passive: false });
