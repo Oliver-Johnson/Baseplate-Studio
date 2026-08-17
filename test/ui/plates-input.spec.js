@@ -335,3 +335,53 @@ test('the connector picker shows the joint you chose, and nothing for none', asy
   await page.waitForTimeout(120);
   expect(await page.getAttribute('.connfig[data-joint="snap"]', 'aria-hidden')).toBe('true');
 });
+
+/* Does the filament estimate actually listen to the infill?
+ *
+ * It did not. The figure was folded in when a piece was built and cached with it, and
+ * geometry does not change when the infill does — so the number was frozen at whatever
+ * the control read at build time while the label beside it dutifully quoted the new
+ * percentage. Worse than no control: it looked like it worked.
+ *
+ * The other half is that on a default open-bottomed plate the infill reaches nothing at
+ * all — every part of a 4.25 mm plate is a thin wall, so the shell estimate exceeds the
+ * whole volume. That is not a bug to hide; it is worth saying, or the honest lack of
+ * movement reads as the same defect.
+ */
+test('the filament estimate follows the infill, and says when it cannot', async ({ page }) => {
+  await H.openPlates(page);
+  const set = async (id, v) => {
+    await page.evaluate(([i, x]) => {
+      const e = document.getElementById(i);
+      e.value = x;
+      e.dispatchEvent(new Event('input', { bubbles: true }));
+      e.dispatchEvent(new Event('change', { bubbles: true }));
+    }, [id, v]);
+    await page.waitForTimeout(2600);
+  };
+  const estimate = async () => {
+    await page.click('#openExport');
+    await page.waitForTimeout(800);
+    const t = ((await page.locator('#exDesign').textContent()) || '').split('\n').pop();
+    await page.locator('#exportClose').click();
+    await page.waitForTimeout(250);
+    return t;
+  };
+  const grams = (t) => Number((t.match(/about ([\d.]+) (g|kg)/) || [])[1]) *
+                       (t.includes(' kg') ? 1000 : 1);
+
+  // open-bottomed: all shell, and the page should say so rather than quote a percentage
+  expect(await estimate()).toMatch(/all shell, so infill does not change it/);
+
+  // a solid pad gives the infill something to reach
+  await set('bottomPad', '2.8');
+  await set('infill', '5');
+  const low = await estimate();
+  await set('infill', '60');
+  const high = await estimate();
+
+  expect(low, 'a reachable core means the percentage is worth quoting').toMatch(/at 5% infill/);
+  expect(high).toMatch(/at 60% infill/);
+  expect(grams(high), `${grams(high)} g at 60% must exceed ${grams(low)} g at 5%`)
+    .toBeGreaterThan(grams(low) * 1.1);
+});

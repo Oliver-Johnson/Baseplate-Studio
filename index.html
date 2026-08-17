@@ -618,6 +618,8 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
       <label class="f"><b>Bed depth</b><input id="bedD" type="number" min="20" max="2000" value="256" aria-describedby="errBedD"></label>
       <label class="f"><b>Height (Z)</b><input id="bedH" type="number" min="20" max="2000" value="256" aria-describedby="errBedH"></label>
     </div>
+    <label class="f"><b>Slicer infill (%)</b><input id="infill" type="number" step="5" min="0" max="100" value="15"></label>
+    <div class="hint">Only affects the material estimate, not the geometry. A baseplate is nearly all shell — the socket walls are a couple of perimeters wide and print solid whatever you set — so this moves the figure much less than it does for bins. It is the slab under a solid plate that the infill actually reaches.</div>
     <span class="hint" id="errBedW" style="color:var(--red)" hidden></span>
     <span class="hint" id="errBedD" style="color:var(--red)" hidden></span>
     <span class="hint" id="errBedH" style="color:var(--red)" hidden></span>
@@ -3270,7 +3272,7 @@ const PIECE_COLORS = ['#4fc3e8','#e8b34f','#7fd8a5','#e88a8a','#b18ae8','#7fb5e8
 // ---------- read/write controls ----------
 const numIds = ['drawerW','drawerD','bedW','bedD','bedH','mLeft','mRight','mFront','mBack',
   'pitch','outerRadius','bottomPad','topCutoff','magnetD','magnetH',
-  'screwHoleD','screwHeadD','screwHeadDepth'];
+  'screwHoleD','screwHeadD','screwHeadDepth','infill'];
 
 /* The fields that carry a real-world size, and the range one can be.
  *
@@ -3365,6 +3367,9 @@ function readControls() {
                           ul: parseFloat($('rBL').value)||0, ur: parseFloat($('rBR').value)||0 };
   } else state.cornerRadii = null;
   state.tolerance = $('tolerance').value;
+  /* Read with the other numbers above; clamped here because it is a percentage and
+     the estimate divides by 100, so a stray 900 would quote a mass nothing can print. */
+  state.infill = Math.max(0, Math.min(100, state.infill));
   state.magnets = $('magnets').checked;
   state.screws = $('screws').checked;
   state.magnetSide = $('magnetSide').value;
@@ -4115,10 +4120,11 @@ function activeJoint() {
  * The shell is measured off the mesh itself, triangle by triangle, because a baseplate's
  * shape moves with the socket profile, the skeleton, magnets, screws and the joint —
  * there is no small set of parameters to work from the way there is for a bin. Assumes
- * 2 perimeters and 4 solid top/bottom layers, and 15% infill, which are the bins tool's
- * assumptions and its default. Geometry is unaffected either way.
+ * 2 perimeters and 4 solid top/bottom layers, matching the bins tool, and takes the
+ * infill from the panel rather than assuming it — 15% was hard-coded here, which quoted
+ * a figure at people printing at 5%. Geometry is unaffected either way.
  */
-const SHELL_T = 0.8, SKIN_T = 0.8, INFILL = 0.15, PLA_DENSITY = 1.24;   // g/cm3
+const SHELL_T = 0.8, SKIN_T = 0.8, PLA_DENSITY = 1.24;   // g/cm3
 function meshMaterial(polys) {
   let raw = 0, shell = 0;
   for (const p of polys) {
@@ -4139,7 +4145,33 @@ function meshMaterial(polys) {
     }
   }
   raw = Math.abs(raw);
-  return { raw, filament: Math.min(raw, shell + INFILL * Math.max(0, raw - shell)) };
+  /* The infill only ever reaches what the shell does not already fill, which on a
+     baseplate is a small share — hence the estimate moving little with it. */
+  /* Deliberately NOT blended with the infill here. This is called once per piece at
+     build time and cached, and geometry does not change when the infill does — so a
+     figure folded in at this point is stale the moment the control is touched, which is
+     exactly how the estimate came to ignore it. Shape in, shape out; filamentOf does
+     the blend at the moment of asking.
+
+     `core` is what the infill can reach once the shell has taken its share. On the
+     default open-bottomed plate it is ZERO: the shell estimate comes out larger than
+     the whole volume, because every part of a 4.25 mm plate is a thin wall a couple of
+     perimeters across. Only a solid pad, or the material magnets and screws need, gives
+     the infill anything to do at all. */
+  return { raw, shell, core: Math.max(0, raw - shell) };
+}
+/* The blend, at the moment of asking rather than at build time. */
+const infillFrac = () => Math.max(0, Math.min(100, state.infill ?? 15)) / 100;
+const filamentOf = (m) => Math.min(m.raw, m.shell + infillFrac() * m.core);
+
+/* A baseplate is mostly shell, so the infill often reaches nothing and the estimate
+   does not move however it is set. Saying so beats quoting a percentage that had no
+   bearing on the number beside it. */
+function infillNote() {
+  const core = !layout ? 0 : layout.pieces.reduce(
+    (a, pc) => a + (builds[pc.id] ? builds[pc.id].mat.core : 0), 0);
+  return core > 1 ? `at ${state.infill}% infill`
+                  : '— all shell, so infill does not change it';
 }
 const massText = (g) => g >= 1000 ? `${(g / 1000).toFixed(1)} kg` : `${Math.round(g)} g`;
 /* Null until every piece exists. Half a total is a number people would act on, and the
@@ -4147,11 +4179,11 @@ const massText = (g) => g >= 1000 ? `${(g / 1000).toFixed(1)} kg` : `${Math.roun
    time it appeared. */
 function materialGrams() {
   if (!layout || layout.pieces.some(pc => !builds[pc.id])) return null;
-  let mm3 = layout.pieces.reduce((a, pc) => a + builds[pc.id].mat.filament, 0);
+  let mm3 = layout.pieces.reduce((a, pc) => a + filamentOf(builds[pc.id].mat), 0);
   // the loose parts are part of the job: keysNeeded is the same count the STL lays out
   // and the print plan reserves bed space for
   if (KEYED.includes(state.connector))
-    mm3 += meshMaterial(connectorPart().polys).filament * keysNeeded();
+    mm3 += filamentOf(meshMaterial(connectorPart().polys)) * keysNeeded();
   return mm3 * PLA_DENSITY / 1000;
 }
 
@@ -4359,7 +4391,7 @@ function renderExportSummary() {
     `in a ${state.drawerW} × ${state.drawerD} mm drawer\n` +
     `${layout.pieces.length} piece(s), ${splitName()} split, joined with ${CONNECTOR_NAMES[state.connector] || state.connector}\n` +
     `margins L ${layout.mL.toFixed(1)} / R ${layout.mR.toFixed(1)} / F ${layout.mF.toFixed(1)} / B ${layout.mB.toFixed(1)} mm` +
-    (g === null ? '' : `\nabout ${massText(g)} of PLA at 15% infill`);
+    (g === null ? '' : `\nabout ${massText(g)} of PLA ${infillNote()}`);
   const fit = bedFitText();
   $('exFit').className = 'exfit ' + fit.cls;
   $('exFit').textContent = fit.t;
@@ -4491,7 +4523,7 @@ $('exportDlg').addEventListener('click', (e) => {
 let hashExtras = {};
 const OWNED = new Set(['w','d','mm','ax','ay','ml','mr','mf','mb','bw','bd','bh','sp','km','ki',
   'rc','cc','cn','cl','to','mg','md','mh','ms','sc','sh','sd','se','pi','or','bp','tc','bm','pc',
-  'r1','r2','r3','r4','v','ph','ps']);
+  'r1','r2','r3','r4','v','ph','ps','if']);
 
 function descriptor() {
   const o = {
@@ -4505,6 +4537,7 @@ function descriptor() {
     sc: state.screws ? 1 : 0, sh: state.screwHoleD, sd: state.screwHeadD, se: state.screwHeadDepth,
     pi: state.pitch, or: state.outerRadius, bp: state.bottomPad, tc: state.topCutoff,
     bm: state.baseMode, ps: state.plateStyle, pc: $('perCorner').checked ? 1 : 0,
+    if: state.infill,
     r1: $('rFL').value, r2: $('rFR').value, r3: $('rBL').value, r4: $('rBR').value,
   };
   return Object.assign({}, hashExtras, o, { v: 2 });
@@ -4616,7 +4649,7 @@ function loadFromHash(src) {
   if (q.sc !== undefined) $('screws').checked = q.sc === '1';
   set('screwHoleD', q.sh); set('screwHeadD', q.sd); set('screwHeadDepth', q.se);
   set('pitch', q.pi); set('outerRadius', q.or); set('bottomPad', q.bp); set('topCutoff', q.tc);
-  set('baseMode', q.bm); set('plateStyle', q.ps);
+  set('baseMode', q.bm); set('plateStyle', q.ps); set('infill', q.if);
   if (q.pc !== undefined) $('perCorner').checked = q.pc === '1';
   set('rFL', q.r1); set('rFR', q.r2); set('rBL', q.r3); set('rBR', q.r4);
   if (q.sp) {
