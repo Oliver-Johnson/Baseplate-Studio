@@ -38,13 +38,20 @@
 <header>
   <h1>DRAWER<span class="tm">FORGE</span> <span class="tm" style="opacity:.55">· BINS</span></h1>
   <p>Lay bins out across the whole drawer, then print exactly what you planned. Built to the published Gridfinity spec, so they fit any spec baseplate.</p>
-  <div class="privacy">runs entirely in your browser — nothing is uploaded, no account, no tracking</div>
+  <div class="privacy">runs entirely in your browser — nothing is uploaded, no account, no tracking. Your layout is kept on this device so you can come back to it</div>
   <nav>
     <a id="navPlates" href="../">Baseplates</a>
     <a id="navBins" href="./" class="on">Bins</a>
     <a id="navGuide" href="../guide/">Guide</a>
   </nav>
 </header>
+<!-- Only shown when the layout came back from this browser rather than from a link.
+     Restoring in silence leaves you unsure whether you are looking at what you left or
+     what the tool starts with, and that doubt costs more than the restore saves. -->
+<div id="restored" class="restored" style="display:none" role="status">
+  <span>Picked up the layout you left here last time.</span>
+  <button type="button" id="startFresh">Start fresh</button>
+</div>
 <main class="app">
 <div class="rail">
 

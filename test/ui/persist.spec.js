@@ -87,3 +87,77 @@ test('editing does not fill the history with entries', async ({ page }) => {
   }
   expect(await page.evaluate(() => history.length)).toBe(start);
 });
+
+/* Coming back to the bare site, with no link to carry the design.
+ *
+ * The hash covers a refresh; it cannot cover someone typing the domain or opening a
+ * bookmark of the bare site, which is the case that actually loses work. These drive
+ * that path exactly — visit, work, then arrive again at a URL with no hash on it.
+ */
+test('the baseplates page remembers a drawer with no link to carry it', async ({ page }) => {
+  await H.openPlates(page);
+  await H.setField(page, 'drawerW', '444');
+  await settle(page);
+
+  // arrive again with nothing in the URL at all
+  await page.goto(page.url().split('#')[0]);
+  await page.waitForFunction(() => typeof THREE !== 'undefined');
+  await settle(page);
+
+  expect(await page.inputValue('#drawerW')).toBe('444');
+  await expect(page.locator('#restored')).toBeVisible();
+});
+
+test('the bins page remembers its bins with no link to carry them', async ({ page }) => {
+  await H.openBins(page);
+  await H.dragCells(page, [0, 0], [1, 1]);
+  await settle(page);
+  expect((await H.bins(page)).length).toBe(1);
+
+  await page.goto(page.url().split('#')[0]);
+  await page.waitForFunction(() => typeof THREE !== 'undefined');
+  await settle(page);
+  expect((await H.bins(page)).length).toBe(1);
+});
+
+test('start fresh clears the save rather than hiding it', async ({ page }) => {
+  await H.openPlates(page);
+  await H.setField(page, 'drawerW', '451');
+  await settle(page);
+  await page.goto(page.url().split('#')[0]);
+  await page.waitForFunction(() => typeof THREE !== 'undefined');
+  await settle(page);
+  expect(await page.inputValue('#drawerW')).toBe('451');
+
+  await page.click('#startFresh');
+  await page.waitForFunction(() => typeof THREE !== 'undefined');
+  await settle(page);
+  expect(await page.inputValue('#drawerW')).not.toBe('451');
+  await expect(page.locator('#restored')).toBeHidden();
+
+  // and it stays gone: coming back again must not resurrect it
+  await page.goto(page.url().split('#')[0]);
+  await page.waitForFunction(() => typeof THREE !== 'undefined');
+  await settle(page);
+  expect(await page.inputValue('#drawerW')).not.toBe('451');
+});
+
+/* The one that matters most. A shared link has to beat whatever the recipient saved,
+   or they see their own drawer while believing it is the sender's — and the sender has
+   no way of finding out. */
+test('a shared link beats the layout this browser saved', async ({ page }) => {
+  await H.openPlates(page);
+  await H.setField(page, 'drawerW', '333');
+  await settle(page);
+  const mine = await page.evaluate(() => location.href);
+
+  await page.goto(mine.split('#')[0]);
+  await H.setField(page, 'drawerW', '512');       // saved: 512, link says 333
+  await settle(page);
+
+  await page.goto(mine);
+  await page.waitForFunction(() => typeof THREE !== 'undefined');
+  await settle(page);
+  expect(await page.inputValue('#drawerW')).toBe('333');
+  await expect(page.locator('#restored')).toBeHidden();
+});

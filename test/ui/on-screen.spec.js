@@ -137,11 +137,14 @@ test('selecting a bin opens the panel that describes it', async ({ page }) => {
    was drawn to match — named neither the drawer nor which end was the front. */
 test('the map says which drawer it is showing, and which end is the front',
   async ({ page }) => {
-    /* The page is already open, and changing only the hash of the URL it is already on
-       is not a navigation — the layout is read once, at load. Reload, or this measures
-       the default drawer while claiming to measure the one that carried across. */
+    /* Arrive fresh, via a blank page. beforeEach has already opened the tool, so going
+       straight to the same URL with a different hash is a same-document navigation and
+       the layout would never be re-read — this used to compensate with an explicit
+       reload. The page now reloads itself when the hash changes under it, so that
+       workaround became a second navigation racing the first. Going through about:blank
+       makes it a genuine load and depends on no such behaviour either way. */
+    await page.goto('about:blank');
     await page.goto(H.BINS_URL + '#w=412&d=297');
-    await page.reload();
     await page.waitForFunction(() => !!document.getElementById('fillmap'));
     await page.waitForTimeout(300);
 

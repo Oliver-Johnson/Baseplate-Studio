@@ -1293,13 +1293,46 @@ const encodeDesc = (o) => Object.entries(o).map(([k, v]) => `${k}=${encodeURICom
  * stops that being your problem.
  */
 let hashSaveT = 0, hashReady = false;
+/* Kept on this browser, so the work survives arriving without a link.
+ *
+ * The address bar already carries the design and a refresh already restores it. What it
+ * cannot do is help someone who types the domain, or opens a bookmark of the bare site:
+ * no hash, nothing to read, and the drawer they spent twenty minutes on is gone. This
+ * covers that, and only that.
+ *
+ * It saves the SAME string the link carries, so there is one serialisation to keep
+ * right rather than two that can disagree — the format is already round-tripped by
+ * test/hash-roundtrip.js.
+ *
+ * A link always wins. Someone following a shared layout must see the sender's drawer and
+ * not their own, and the person who sent it would never know if they did not.
+ *
+ * Saved automatically rather than behind a Save button. A button you have to remember to
+ * press does not protect you from the case this exists for, which is closing a tab
+ * without thinking about it. The cost is that a restore could be a surprise, so it says
+ * when it has done one and offers a way back.
+ */
+const SAVE_KEY = 'drawerforge:plates:v1';
+const saveLocal = (h) => {
+  try { localStorage.setItem(SAVE_KEY, h); }
+  catch (err) { /* private mode, or the quota is full — losing the save is not worth
+                   an exception that stops the page working */ }
+};
+const readLocal = () => { try { return localStorage.getItem(SAVE_KEY) || ''; } catch (err) { return ''; } };
+function startFresh() {
+  try { localStorage.removeItem(SAVE_KEY); } catch (err) { /* nothing to clear */ }
+  location.href = location.origin + location.pathname;   // drop the hash and reload clean
+}
+
 function rememberState() {
   if (!hashReady) return;
   clearTimeout(hashSaveT);
   hashSaveT = setTimeout(() => {
-    try { history.replaceState(null, '', '#' + encodeDesc(descriptor())); }
+    const h = encodeDesc(descriptor());
+    try { history.replaceState(null, '', '#' + h); }
     catch (err) { /* some browsers refuse replaceState on file:// — a lost URL is not
                      worth an exception that stops the rest of the page working */ }
+    saveLocal(h);   // outside the try: a refused URL is no reason to lose the save too
   }, 400);
 }
 function shareLink() {
@@ -1326,9 +1359,10 @@ $('shareBtn').addEventListener('click', () => {
     () => { $('shareBtn').textContent = 'Copied ✓'; setTimeout(() => $('shareBtn').textContent = 'Copy settings link', 1600); },
     () => prompt('Copy this link:', link));
 });
-function loadFromHash() {
-  if (!location.hash || location.hash.length < 3) return;
-  const q = Object.fromEntries(location.hash.slice(1).split('&').map(kv => kv.split('=').map(decodeURIComponent)));
+function loadFromHash(src) {
+  const h = (src !== undefined ? src : location.hash || '').replace(/^#/, '');
+  if (h.length < 2) return;
+  const q = Object.fromEntries(h.split('&').map(kv => kv.split('=').map(decodeURIComponent)));
   for (const [k, v] of Object.entries(q)) if (!OWNED.has(k)) hashExtras[k] = v;
   const set = (id, v) => { if (v !== undefined && $(id)) $(id).value = v; };
   set('drawerW', q.w); set('drawerD', q.d); set('marginMode', q.mm);
@@ -1386,8 +1420,27 @@ for (const id of [...numIds, 'alignX', 'alignY', 'marginMode', 'connector', 'con
 window.addEventListener('resize', () => { if (layout) drawMap(); });
 
 initThree();
-loadFromHash();
+/* A link beats a saved layout, always. Reading the hash first and only falling back
+   means a shared drawer is never quietly replaced by the recipient's own. */
+const incomingHash = (location.hash || '').replace(/^#/, '');
+if (incomingHash.length > 2) loadFromHash();
+else {
+  const saved = readLocal();
+  if (saved.length > 2) { loadFromHash(saved); $('restored').style.display = ''; }
+}
 hashReady = true;                         // loadFromHash has had its say; ours may start
 recomputeLayout();
 fitThree();
+
+
+if ($('startFresh')) $('startFresh').addEventListener('click', startFresh);
+
+/* A hash this page did not write means someone navigated to a link — pasted a share URL
+   into the address bar, or picked a bookmark — and changing only the fragment is a
+   same-document navigation, so nothing re-reads it and the drawer on screen stays put.
+   Before local saving that was merely confusing; now it means a shared layout loses to
+   whatever this browser had stored, which is the one case that must never happen.
+   Reloading applies the link. replaceState does not fire this event, so the saves this
+   page makes every few seconds cannot trigger it. */
+addEventListener('hashchange', () => location.reload());
 
