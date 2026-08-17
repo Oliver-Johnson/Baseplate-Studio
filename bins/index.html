@@ -103,6 +103,10 @@ a{color:var(--cyan)}
 .connfig{margin:8px 0 2px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .connfig svg.joint{display:block;width:100%;background:var(--bg)}
 /* A bin already printed: still in the drawer, visibly not in the queue. */
+/* A card heading that carries a control on the right. */
+.tnote{display:block;color:var(--cyan);font-family:var(--sans);font-size:11.5px;margin-top:2px}
+.cardhead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.tog.inline{margin:0;font-size:12.5px;text-transform:none;letter-spacing:0}
 .bin.done{opacity:.4;stroke-dasharray:5 4}
 .restored{display:flex;gap:12px;align-items:center;flex-wrap:wrap;
   padding:9px 26px;background:var(--panel);border-bottom:1px solid var(--line);
@@ -584,7 +588,6 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
       <label class="f"><b>Baseplate height (mm)</b><input id="plateH" type="number" step="0.05" value="4.25"></label>
     </div>
     <div class="hint">Usable height is drawer floor to the lowest thing above. Baseplate height is 4.25 mm unless your joint forced a solid floor — the baseplate tool passes the real figure across.</div>
-    <label class="tog"><input id="showDrawer" type="checkbox"> Show the drawer around the bins</label>
     <label class="f" id="drawerFrontRow" style="display:none"><b>Drawer front height (mm)</b><input id="drawerFrontH" type="number" step="0.5" min="0" value="0"></label>
     <div class="hint" id="drawerViewHint" style="display:none">Draws the real drawer in the preview — floor and four walls, translucent so the bins still show through. The sides stand at the usable height you gave above, because that is the number the fit check already uses and a second side measurement could only disagree with it. The front panel is often taller or lower than the sides, so it gets its own figure; leave it at 0 to match them. The walls sit at the drawer's inside dimensions, so the gap between them and the baseplate is the space the grid cannot reach. It is a view only — nothing you download changes.</div>
     <label class="f"><b>Slicer infill (%)</b><input id="infill" type="number" step="5" min="0" max="100" value="15"></label>
@@ -749,7 +752,14 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
 </div>
 
 <div class="stagecard">
-  <h3>Preview</h3>
+  <!-- The toggle lives here, not in panel 01. It changes what this box shows, and up
+       there it was three scrolls away behind the first panel you ever fill in — easy
+       to forget you had it, and easy not to know it existed. A control belongs beside
+       the thing it changes. The measurement it needs stays in the panel with the other
+       drawer numbers; only the switch moved. -->
+  <h3 class="cardhead">Preview
+    <label class="tog inline"><input id="showDrawer" type="checkbox"> Show the drawer</label>
+  </h3>
   <div id="threewrap"><canvas id="three" role="img" aria-label="3D preview of the bins, loading"></canvas><div id="threeempty" style="display:none">Place a bin on the map to see it here.</div><div id="status"></div><div id="threehint">drag rotate · wheel zoom</div></div>
 </div>
 
@@ -5228,13 +5238,28 @@ function drawWarnings() {
  * them at once rather than from whichever ones someone remembered to filter. The bin
  * stays in the layout: it is in the drawer, it just is not in the queue.
  */
+/* How a type reads in a list: its shape, and what you said goes in it. Distinct from
+   typeName further down, which builds the STL FILENAME and must stay stable and
+   filesystem-safe — a note with a slash in it has no business in a filename. */
+const typeLabel = (t) => `${t.b.u}×${t.b.v}×${t.b.hUnits}` +
+  (t.b.solid ? ' solid' : '') + (t.qty > 1 ? ` × ${t.qty}` : '') +
+  (t.notes && t.notes.length ? ` — ${t.notes.join(', ')}` : '');
+
 function types() {
   const m = new Map();
   for (const { b } of allBins()) {
     if (b.done) continue;
     const k = typeKey(b);
-    if (!m.has(k)) m.set(k, { key: k, b, qty: 0 });
-    m.get(k).qty++;
+    if (!m.has(k)) m.set(k, { key: k, b, qty: 0, notes: [] });
+    const t = m.get(k);
+    t.qty++;
+    /* What you wrote in the bin travels with its type, because "1x1x3 x 2" is the one
+       thing a row of the download table cannot tell you: which of the four identical
+       shapes on the plate is the one for drill bits. Notes are NOT part of typeKey — two
+       bins the same shape share one STL whatever they are for — so a type can carry
+       several, and all of them are worth showing. */
+    const n = (b.note || '').trim();
+    if (n && !t.notes.includes(n)) t.notes.push(n);
   }
   return [...m.values()].sort((a, b) => b.qty - a.qty);
 }
@@ -5274,7 +5299,10 @@ function refresh() {
   $('typeRows').innerHTML = ts.map((t) => {
     const gm = geomFor(t.b);
     vol += gm.vol * t.qty;
-    return `<tr><td class="mono">${t.b.u}×${t.b.v}×${t.b.hUnits}${t.b.solid ? ' solid' : ''}${t.b.divX || t.b.divY ? ` · ${(t.b.divX + 1) * (t.b.divY + 1)} comp` : ''}</td>` +
+    return `<tr><td class="mono">${t.b.u}×${t.b.v}×${t.b.hUnits}${t.b.solid ? ' solid' : ''}${t.b.divX || t.b.divY ? ` · ${(t.b.divX + 1) * (t.b.divY + 1)} comp` : ''}` +
+      /* what it is for, beside what it is — the row is how you tell four identical
+         shapes apart when they come off the plate */
+      `${t.notes && t.notes.length ? `<span class="tnote">${t.notes.join(', ')}</span>` : ''}</td>` +
       `<td class="mono">${gm.meta.W.toFixed(1)} × ${gm.meta.D.toFixed(1)} × ${gm.meta.totalH.toFixed(1)}</td>` +
       `<td class="mono">${t.qty}</td>` +
       `<td class="mono">${(gm.vol * t.qty / 1000 * PLA_DENSITY).toFixed(0)} g</td>` +
@@ -5695,7 +5723,10 @@ function layoutReadme() {
     vol += gm.vol * t.qty;
     L.push(`  ${String(t.qty).padStart(3)} x  ${t.b.u}x${t.b.v}x${t.b.hUnits}` +
       `  (${gm.meta.W.toFixed(1)} x ${gm.meta.D.toFixed(1)} x ${gm.meta.totalH.toFixed(1)} mm incl. lip)` +
-      `${t.b.solid ? '  solid' : ''}${t.b.divX || t.b.divY ? `  ${(t.b.divX + 1) * (t.b.divY + 1)} compartments` : ''}`);
+      `${t.b.solid ? '  solid' : ''}${t.b.divX || t.b.divY ? `  ${(t.b.divX + 1) * (t.b.divY + 1)} compartments` : ''}` +
+      // the README is read beside a pile of printed parts, which is exactly when
+      // "1x1x3" stops being enough to tell them apart
+      `${t.notes && t.notes.length ? `  — ${t.notes.join(', ')}` : ''}`);
   }
   L.push('');
   L.push(`Total: ${plural(allBins().length, 'bin')}, about ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g of PLA.`);
@@ -5873,7 +5904,7 @@ function renderExport() {
     exRow('Every bin type, with a README', `${plural(ts.length, 'STL file')} + README.txt · ZIP`,
           'Download', downloadBinZip, { 'data-ex': 'zip' });
     for (const t of ts)
-      exRow(`${t.b.u}×${t.b.v}×${t.b.hUnits}${t.b.solid ? ' solid' : ''} × ${t.qty}`,
+      exRow(typeLabel(t),
             `${DF.bytes(DF.stlBytes(geomFor(t.b).polys))} · STL`, 'STL',
             () => downloadType(t), { 'data-ex': 'stl' });
   }

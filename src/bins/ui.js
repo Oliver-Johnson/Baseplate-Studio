@@ -1054,13 +1054,28 @@ function drawWarnings() {
  * them at once rather than from whichever ones someone remembered to filter. The bin
  * stays in the layout: it is in the drawer, it just is not in the queue.
  */
+/* How a type reads in a list: its shape, and what you said goes in it. Distinct from
+   typeName further down, which builds the STL FILENAME and must stay stable and
+   filesystem-safe — a note with a slash in it has no business in a filename. */
+const typeLabel = (t) => `${t.b.u}×${t.b.v}×${t.b.hUnits}` +
+  (t.b.solid ? ' solid' : '') + (t.qty > 1 ? ` × ${t.qty}` : '') +
+  (t.notes && t.notes.length ? ` — ${t.notes.join(', ')}` : '');
+
 function types() {
   const m = new Map();
   for (const { b } of allBins()) {
     if (b.done) continue;
     const k = typeKey(b);
-    if (!m.has(k)) m.set(k, { key: k, b, qty: 0 });
-    m.get(k).qty++;
+    if (!m.has(k)) m.set(k, { key: k, b, qty: 0, notes: [] });
+    const t = m.get(k);
+    t.qty++;
+    /* What you wrote in the bin travels with its type, because "1x1x3 x 2" is the one
+       thing a row of the download table cannot tell you: which of the four identical
+       shapes on the plate is the one for drill bits. Notes are NOT part of typeKey — two
+       bins the same shape share one STL whatever they are for — so a type can carry
+       several, and all of them are worth showing. */
+    const n = (b.note || '').trim();
+    if (n && !t.notes.includes(n)) t.notes.push(n);
   }
   return [...m.values()].sort((a, b) => b.qty - a.qty);
 }
@@ -1100,7 +1115,10 @@ function refresh() {
   $('typeRows').innerHTML = ts.map((t) => {
     const gm = geomFor(t.b);
     vol += gm.vol * t.qty;
-    return `<tr><td class="mono">${t.b.u}×${t.b.v}×${t.b.hUnits}${t.b.solid ? ' solid' : ''}${t.b.divX || t.b.divY ? ` · ${(t.b.divX + 1) * (t.b.divY + 1)} comp` : ''}</td>` +
+    return `<tr><td class="mono">${t.b.u}×${t.b.v}×${t.b.hUnits}${t.b.solid ? ' solid' : ''}${t.b.divX || t.b.divY ? ` · ${(t.b.divX + 1) * (t.b.divY + 1)} comp` : ''}` +
+      /* what it is for, beside what it is — the row is how you tell four identical
+         shapes apart when they come off the plate */
+      `${t.notes && t.notes.length ? `<span class="tnote">${t.notes.join(', ')}</span>` : ''}</td>` +
       `<td class="mono">${gm.meta.W.toFixed(1)} × ${gm.meta.D.toFixed(1)} × ${gm.meta.totalH.toFixed(1)}</td>` +
       `<td class="mono">${t.qty}</td>` +
       `<td class="mono">${(gm.vol * t.qty / 1000 * PLA_DENSITY).toFixed(0)} g</td>` +
@@ -1521,7 +1539,10 @@ function layoutReadme() {
     vol += gm.vol * t.qty;
     L.push(`  ${String(t.qty).padStart(3)} x  ${t.b.u}x${t.b.v}x${t.b.hUnits}` +
       `  (${gm.meta.W.toFixed(1)} x ${gm.meta.D.toFixed(1)} x ${gm.meta.totalH.toFixed(1)} mm incl. lip)` +
-      `${t.b.solid ? '  solid' : ''}${t.b.divX || t.b.divY ? `  ${(t.b.divX + 1) * (t.b.divY + 1)} compartments` : ''}`);
+      `${t.b.solid ? '  solid' : ''}${t.b.divX || t.b.divY ? `  ${(t.b.divX + 1) * (t.b.divY + 1)} compartments` : ''}` +
+      // the README is read beside a pile of printed parts, which is exactly when
+      // "1x1x3" stops being enough to tell them apart
+      `${t.notes && t.notes.length ? `  — ${t.notes.join(', ')}` : ''}`);
   }
   L.push('');
   L.push(`Total: ${plural(allBins().length, 'bin')}, about ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g of PLA.`);
@@ -1699,7 +1720,7 @@ function renderExport() {
     exRow('Every bin type, with a README', `${plural(ts.length, 'STL file')} + README.txt · ZIP`,
           'Download', downloadBinZip, { 'data-ex': 'zip' });
     for (const t of ts)
-      exRow(`${t.b.u}×${t.b.v}×${t.b.hUnits}${t.b.solid ? ' solid' : ''} × ${t.qty}`,
+      exRow(typeLabel(t),
             `${DF.bytes(DF.stlBytes(geomFor(t.b).polys))} · STL`, 'STL',
             () => downloadType(t), { 'data-ex': 'stl' });
   }

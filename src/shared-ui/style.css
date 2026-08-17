@@ -75,6 +75,10 @@ a{color:var(--cyan)}
 .connfig{margin:8px 0 2px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .connfig svg.joint{display:block;width:100%;background:var(--bg)}
 /* A bin already printed: still in the drawer, visibly not in the queue. */
+/* A card heading that carries a control on the right. */
+.tnote{display:block;color:var(--cyan);font-family:var(--sans);font-size:11.5px;margin-top:2px}
+.cardhead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.tog.inline{margin:0;font-size:12.5px;text-transform:none;letter-spacing:0}
 .bin.done{opacity:.4;stroke-dasharray:5 4}
 .restored{display:flex;gap:12px;align-items:center;flex-wrap:wrap;
   padding:9px 26px;background:var(--panel);border-bottom:1px solid var(--line);

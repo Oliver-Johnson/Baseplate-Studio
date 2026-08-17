@@ -111,3 +111,53 @@ test('the printed mark survives a reload', async ({ page }) => {
   expect(await page.evaluate(() => B().filter((b) => b.done).length)).toBe(1);
   expect(await planText(page)).toMatch(/1 bin packed/);
 });
+
+/* What a bin is FOR, wherever a bin is listed.
+ *
+ * The download table said "1×1×3 × 2". Standing over four identical printed shapes,
+ * that is the one thing it cannot help you with — which of them is the one for drill
+ * bits. The note you typed is the answer and it was on screen nowhere but the map.
+ *
+ * Notes are deliberately not part of typeKey: two bins of one shape share one STL
+ * whatever they are for. So a type can carry several notes and all of them show.
+ */
+test('a bin note reaches the piece table and the download list', async ({ page }) => {
+  await H.openBins(page);
+  await H.dragCells(page, [0, 0], [0, 0]);
+  await settle(page);
+  await H.clickCell(page, 0, 0);
+  await settle(page);
+  await page.fill('#note', 'drill bits');
+  await settle(page);
+
+  await expect(page.locator('#typeRows')).toContainText('drill bits');
+
+  await page.click('#openExport');
+  await page.waitForTimeout(700);
+  await expect(page.locator('#exportDlg')).toContainText('drill bits');
+  await page.locator('#exportClose').click();
+});
+
+test('two bins of one shape with different notes list both against the one STL', async ({ page }) => {
+  await H.openBins(page);
+  await H.dragCells(page, [0, 0], [0, 0]);
+  await settle(page);
+  await H.clickCell(page, 0, 0);
+  await settle(page);
+  await page.fill('#note', 'M3 screws');
+  await settle(page);
+
+  await H.dragCells(page, [3, 3], [3, 3]);
+  await settle(page);
+  await H.clickCell(page, 3, 3);
+  await settle(page);
+  await page.fill('#note', 'drill bits');
+  await settle(page);
+
+  await page.click('#openExport');
+  await page.waitForTimeout(700);
+  const dlg = page.locator('#exportDlg');
+  await expect(dlg).toContainText('M3 screws');
+  await expect(dlg).toContainText('drill bits');
+  await page.locator('#exportClose').click();
+});

@@ -76,7 +76,6 @@
       <label class="f"><b>Baseplate height (mm)</b><input id="plateH" type="number" step="0.05" value="4.25"></label>
     </div>
     <div class="hint">Usable height is drawer floor to the lowest thing above. Baseplate height is 4.25 mm unless your joint forced a solid floor — the baseplate tool passes the real figure across.</div>
-    <label class="tog"><input id="showDrawer" type="checkbox"> Show the drawer around the bins</label>
     <label class="f" id="drawerFrontRow" style="display:none"><b>Drawer front height (mm)</b><input id="drawerFrontH" type="number" step="0.5" min="0" value="0"></label>
     <div class="hint" id="drawerViewHint" style="display:none">Draws the real drawer in the preview — floor and four walls, translucent so the bins still show through. The sides stand at the usable height you gave above, because that is the number the fit check already uses and a second side measurement could only disagree with it. The front panel is often taller or lower than the sides, so it gets its own figure; leave it at 0 to match them. The walls sit at the drawer's inside dimensions, so the gap between them and the baseplate is the space the grid cannot reach. It is a view only — nothing you download changes.</div>
     <label class="f"><b>Slicer infill (%)</b><input id="infill" type="number" step="5" min="0" max="100" value="15"></label>
@@ -241,7 +240,14 @@
 </div>
 
 <div class="stagecard">
-  <h3>Preview</h3>
+  <!-- The toggle lives here, not in panel 01. It changes what this box shows, and up
+       there it was three scrolls away behind the first panel you ever fill in — easy
+       to forget you had it, and easy not to know it existed. A control belongs beside
+       the thing it changes. The measurement it needs stays in the panel with the other
+       drawer numbers; only the switch moved. -->
+  <h3 class="cardhead">Preview
+    <label class="tog inline"><input id="showDrawer" type="checkbox"> Show the drawer</label>
+  </h3>
   <div id="threewrap"><canvas id="three" role="img" aria-label="3D preview of the bins, loading"></canvas><div id="threeempty" style="display:none">Place a bin on the map to see it here.</div><div id="status"></div><div id="threehint">drag rotate · wheel zoom</div></div>
 </div>
 
