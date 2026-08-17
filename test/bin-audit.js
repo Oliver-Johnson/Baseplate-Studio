@@ -6,7 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const G = require('../src/core.js');
-const { buildBin, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt } = require('../src/bins/bin.js');
+const { buildBin, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt, wallSplits } = require('../src/bins/bin.js');
 const { checkOrientation, orientationNote } = require('./orientation.js');
 
 // the browser hand-assembles its own G; make sure core still exports everything
@@ -260,6 +260,7 @@ console.log('\nouter silhouette: no overhang steeper than 45 degrees');
  */
 console.log('\nwhere a lowered wall meets a full-height one');
 {
+  const seen = new Map();
   const LIMIT = 75;   // degrees from horizontal; the ramps measure 41-61, a step is 90
   const RAMP = [
     ['1x1 front at half', 1, 1, { f: 0.5 }],
@@ -270,7 +271,12 @@ console.log('\nwhere a lowered wall meets a full-height one');
   ];
   for (const [label, u, v, edges] of RAMP) {
     const r = buildBin(G, Object.assign({}, BIN_DEFAULTS, { u, v, hUnits: 3, edges }));
-    const prof = outlineAt(u, v, SPEC.half, 0, 6).map(([x, y]) => {
+    /* The same outline buildBin walls with, splits and all. Rebuilding it uniformly
+       would sample straight over the ramp vertex and read the shallow average instead
+       of the step that is actually there — a check that cannot see the defect. */
+    const sp = wallSplits((u - 1) * SPEC.pitch / 2 + SPEC.half,
+                          (v - 1) * SPEC.pitch / 2 + SPEC.half, SPEC.r);
+    const prof = outlineAt(u, v, SPEC.half, 0, 6, sp).map(([x, y]) => {
       let z = -Infinity;
       for (const pl of r.polys) for (const w of pl.verts)
         if (Math.hypot(w[0] - x, w[1] - y) < 0.35 && w[2] > z) z = w[2];
@@ -288,7 +294,44 @@ console.log('\nwhere a lowered wall meets a full-height one');
     console.log(`  ${label.padEnd(20)}steepest top edge ${worst.toFixed(1).padStart(5)}°   ` +
                 (ok ? 'ok' : 'CLIFF — a wall ending in a square notch is what broke'));
     if (!ok) bad++;
+    seen.set(label, worst);
   }
+
+  /* The angle must not depend on the footprint.
+   *
+   * The ramp was a quarter of the wall to begin with, which meant a wide bin got a long
+   * shallow one — 26 degrees across a 3x5 against 60 across a 1x1 — and gave up a third
+   * of an opening that had no strength problem to solve. It is a fixed 8.5 mm now, so
+   * the same climb takes the same run whatever the bin's plan. The check above cannot
+   * see that regression on its own: a shallower ramp passes a "not a cliff" test
+   * comfortably. This is the assertion that fails if the rule goes back to a fraction.
+   */
+  const wide = [['1x1x5', 1, 1], ['3x1x5', 3, 1], ['3x5x5', 3, 5], ['5x5x5', 5, 5]];
+  const angles = wide.map(([, u, v]) => {
+    const r = buildBin(G, Object.assign({}, BIN_DEFAULTS, { u, v, hUnits: 5, edges: { f: 0.5 } }));
+    const sp = wallSplits((u - 1) * SPEC.pitch / 2 + SPEC.half,
+                          (v - 1) * SPEC.pitch / 2 + SPEC.half, SPEC.r);
+    const prof = outlineAt(u, v, SPEC.half, 0, 6, sp).map(([x, y]) => {
+      let z = -Infinity;
+      for (const pl of r.polys) for (const w of pl.verts)
+        if (Math.hypot(w[0] - x, w[1] - y) < 0.35 && w[2] > z) z = w[2];
+      return [x, y, z];
+    }).filter((q) => isFinite(q[2]));
+    let worst = 0;
+    for (let i = 0; i < prof.length; i++) {
+      const a = prof[i], b = prof[(i + 1) % prof.length];
+      const climb = Math.abs(a[2] - b[2]);
+      if (climb < 0.2) continue;
+      worst = Math.max(worst, Math.atan2(climb,
+        Math.hypot(a[0] - b[0], a[1] - b[1])) * 180 / Math.PI);
+    }
+    return worst;
+  });
+  const spread = Math.max(...angles) - Math.min(...angles);
+  console.log(`  ${'same angle at any width'.padEnd(24)}` +
+    wide.map(([n], i) => `${n} ${angles[i].toFixed(1)}°`).join('  ') +
+    `   ${spread <= 1 ? 'ok' : `SPREAD ${spread.toFixed(1)}° — the ramp is scaling with the bin again`}`);
+  if (spread > 1) bad++;
 }
 
 console.log(bad ? `\n${bad} case(s) FAILED` : '\nall cases clean');

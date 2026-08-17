@@ -651,7 +651,7 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
       <label class="f"><b>Label shelf (mm)</b><input id="label" type="number" step="1" min="0" value="0"></label>
     </div>
     <div class="hint" id="featureHint">A scoop fills the front inside corner with a curve so you can sweep contents out — try 8 mm. The label shelf juts in from the top of the back wall with a 45° underside, so it prints without support; 12 mm suits a printed label. Both need their wall to exist.</div>
-    <div class="hint" id="edgeHint">Front is the front of the drawer, matching the map. Corner posts stay full height and a lowered wall ramps up to meet them, so the side walls keep their ends — a wall that stopped square against the post snapped off there. The ramp takes about a quarter of the wall at each end. Lowering any wall removes the stacking lip — nothing can sit on it.</div>
+    <div class="hint" id="edgeHint">Front is the front of the drawer, matching the map. Corner posts stay full height and a lowered wall ramps up to meet them, so the side walls keep their ends — a wall that stopped square against the post snapped off there. The ramp is 8.5 mm at each end whatever the bin&rsquo;s footprint, so a wider bin keeps the same corner and gains a longer flat opening. Lowering any wall removes the stacking lip — nothing can sit on it.</div>
     <button class="ghost" id="presetTray" style="margin-top:8px">Make this a flat tray / lid</button>
     <label class="f"><b>Corner smoothness</b>
       <select id="arcSegs">
@@ -3346,8 +3346,49 @@ const lipHeight = (lipMin) => 2.6 + (1.90 - lipMin);   // 3.95 at the default
 // threaded argument.
 const SSEG = 4;
 
-// Rounded rectangle centred on origin, CCW, sharing SPEC.centre where possible.
-function roundRect(hw, hd, r, n) {
+/* How far a lowered wall takes to climb to the corner post, in millimetres.
+ *
+ * A fixed distance, not a fraction of the wall. It was a quarter of the wall to begin
+ * with, because a quarter is the gap between two straight vertices and the mesh could
+ * not express anything shorter — which meant a 3-wide bin got a 29.5 mm ramp for the
+ * same 7.5 mm climb a 1x1 did in 8.5, flattening the angle and eating a third of an
+ * opening that had no strength problem to solve. 8.5 mm is the 1x1's ramp, and holding
+ * it fixed keeps the angle the same whatever the bin's footprint: a wider bin gets the
+ * same corner and a longer flat opening, which is the whole point of making it wider.
+ *
+ * Still capped at a quarter of the wall, so a bin too small to give up 8.5 mm at each
+ * end gives up less rather than having its opening closed over.
+ *
+ * The angle does vary with HEIGHT, because a taller wall has further to climb over the
+ * same run — 41 degrees on a 3-unit bin, 60 on a 5. That follows from fixing the
+ * distance, and fixing the distance is what was asked for.
+ */
+const RAMP_RUN = 8.5;
+const rampLen = (wallLen) => Math.min(RAMP_RUN, wallLen / 4);
+
+/* Where to put vertices along a straight, as fractions of its length.
+ *
+ * The uniform SSEG subdivision, plus one at each end where a ramp finishes. Without
+ * that second pair the ramp can only end where a vertex already is, which is what
+ * pinned it to a quarter of the wall. Deduplicated, so a 1x1 — whose ramp lands exactly
+ * on the first uniform vertex — comes out with the same points it always had rather
+ * than a zero-length edge beside it. */
+function straightSplits(L) {
+  const fs = [];
+  for (let k = 1; k < SSEG; k++) fs.push(k / SSEG);
+  if (L > 1e-6) { const t = rampLen(L) / L; fs.push(t, 1 - t); }
+  return fs.filter((t) => t > 1e-6 && t < 1 - 1e-6).sort((a, b) => a - b)
+           .filter((t, i, a) => i === 0 || t - a[i - 1] > 1e-4);
+}
+
+/* Rounded rectangle centred on origin, CCW, sharing SPEC.centre where possible.
+ *
+ * `splits` is one fraction list per straight, in the order the straights are emitted:
+ * back, left, front, right. Passing the SAME lists to two rings is what keeps them
+ * pairing index for index — see wallRing. The outer and inner wall rings shrink both
+ * hw and r by the wall thickness, so their straights are the same length and a fraction
+ * means the same millimetres on each. */
+function roundRect(hw, hd, r, n, splits) {
   r = Math.max(0.2, Math.min(r, Math.min(hw, hd) - 0.01));
   const cs = [[hw - r, hd - r, 0], [-hw + r, hd - r, 90],
               [-hw + r, -hd + r, 180], [hw - r, -hd + r, 270]];
@@ -3359,15 +3400,25 @@ function roundRect(hw, hd, r, n) {
     }
     return out;
   });
+  const uniform = [];
+  for (let k = 1; k < SSEG; k++) uniform.push(k / SSEG);
   const pts = [];
   for (let c = 0; c < 4; c++) {
     pts.push(...arcs[c]);
     // arc ends are tangent, so the gap to the next arc is exactly the straight edge
     const a = arcs[c][arcs[c].length - 1], b = arcs[(c + 1) % 4][0];
-    for (let k = 1; k < SSEG; k++)
-      pts.push([a[0] + (b[0] - a[0]) * k / SSEG, a[1] + (b[1] - a[1]) * k / SSEG]);
+    for (const t of (splits && splits[c]) || uniform)
+      pts.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
   }
   return pts;
+}
+
+/* The split lists for one bin's wall rings, from the OUTER dimensions. Straights are
+   emitted back, left, front, right — so the x-running pair share one list and the
+   y-running pair the other. */
+function wallSplits(hw, hd, r) {
+  const sx = straightSplits(2 * (hw - r)), sy = straightSplits(2 * (hd - r));
+  return [sx, sy, sx, sy];
 }
 
 /* Which edge each outline vertex belongs to, and how a short one meets a tall one.
@@ -3407,9 +3458,9 @@ function edgeHeights(outline, hw, hd, r, edges, zLow, zHigh) {
   /* How high this edge stands `dist` along from a corner whose other wall is taller.
      Never lowers anything: a wall already at or above its neighbour is left alone. */
   const ramp = (self, nbr, dist, wallLen) => {
-    const seg = wallLen / SSEG;
-    if (nbr <= self + 1e-9 || seg <= E || dist >= seg) return self;
-    return self + (nbr - self) * (1 - dist / seg);
+    const len = rampLen(wallLen);
+    if (nbr <= self + 1e-9 || len <= E || dist >= len) return self;
+    return self + (nbr - self) * (1 - dist / len);
   };
   return outline.map(([x, y]) => {
     let f;
@@ -3429,10 +3480,10 @@ function edgeHeights(outline, hw, hd, r, edges, zLow, zHigh) {
 
 // The bin's outer outline at a given foot half-width, for a u x v footprint.
 // Extra cells extend the straight sections; the corners keep the spec radius.
-function outlineAt(u, v, half, shrink, n) {
+function outlineAt(u, v, half, shrink, n, splits) {
   const hw = (u - 1) * SPEC.pitch / 2 + half - shrink;
   const hd = (v - 1) * SPEC.pitch / 2 + half - shrink;
-  return roundRect(hw, hd, half - SPEC.centre, n);
+  return roundRect(hw, hd, half - SPEC.centre, n, splits);
 }
 
 /* ---------- mesh helpers -------------------------------------------------- */
@@ -3908,7 +3959,11 @@ function buildBin(G, cfg) {
     }
 
   /* body */
-  const outer = outlineAt(c.u, c.v, SPEC.half, c.shrink, n);
+  /* One split list, both loops. The ramp needs a vertex where it ends, and the two
+     rims only pair index for index if they are cut the same way. */
+  const wsp = wallSplits((c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink,
+                         (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink, SPEC.r);
+  const outer = outlineAt(c.u, c.v, SPEC.half, c.shrink, n, wsp);
   /* The foot reaches full width at 4.75, so that is where the body starts and there
      is no step in the silhouette between them. */
   const bodyBase = SPEC.footH;
@@ -3942,7 +3997,7 @@ function buildBin(G, cfg) {
     const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
     const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
     const inner = roundRect(hw - c.wall, hd - c.wall,
-                            Math.max(0.4, SPEC.r - c.wall), n);
+                            Math.max(0.4, SPEC.r - c.wall), n, wsp);
     // Start the ring below the cavity floor, buried in the slab. An "open" edge
     // then has its top at floorZ and the ring is still a real volume there rather
     // than a zero-height sliver — the degenerate case simply hides inside the slab.
@@ -4081,7 +4136,7 @@ const unpackLayers = (s) => (s || '').split(SEP.layer)
   .map((ls) => ({ bins: ls.split(SEP.bin).filter(Boolean).map(unpackBin) }));
 
 if (typeof module !== 'undefined') {
-  module.exports = { buildBin, roundRect, outlineAt, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
+  module.exports = { buildBin, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
     lipHeight, REQUIRED_CORE,
     maskOf, maskCheck, isFullRect, cellKey, maskBits, bitsToCells,
     packBin, unpackBin, packLayers, unpackLayers };
