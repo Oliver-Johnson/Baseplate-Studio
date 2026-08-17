@@ -147,17 +147,59 @@ function roundRect(hw, hd, r, n) {
   return pts;
 }
 
-/* Which edge each outline vertex belongs to. Straights are classified by position;
-   corner-arc vertices take the taller of their two neighbours, so an open front
-   still leaves the side walls running the full length with a corner post. */
+/* Which edge each outline vertex belongs to, and how a short one meets a tall one.
+ *
+ * Straights are classified by position; corner-arc vertices take the taller of their two
+ * neighbours, so an open front still leaves the side walls running the full length with
+ * a corner post.
+ *
+ * The lowered edge climbs to meet that post over the first straight segment, instead of
+ * stopping dead beside it. It used to step: the last arc vertex stood at full height and
+ * the first straight vertex next to it at half, so the top edge fell the better part of
+ * a centimetre across a tangent point. That is a square notch at the end of the longest
+ * unsupported run of wall on the bin, and it is where one broke — the top of a side wall
+ * came away when the bin was picked up. Nearly all of a thin wall's stiffness in bending
+ * comes from material at its edge, and the end of that edge is the worst place to put a
+ * stress riser.
+ *
+ * One segment, not a computed 45 degrees. Every ring in a bin shares a vertex count so
+ * the skins stitch (see SSEG), so the shortest ramp expressible is the gap between two
+ * straight vertices — a quarter of the wall. Asking for less silently gets you a quarter
+ * anyway. Buying finer control means raising SSEG for every ring on every bin: measured,
+ * SSEG 6 costs 12% more triangles and SSEG 8 costs 25%, and even at 8 a three-wide bin
+ * still cannot express a ramp under 14 mm. That is a whole-catalogue cost for something
+ * only partial-wall bins would use.
+ *
+ * So the slope varies with the bin: about 41 degrees across a 1x1, gentler as the wall
+ * gets longer. Gentler is stronger, and it costs a quarter of the opening at each end,
+ * which is the trade. Nothing here overhangs — the top edge only ever climbs, so every
+ * layer lands on the one beneath it.
+ *
+ * This does not get the stacking lip back. allFull still drops it from all four walls
+ * the moment one is lowered, which is a far larger loss of material and all of it from
+ * the top edge. That is the other half of this repair, and it is not done. */
 function edgeHeights(outline, hw, hd, r, edges, zLow, zHigh) {
   const E = 1e-6;
   const frac = (k) => Math.max(0, Math.min(1, edges && edges[k] !== undefined ? edges[k] : 1));
+  /* How high this edge stands `dist` along from a corner whose other wall is taller.
+     Never lowers anything: a wall already at or above its neighbour is left alone. */
+  const ramp = (self, nbr, dist, wallLen) => {
+    const seg = wallLen / SSEG;
+    if (nbr <= self + 1e-9 || seg <= E || dist >= seg) return self;
+    return self + (nbr - self) * (1 - dist / seg);
+  };
   return outline.map(([x, y]) => {
     let f;
-    if (Math.abs(y) <= hd - r + E) f = x > 0 ? frac('r') : frac('l');
-    else if (Math.abs(x) <= hw - r + E) f = y > 0 ? frac('b') : frac('f');
-    else f = Math.max(x > 0 ? frac('r') : frac('l'), y > 0 ? frac('b') : frac('f'));
+    if (Math.abs(y) <= hd - r + E) {
+      // a left or right wall, running between the front and the back corners
+      const self = x > 0 ? frac('r') : frac('l'), L = 2 * (hd - r);
+      f = Math.max(self, ramp(self, frac('f'), y + (hd - r), L),
+                         ramp(self, frac('b'), (hd - r) - y, L));
+    } else if (Math.abs(x) <= hw - r + E) {
+      const self = y > 0 ? frac('b') : frac('f'), L = 2 * (hw - r);
+      f = Math.max(self, ramp(self, frac('l'), x + (hw - r), L),
+                         ramp(self, frac('r'), (hw - r) - x, L));
+    } else f = Math.max(x > 0 ? frac('r') : frac('l'), y > 0 ? frac('b') : frac('f'));
     return zLow + f * (zHigh - zLow);
   });
 }

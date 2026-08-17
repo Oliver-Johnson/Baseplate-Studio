@@ -6,7 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const G = require('../src/core.js');
-const { buildBin, SPEC, REQUIRED_CORE } = require('../src/bins/bin.js');
+const { buildBin, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt } = require('../src/bins/bin.js');
 const { checkOrientation, orientationNote } = require('./orientation.js');
 
 // the browser hand-assembles its own G; make sure core still exports everything
@@ -240,6 +240,53 @@ console.log('\nouter silhouette: no overhang steeper than 45 degrees');
     const ok = worst <= STEP + 1e-6;
     console.log(`  ${(hUnits + 'u').padEnd(13)} widest step ${worst.toFixed(3)} mm ` +
                 `per ${STEP} mm of height, at z ${where.toFixed(2)}   ${ok ? 'ok' : 'OVERHANG'}`);
+    if (!ok) bad++;
+  }
+}
+
+/* Where a lowered wall meets a full-height one.
+ *
+ * A bin with a half-height front broke in the hand: the top of a side wall came away.
+ * The lowered edge used to stop dead beside the full-height corner post, so the top edge
+ * fell most of a centimetre across a tangent point — a square notch at the end of the
+ * longest unsupported run of wall on the bin, and nearly all of a thin wall's stiffness
+ * in bending comes from material at that edge. It now climbs over the first straight
+ * segment instead.
+ *
+ * Measured off the mesh rather than off edgeHeights: the outline rule and the geometry
+ * it produces are two different claims, and only the second one gets printed. The top of
+ * the wall is read along the outer outline in order, and the steepest step between
+ * neighbouring points has to stay clear of vertical. A cliff reads 90.
+ */
+console.log('\nwhere a lowered wall meets a full-height one');
+{
+  const LIMIT = 75;   // degrees from horizontal; the ramps measure 41-61, a step is 90
+  const RAMP = [
+    ['1x1 front at half', 1, 1, { f: 0.5 }],
+    ['1x1 front open', 1, 1, { f: 0 }],
+    ['3x1 front at half', 3, 1, { f: 0.5 }],
+    ['2x2 front and left', 2, 2, { f: 0.5, l: 0.5 }],
+    ['1x1 all full', 1, 1, null],
+  ];
+  for (const [label, u, v, edges] of RAMP) {
+    const r = buildBin(G, Object.assign({}, BIN_DEFAULTS, { u, v, hUnits: 3, edges }));
+    const prof = outlineAt(u, v, SPEC.half, 0, 6).map(([x, y]) => {
+      let z = -Infinity;
+      for (const pl of r.polys) for (const w of pl.verts)
+        if (Math.hypot(w[0] - x, w[1] - y) < 0.35 && w[2] > z) z = w[2];
+      return [x, y, z];
+    }).filter((q) => isFinite(q[2]));
+    let worst = 0;
+    for (let i = 0; i < prof.length; i++) {
+      const a = prof[i], b = prof[(i + 1) % prof.length];
+      const climb = Math.abs(a[2] - b[2]);
+      if (climb < 0.2) continue;                       // flat runs carry no transition
+      const run = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      worst = Math.max(worst, Math.atan2(climb, run) * 180 / Math.PI);
+    }
+    const ok = worst <= LIMIT;
+    console.log(`  ${label.padEnd(20)}steepest top edge ${worst.toFixed(1).padStart(5)}°   ` +
+                (ok ? 'ok' : 'CLIFF — a wall ending in a square notch is what broke'));
     if (!ok) bad++;
   }
 }
