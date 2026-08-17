@@ -291,7 +291,18 @@ function readControls() {
     edges: { f: parseFloat($('edgeF').value), b: parseFloat($('edgeB').value),
              l: parseFloat($('edgeL').value), r: parseFloat($('edgeR').value) },
   };
+  /* Deliberately not part of `t`. Whether a bin has been printed is a fact about the
+     world, not a design setting, and `t` is the settings object — bulk-assigned to the
+     selection and then copied into `state`, the template for the next bin drawn.
+
+     Being honest about how much that buys today: new bins are built from an explicit
+     field list further down, so `done` could not leak through `state` even if it were
+     in `t`. Keeping it out matters the day that construction becomes a spread of
+     `state`, which is a very ordinary tidy-up to make — and then a flag in `t` would
+     have every bin drawn after a mark born already printed. print-queue.spec.js fails
+     on exactly that pair of changes. */
   const sel = selAll();
+  $('doneRow').style.display = sel.length ? '' : 'none';
   if (sel.length) {
     // size only applies to a single bin; several at once would have to overlap
     const b = B()[selected];
@@ -365,6 +376,7 @@ function writeControls(src) {
   $('divX').value = src.divX; $('divY').value = src.divY;
   $('solid').checked = !!src.solid;
   $('scoop').value = src.scoop || 0; $('label').value = src.label || 0;
+  $('done').checked = !!src.done;
   $('note').value = src.note || '';
   for (const [k, id] of [['f', 'edgeF'], ['b', 'edgeB'], ['l', 'edgeL'], ['r', 'edgeR']])
     $(id).value = String(src.edges && src.edges[k] !== undefined ? src.edges[k] : 1);
@@ -466,7 +478,8 @@ function drawMap() {
 
   B().forEach((b, i) => {
     const issues = binIssues(b, cur).filter((x) => typeof x === 'string' || !x.note);
-    const cls = 'bin' + (selAll().includes(i) ? ' sel' : '') + (issues.length ? ' clash' : '');
+    const cls = 'bin' + (selAll().includes(i) ? ' sel' : '') + (issues.length ? ' clash' : '')
+                      + (b.done ? ' done' : '');
     const cells = binCells(b);
     const held = new Set(cells.map(([dx, dy]) => dx + ',' + dy));
     let r = null;
@@ -1034,9 +1047,17 @@ function drawWarnings() {
 }
 
 /* ---------- types + totals ------------------------------------------------ */
+/* The bins still to print, grouped by shape.
+ *
+ * Everything you could print comes through here — the plates, the per-type STLs, the
+ * ZIP, the filament estimate — so marking a bin printed here removes it from all of
+ * them at once rather than from whichever ones someone remembered to filter. The bin
+ * stays in the layout: it is in the drawer, it just is not in the queue.
+ */
 function types() {
   const m = new Map();
   for (const { b } of allBins()) {
+    if (b.done) continue;
     const k = typeKey(b);
     if (!m.has(k)) m.set(k, { key: k, b, qty: 0 });
     m.get(k).qty++;
@@ -1090,9 +1111,16 @@ function refresh() {
       const t = types().find((x) => x.key === btn.dataset.t);
       if (t) downloadType(t);
     });
+  /* Two counts once anything is marked: what is in the drawer, and what is still to
+     come off the printer. Reporting only the second would make the drawer look
+     half-designed; only the first would quote filament for bins already sitting in it. */
+  const doneN = allBins().filter(({ b }) => b.done).length;
   $('totals').textContent = allBins().length
-    ? `${plural(allBins().length, 'bin')} · ${plural(ts.length, 'distinct type')} · ` +
-      `≈ ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g PLA at ${state.infill}% infill`
+    ? `${plural(allBins().length, 'bin')}` +
+      (doneN ? ` · ${plural(allBins().length - doneN, 'bin')} still to print` : '') +
+      ` · ${plural(ts.length, 'distinct type')} · ` +
+      `≈ ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g PLA at ${state.infill}% infill` +
+      (doneN ? ' for those' : '')
     : '—';
 
   drawWarnings();
@@ -1949,6 +1977,20 @@ drawLayerTabs();
 drawMap();
 refresh();
 updateUndoButtons();
+
+/* Applied straight to the selection rather than through readControls, for the reason
+   given where doneRow is hidden: readControls also writes `state`, the template for the
+   next bin you draw. */
+$('done').addEventListener('change', () => {
+  for (const i of selAll()) B()[i].done = $('done').checked;
+  pushUndo(); drawMap(); refresh();
+});
+const markAll = (v) => () => {
+  for (const L of layers) for (const b of L.bins) b.done = v;
+  pushUndo(); drawMap(); refresh();
+};
+$('markAllDone').addEventListener('click', markAll(true));
+$('markNoneDone').addEventListener('click', markAll(false));
 
 if ($('startFresh')) $('startFresh').addEventListener('click', startFresh);
 

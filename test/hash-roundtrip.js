@@ -67,14 +67,32 @@ console.log('\nseparators cannot appear inside a value');
   try { packBin(bin({ wall: -1 })); } catch (e) { threw = true; }
   console.log(`  a negative field is rejected           ${threw ? 'guarded' : 'NOT GUARDED'}`);
   if (!threw) bad++;
-  /* 17 since the base-style field went with the base styles: position IS the format,
-     so this number is deliberate and changing it changes what every link means. It
-     was safe to change once, before the site had been advertised and while no link
-     existed to break. Update it on purpose or not at all. */
+  /* 18 since bins can be marked already-printed: position IS the format, so this
+     number is deliberate and changing it changes what every link means. Update it on
+     purpose or not at all.
+     It went 17 -> 18 by APPENDING, which is the only safe direction — see the
+     older-link case below, which is what makes appending safe rather than merely
+     conventional. */
   const packed = packBin(bin({}));
   const fieldCount = packed.split('-').length;
-  console.log(`  field count is stable                  ${fieldCount === 17 ? '17, correct' : fieldCount + ' — WRONG'}`);
-  if (fieldCount !== 17) bad++;
+  console.log(`  field count is stable                  ${fieldCount === 18 ? '18, correct' : fieldCount + ' — WRONG'}`);
+  if (fieldCount !== 18) bad++;
+
+  /* A link written before the field existed. Nobody has one yet, but the reason to
+     handle it is the same reason to append rather than insert: the day the format grows
+     again, this is the case that says whether it grew safely. A bin nobody has marked
+     is a bin nobody has printed, so the absent field has to read as false — not as
+     NaN, and not as true, which would hide it from the plates it belongs on. */
+  const short = packed.split('-').slice(0, 17).join('-');
+  const old = unpackBin(short);
+  const okOld = old.done === false && old.u === 1 && old.hUnits === 3;
+  console.log(`  a link from before the field still reads ${okOld ? 'as unprinted' : 'WRONG: ' + JSON.stringify(old.done)}`);
+  if (!okOld) bad++;
+
+  // and the flag itself has to survive the trip, or marking a bin is lost on sharing
+  const round = unpackBin(packBin(bin({ done: true })));
+  console.log(`  a printed mark survives the trip       ${round.done === true ? 'intact' : 'LOST'}`);
+  if (round.done !== true) bad++;
 }
 
 /* A hash is in the address bar, so it gets hand-edited, truncated by a chat client and

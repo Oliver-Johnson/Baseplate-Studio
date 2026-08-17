@@ -133,6 +133,13 @@
       <label class="f"><b>Dividers along</b><input id="divY" type="number" step="1" min="0" value="0"></label>
     </div>
     <div class="hint">Dividers are counts of walls, not compartments — 1 divider makes 2 compartments.</div>
+    <!-- Only shown with a bin selected: it describes that bin, not the next one you
+         draw. Half a drawer is often already printed, and a plate arranged around
+         parts already sitting in the drawer wastes the plate. -->
+    <div class="row" id="doneRow" style="display:none">
+      <label class="tog"><input id="done" type="checkbox"> Already printed — leave off the plates</label>
+    </div>
+    <div class="hint" id="doneHint">A bin marked printed stays in the drawer and in the layout, and drops out of the print plates, the STL downloads and the filament estimate. It is what you want when you are filling a drawer a few prints at a time.</div>
     <div class="row" id="edgeRowA">
       <label class="f"><b>Front wall</b><select id="edgeF">
         <option value="1">Full height</option><option value="0.66">Two thirds</option>
@@ -253,6 +260,11 @@
   <div id="plateWrap" style="padding:10px 14px 14px;display:grid;gap:14px;
        grid-template-columns:repeat(auto-fit,minmax(190px,1fr))"></div>
   <div class="mono" id="plateSummary" style="padding:0 14px 12px">—</div>
+  <!-- The click you want when a plate comes off the printer. -->
+  <div class="row" style="padding:0 14px 14px">
+    <button class="ghost" id="markAllDone">Mark every bin printed</button>
+    <button class="ghost" id="markNoneDone">Clear printed marks</button>
+  </div>
 </div>
 
 <div class="stagecard">
