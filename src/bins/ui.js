@@ -594,6 +594,17 @@ function cellFromEvent(e) {
 }
 function initMap() {
   const svg = $('fillmap');
+  /* Right-click on the map. Uses the same cell arithmetic as every other click here, so
+     the menu opens on the bin under the cursor whether or not it is the selected one. */
+  svg.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    const c = cellFromEvent(e);
+    const i = B().findIndex((b) => binCells(b).some(([dx, dy]) =>
+      b.x + dx === c.x && b.y + dy === c.y));
+    if (i < 0) return closeMenu();
+    hideTip();
+    openMenu(e.clientX, e.clientY, cur, i);
+  });
   svg.addEventListener('pointerdown', (e) => {
     const c = cellFromEvent(e);
     const handle = e.target && e.target.dataset ? e.target.dataset.handle : null;
@@ -1313,6 +1324,23 @@ function initThree() {
     else hideTip();
   });
   canvas.addEventListener('pointerleave', hideTip);
+  /* Right-click in the preview. The same ray the tooltip uses, so the menu opens on the
+     bin you are pointing at rather than the one that happens to be selected — and the
+     preview is where you notice a bin is in the wrong layer, because the map only shows
+     one layer at a time. */
+  canvas.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    const r = canvas.getBoundingClientRect();
+    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1,
+            -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    const hit = ray.intersectObjects(group.children, false)
+                   .find((h) => h.object.userData && h.object.userData.bin);
+    if (!hit) return closeMenu();
+    const L = hit.object.userData.layer, b = hit.object.userData.bin;
+    const i = layers[L].bins.indexOf(b);
+    if (i >= 0) { hideTip(); openMenu(e.clientX, e.clientY, L, i); }
+  });
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
     dist = Math.min(4000, Math.max(80, dist * (1 + Math.sign(e.deltaY) * 0.12)));
@@ -2036,6 +2064,124 @@ const markAll = (v) => () => {
 };
 $('markAllDone').addEventListener('click', markAll(true));
 $('markNoneDone').addEventListener('click', markAll(false));
+
+
+/* ---------- right-click menu ---------------------------------------------- */
+/* The actions you want on a bin are spread across three panels and a keyboard
+ * shortcut list: delete is a button in the rail, duplicate is another, the printed
+ * mark is a checkbox two panels up, and moving a bin between layers could not be done
+ * at all — you deleted it and drew it again on the other tab. A right-click on the
+ * thing itself is where people look for all of that.
+ *
+ * Offered on the map AND in the preview, because the preview is where you notice that
+ * a bin is in the wrong layer: the map only ever shows one layer at a time.
+ *
+ * Built on open rather than kept in the markup, since half the entries depend on which
+ * bin was clicked — which layers it could move to, and whether it is already printed.
+ */
+let ctxFor = null;                     // { layer, index } while the menu is open
+function closeMenu() {
+  const m = $('ctxmenu');
+  if (!m.hidden) { m.hidden = true; m.innerHTML = ''; }
+  ctxFor = null;
+}
+function menuItem(label, fn, opts) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.textContent = label; b.setAttribute('role', 'menuitem');
+  if (opts && opts.disabled) b.disabled = true;
+  else b.addEventListener('click', () => { closeMenu(); fn(); });
+  return b;
+}
+function openMenu(clientX, clientY, layerIdx, idx) {
+  closeMenu();
+  const m = $('ctxmenu');
+  const b = layers[layerIdx].bins[idx];
+  if (!b) return;
+  ctxFor = { layer: layerIdx, index: idx };
+
+  const head = document.createElement('div');
+  head.className = 'head';
+  head.textContent = `${b.u}\u00d7${b.v}\u00d7${b.hUnits}` + (b.note ? ` \u2014 ${b.note}` : '');
+  m.appendChild(head);
+
+  /* Acting on a bin selects it first. Every action below already works on the
+     selection, and a menu that acted on something other than what is highlighted
+     would be its own kind of surprise. */
+  const pick = () => {
+    if (layerIdx !== cur) { cur = layerIdx; drawLayerTabs(); }
+    clearSel(); selected = idx; B()[idx].sel = true;
+    writeControls(B()[idx]); readControls();
+  };
+
+  m.appendChild(menuItem(b.done ? 'Mark as not printed' : 'Mark as printed', () => {
+    pushUndo(); layers[layerIdx].bins[idx].done = !b.done;
+    drawMap(); refresh();
+  }));
+  m.appendChild(menuItem('Rename\u2026', () => {
+    pick();
+    setPanel('s-bin', true);
+    $('note').focus(); $('note').select();
+    drawMap(); refresh();
+  }));
+  m.appendChild(menuItem('Duplicate', () => { pick(); duplicateSelected(); }));
+
+  /* Moving between layers. Only the layers it actually fits in are offered — a bin
+     dropped onto an occupied cell would either overlap or vanish, and finding out
+     which after the click is not a choice worth giving anyone. */
+  const sep = document.createElement('div'); sep.className = 'sep'; m.appendChild(sep);
+  const targets = layers.map((_, k) => k).filter((k) => k !== layerIdx);
+  if (!targets.length) m.appendChild(menuItem('Move to layer\u2026', null, { disabled: true }));
+  for (const k of targets) {
+    const clash = layers[k].bins.some((o) => !(b.x + b.u <= o.x || o.x + o.u <= b.x ||
+                                               b.y + b.v <= o.y || o.y + o.v <= b.y));
+    m.appendChild(menuItem(`Move to layer ${k + 1}${clash ? ' (occupied)' : ''}`, () => {
+      pushUndo();
+      const [moved] = layers[layerIdx].bins.splice(idx, 1);
+      layers[k].bins.push(moved);
+      clearSel(); cur = k; selected = layers[k].bins.length - 1;
+      layers[k].bins[selected].sel = true;
+      writeControls(layers[k].bins[selected]);
+      readControls(); drawLayerTabs(); drawMap(); refresh();
+    }, { disabled: clash }));
+  }
+  m.appendChild(menuItem('Move to a new layer on top', () => {
+    pushUndo();
+    const [moved] = layers[layerIdx].bins.splice(idx, 1);
+    layers.push({ bins: [moved] });
+    clearSel(); cur = layers.length - 1; selected = 0; layers[cur].bins[0].sel = true;
+    writeControls(layers[cur].bins[0]);
+    readControls(); drawLayerTabs(); drawMap(); refresh();
+  }));
+
+  const sep2 = document.createElement('div'); sep2.className = 'sep'; m.appendChild(sep2);
+  m.appendChild(menuItem('Delete', () => {
+    pushUndo();
+    layers[layerIdx].bins.splice(idx, 1);
+    clearSel(); readControls(); drawLayerTabs(); drawMap(); refresh();
+  }));
+
+  /* Placed after measuring, so a menu opened near the right or bottom edge folds back
+     into the window instead of hanging off it. */
+  m.hidden = false;
+  m.style.left = '0px'; m.style.top = '0px';
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.max(4, Math.min(clientX, innerWidth - r.width - 4)) + 'px';
+  m.style.top = Math.max(4, Math.min(clientY, innerHeight - r.height - 4)) + 'px';
+  const first = m.querySelector('button:not([disabled])');
+  if (first) first.focus();
+}
+/* Arrow keys and Escape, because a menu you can open with the keyboard and not leave is
+   worse than no menu. */
+$('ctxmenu').addEventListener('keydown', (e) => {
+  const items = [...$('ctxmenu').querySelectorAll('button:not([disabled])')];
+  const i = items.indexOf(document.activeElement);
+  if (e.key === 'Escape') { closeMenu(); $('fillmap').focus(); e.preventDefault(); }
+  else if (e.key === 'ArrowDown') { items[(i + 1) % items.length].focus(); e.preventDefault(); }
+  else if (e.key === 'ArrowUp') { items[(i - 1 + items.length) % items.length].focus(); e.preventDefault(); }
+});
+addEventListener('pointerdown', (e) => { if (!$('ctxmenu').contains(e.target)) closeMenu(); }, true);
+addEventListener('blur', closeMenu);
+addEventListener('resize', closeMenu);
 
 if ($('startFresh')) $('startFresh').addEventListener('click', startFresh);
 

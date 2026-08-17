@@ -103,6 +103,18 @@ a{color:var(--cyan)}
 .connfig svg.joint{display:block;width:100%;background:var(--bg)}
 /* A bin already printed: still in the drawer, visibly not in the queue. */
 /* A card heading that carries a control on the right. */
+/* Right-click menu. Fixed, because it is positioned from viewport coordinates and
+   must not move when the panel under it scrolls. */
+.ctxmenu{position:fixed;z-index:70;min-width:190px;padding:5px;
+  background:var(--panel);border:1px solid var(--line);border-radius:9px;
+  box-shadow:0 12px 32px rgba(0,0,0,.5)}
+.ctxmenu button{display:block;width:100%;text-align:left;padding:7px 11px;border:0;
+  border-radius:6px;background:none;color:var(--ink);font:inherit;font-size:13px;cursor:pointer}
+.ctxmenu button:hover,.ctxmenu button:focus{background:var(--bg);outline:none}
+.ctxmenu button[disabled]{color:var(--dim);cursor:default}
+.ctxmenu button[disabled]:hover{background:none}
+.ctxmenu .sep{height:1px;margin:5px 7px;background:var(--line)}
+.ctxmenu .head{padding:5px 11px 6px;color:var(--dim);font-size:11.5px;font-family:var(--mono)}
 .tnote{display:block;color:var(--cyan);font-family:var(--sans);font-size:11.5px;margin-top:2px}
 .cardhead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .tog.inline{margin:0;font-size:12.5px;text-transform:none;letter-spacing:0}
