@@ -750,6 +750,82 @@ function dividerPart(G, cfg, axis) {
            meta: { span, tall, t, slot: t + 2 * c.divClr, W: span, D: tall, totalH: t } };
 }
 
+/* A lid for a bin: a flat plate with a skirt that seats inside the bin's stacking lip.
+ *
+ * Measured off four reference lids before writing any of this, and the measurement
+ * changed the design. None of them used clips. All three that retain at all use one
+ * CONTINUOUS skirt whose outside mirrors the lip's inner funnel — 62.8 mm at the plate
+ * tapering to 60.9 mm at its deepest, against the lip's own 2.70 -> 1.90 mm inset. So a
+ * lid seats the way a bin foot does, except hollow: a rim rather than a solid foot,
+ * which is where the filament saving comes from. The fourth was a bare plate 3 mm
+ * undersize that just rests in the lip and retains nothing.
+ *
+ * Built in PRINT orientation — upside down, plate first. That is how it goes on the bed
+ * and it makes the plate the first layer, so the skirt grows off it with no overhang.
+ * z = 0 is therefore the TOP of the lid in use, and the skirt descends as z increases.
+ *
+ * Per side rather than one ring, because a skirt is only wanted where the bin has a lip
+ * to grip and sometimes not on a side you want to reach into. Each side is a prism along
+ * its straight run; the corner arcs are left bare, which costs nothing — retention comes
+ * from the straights, and a segment that tried to follow the arc would be a swept ring
+ * again with none of the per-side freedom.
+ */
+function lidPart(G, cfg) {
+  const c = Object.assign({}, BIN_DEFAULTS, { lidT: 1.2, lidClr: 0.2, lidSkirt: 3.0,
+                                              lidSides: null }, cfg);
+  const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
+  const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
+  const r = SPEC.half - SPEC.centre;
+  const t = c.lidT, skirt = c.lidSkirt;
+  const polys = [];
+
+  // the plate, full footprint, lying on the bed
+  polys.push(...G.extrudePoly(roundRect(hw, hd, r, c.arcSegs || 12), 0, t));
+
+  /* The skirt's cross-section, as (inset from the outer face, height). It follows the
+     lip's own inner steps so the two mate, plus clearance so it drops rather than binds:
+     the lip runs 1.90 mm in through its vertical band and 2.70 at its base, and the
+     skirt sits inside that. Deliberately stops short of the lip's full 3.95 mm depth —
+     the references only use the top ~2 mm of the funnel, and going deeper would foul the
+     radius where the lip meets the wall. */
+  /* The skirt follows the LIP'S OWN ramp, not a shape of its own.
+     First attempt invented a taper — flat for 0.6 mm then ramping over 1.2 — and it
+     fouled the lip from 0.3 mm to 1.5 mm down, by as much as 0.40 mm. The lid would have
+     jammed near the top and never seated, and nothing about the mesh would have said so:
+     it was watertight, the right size, and wrong. The lip narrows from lipMin at the rim
+     to 1.90 over the first 1.35 mm; the skirt does the same, plus clearance. */
+  const RAMP = lipHeight(c.lipMin) - 2.6;  // 1.35: rim down to the vertical band
+  const IN_TOP = c.lipMin + c.lidClr;      // just inside the rim
+  const IN_DEEP = 1.90 + c.lidClr;         // against the lip's vertical band
+  const wantSide = (k) => !c.lidSides || c.lidSides[k] !== false;
+
+  /* One side's skirt, as a profile swept along the straight run. `along` is the length
+     axis; the profile is (distance in from the outer face, z). */
+  const side = (k, axis, sign) => {
+    if (!wantSide(k)) return;
+    const half = axis === 'x' ? hw : hd;          // distance to the outer face
+    const run = (axis === 'x' ? hd : hw) - r;     // straight length, arcs excluded
+    const face = sign * half;
+    const prof = [
+      [face - sign * IN_TOP, t - BLOAT],
+      [face - sign * IN_DEEP, t + RAMP],
+      [face - sign * IN_DEEP, t + skirt],
+      [face - sign * (IN_DEEP + 1.0), t + skirt],
+      [face - sign * (IN_DEEP + 1.0), t + RAMP],
+      [face - sign * (IN_TOP + 1.0), t - BLOAT],
+    ];
+    const p = sign > 0 ? prof : prof.slice().reverse();
+    polys.push(...(axis === 'x'
+      ? G.profilePrism(p, -run, run, (u, v) => [u, v])
+      : G.profilePrism(p, -run, run, (u, v) => [v, u])));
+  };
+  side('l', 'x', -1); side('r', 'x', +1);
+  side('f', 'y', -1); side('b', 'y', +1);
+
+  return { polys, meta: { W: 2 * hw, D: 2 * hd, totalH: t + skirt, t, skirt,
+                          sides: ['l', 'r', 'f', 'b'].filter(wantSide) } };
+}
+
 function buildBin(G, cfg) {
   const c = Object.assign({}, BIN_DEFAULTS, cfg || {});
   const n = c.arcSegs;
@@ -993,7 +1069,7 @@ const unpackLayers = (s) => (s || '').split(SEP.layer)
   .map((ls) => ({ bins: ls.split(SEP.bin).filter(Boolean).map(unpackBin) }));
 
 if (typeof module !== 'undefined') {
-  module.exports = { buildBin, dividerPart, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
+  module.exports = { buildBin, dividerPart, lidPart, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
     lipHeight, REQUIRED_CORE,
     maskOf, maskCheck, isFullRect, cellKey, maskBits, bitsToCells,
     packBin, unpackBin, packLayers, unpackLayers };

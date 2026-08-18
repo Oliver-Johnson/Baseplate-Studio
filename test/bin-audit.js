@@ -6,7 +6,8 @@
 const fs = require('fs');
 const path = require('path');
 const G = require('../src/core.js');
-const { buildBin, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt, wallSplits } = require('../src/bins/bin.js');
+const { buildBin, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt, wallSplits,
+        lidPart: lidPartOf, lipHeight: lipHeightOf, LIP_TABLE } = require('../src/bins/bin.js');
 const { checkOrientation, orientationNote } = require('./orientation.js');
 
 // the browser hand-assembles its own G; make sure core still exports everything
@@ -336,6 +337,64 @@ console.log('\nwhere a lowered wall meets a full-height one');
     wide.map(([n], i) => `${n} ${angles[i].toFixed(1)}°`).join('  ') +
     `   ${spread <= 1 ? 'ok' : `SPREAD ${spread.toFixed(1)}° — the ramp is scaling with the bin again`}`);
   if (spread > 1) bad++;
+}
+
+/* Does a lid actually go into the lip it is made for?
+ *
+ * Nothing about the mesh can tell you. The first skirt was watertight, the right
+ * footprint and the right height, and fouled the lip from 0.3 mm to 1.5 mm down by up
+ * to 0.40 mm — it would have jammed near the top and never seated. It invented a taper
+ * instead of following the lip's, which is the sort of mistake that only shows up in
+ * the hand, on a print, after an hour.
+ *
+ * So this compares the two profiles directly: at every depth down the skirt, how much
+ * narrower is the lid than the opening it goes into. Must be positive everywhere, and
+ * should come out at the clearance, since the two surfaces are meant to be parallel.
+ */
+console.log('\na lid fits the lip it is made for');
+{
+  const lipMin = BIN_DEFAULTS.lipMin, lipH = lipHeightOf(lipMin), CLR = 0.2;
+  // lip inner inset, as a function of depth below the rim
+  const pts = LIP_TABLE.map(([h, i]) => [lipH - h, i]).concat([[0, lipMin]])
+                       .sort((a, b) => a[0] - b[0]);
+  const lipAt = (d) => {
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const [d0, i0] = pts[i], [d1, i1] = pts[i + 1];
+      if (d >= d0 && d <= d1) return i0 + (i1 - i0) * ((d - d0) / ((d1 - d0) || 1));
+    }
+    return pts[pts.length - 1][1];
+  };
+  const RAMP = lipH - 2.6, IN_TOP = lipMin + CLR, IN_DEEP = 1.90 + CLR, SKIRT = 3.0;
+  const lidAt = (d) => (d <= RAMP ? IN_TOP + (IN_DEEP - IN_TOP) * (d / RAMP) : IN_DEEP);
+  let worst = Infinity, at = 0;
+  for (let d = 0; d <= SKIRT + 1e-9; d += 0.05) {
+    const gap = lidAt(d) - lipAt(d);
+    if (gap < worst) { worst = gap; at = d; }
+  }
+  const ok = worst > 0.05;
+  console.log(`  tightest clearance down the skirt      ` +
+    (ok ? `${worst.toFixed(3)} mm at ${at.toFixed(2)} mm down`
+        : `FOULS by ${(-worst).toFixed(3)} mm at ${at.toFixed(2)} mm down`));
+  if (!ok) bad++;
+
+  // and the skirt must stop before the lip's bottom taper, or it lands on the ramp
+  const straightTo = lipH - 0.8;
+  console.log(`  skirt stays in the lip's straight band  ` +
+    (SKIRT <= straightTo ? `ok (${SKIRT} of ${straightTo.toFixed(2)} mm)`
+                         : `TOO DEEP: ${SKIRT} past ${straightTo.toFixed(2)}`));
+  if (SKIRT > straightTo) bad++;
+
+  for (const [name, cfg] of [['every side', { u: 3, v: 5 }],
+                             ['front left open', { u: 3, v: 5, lidSides: { f: false } }],
+                             ['one cell', { u: 1, v: 1 }]]) {
+    const L = lidPartOf(G, cfg);
+    const m = G.checkManifold(L.polys);
+    const expW = (cfg.u - 1) * 42 + 41.5;
+    const wOk = Math.abs(L.meta.W - expW) < 0.02;
+    console.log(`  lid, ${name.padEnd(32)}${m.bad === 0 && wOk ? 'watertight, right footprint' :
+      (m.bad ? m.bad + ' BAD EDGES' : `FOOTPRINT ${L.meta.W} vs ${expW}`)}`);
+    if (m.bad || !wOk) bad++;
+  }
 }
 
 console.log(bad ? `\n${bad} case(s) FAILED` : '\nall cases clean');
