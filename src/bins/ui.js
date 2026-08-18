@@ -35,9 +35,17 @@ let selected = -1;          // the primary selection: what resize and move act o
    the sole mention was a line of grey help text, while merge — the other route to the
    same shapes — had a button. This is that button. Alt-click still works. */
 let carving = false;
+/* Single-bin focus: a view mode and nothing else. The bin it means is B()[selected]
+   in layer `cur`, so every existing edit path — the settings, undo, the keyboard, the
+   context menu — keeps working in it unchanged rather than learning a second way to
+   name a bin. What the mode HIDES lives in one class on <body>; see applyFocus() and
+   the block it points at in style.css. */
+let focused = false;
+let savedView = null;       // the drawer's camera, put back when focus is left
 let selExtra = new Set();   // ctrl-clicked companions, edited together with it
 let hashExtras = {};
 let pendingNotes = null;
+let pendingFocus = null;    // "layer.index" from the hash, applied once the layout exists
 const geoCache = new Map();
 
 const B = () => layers[cur].bins;
@@ -175,7 +183,33 @@ function setFootprint(b, nu, nv) {
   }
   b.u = nu; b.v = nv;
 }
+/* Cut a cell out of a bin, or put one back. Both maps carve — the drawer map by
+   alt-click or carve mode, the focus map by a plain click — and the rule for what a
+   click may do is subtle enough (never empty the bin; never take back a cell another
+   bin now owns) that a second copy would be a fourth jointKind. Says whether it
+   changed anything. */
+function carveToggle(b, dx, dy) {
+  if (dx < 0 || dy < 0 || dx >= b.u || dy >= b.v) return false;
+  const cells = binCells(b).slice();
+  const at = cells.findIndex(([a, o]) => a === dx && o === dy);
+  if (at >= 0) {
+    if (cells.length <= 1) return false;          // a bin with no cells is not a bin
+    pushUndo(); cells.splice(at, 1); b.cells = cells;
+    return true;
+  }
+  if (!canPlace(b.x + dx, b.y + dy, 1, 1, selected)) return false;
+  pushUndo(); cells.push([dx, dy]);
+  b.cells = cells.length === b.u * b.v ? null : cells;
+  return true;
+}
+
 const allBins = () => layers.flatMap((L, k) => L.bins.map((b) => ({ b, k })));
+/* What the page is currently ABOUT. Everything that lists parts — the piece table, the
+   print plan, the filament estimate, the lids, the divider plates, the whole export —
+   reads through types(), and types() reads through here. So focus narrows all of them
+   at one line rather than at eight call sites, each of which could be forgotten
+   separately and only one of which anybody would notice. */
+const scoped = () => (focused && B()[selected] ? [{ b: B()[selected], k: cur }] : allBins());
 
 /* ---------- geometry + volume --------------------------------------------- */
 function geomFor(b) {
@@ -270,6 +304,76 @@ function setPanel(id, open) {
    interface than the one this is fixing. */
 let hadSelection = false;
 let hadErrors = false;
+
+/* ---------- single-bin focus ----------------------------------------------
+   The one place that says what focus mode looks like. It sets a class and lets the
+   stylesheet do the hiding, for the reason written above that CSS block: this
+   function already makes twenty-five show/hide decisions, and a mode whose restore
+   is twenty-five assignments the other way is a mode that eventually half-restores.
+
+   It also RE-VALIDATES the mode on every draw. The focused bin can stop existing
+   under you — Delete, an undo, a layer removed, a split that replaces it with four —
+   and every one of those routes already ends in readControls(). Checking here means
+   none of them has to remember to, and the mode falls away instead of pointing at a
+   bin that is gone. */
+function applyFocus() {
+  if (focused && !(selected >= 0 && B()[selected])) leaveFocus(true);
+  const on = focused;
+  document.body.classList.toggle('binfocus', on);
+  document.body.classList.toggle('focuscarve', on && carving);
+  const one = selAll().length === 1;
+  $('focusBin').style.display = !on && one ? '' : 'none';
+  $('focusBinHint').style.display = !on && one ? '' : 'none';
+  $('focusUndo').disabled = !undoStack.length;
+  $('focusRedo').disabled = !redoStack.length;
+  if (!on) return;
+  const b = B()[selected];
+  $('focusName').textContent = `${b.u}×${b.v}×${b.hUnits}` + (b.note ? ` — ${b.note}` : '');
+  $('focusWhere').textContent =
+    `column ${b.x + 1}, row ${b.y + 1}` + (layers.length > 1 ? `, layer ${cur + 1}` : '');
+  /* drawMap() writes an inline grid-template-columns on .stagetop sized to the map,
+     and an inline style beats the class rule that widens the preview — the same trap
+     its own comment describes for the mobile breakpoint. The map card is gone here, so
+     the measurement it left behind has to go with it, or the preview stays pinned to a
+     column shaped like a map that is no longer on the page. */
+  const top = document.querySelector('.stagetop');
+  if (top) { top.style.gridTemplateColumns = ''; top.classList.remove('wide'); }
+}
+function enterFocus() {
+  if (!(selected >= 0 && B()[selected])) return;
+  selExtra.clear();          // focus is one bin; a companion selection means nothing here
+  focused = true; carving = false;
+  const b = B()[selected];
+  savedView = { theta, phi, dist, panX, panZ };
+  /* Frame the bin, not the drawer. dist is sized for a 300 mm layout, which would put a
+     1×1 bin in the middle distance as a speck — the mode looking broken at the exact
+     moment it opens. */
+  panX = 0; panZ = 0;
+  dist = Math.max(150, 2.4 * Math.max(b.u * SPEC.pitch, b.v * SPEC.pitch,
+                                      b.hUnits * SPEC.unitH + LIP_H));
+  setPanel('s-bin', true);
+  $('focusSay').textContent =
+    `Editing the ${b.u} by ${b.v} bin on its own. The drawer, the layers and the map are hidden.`;
+  writeControls(b);
+  readControls(); drawMap(); refresh();
+}
+/* quiet is for the call inside applyFocus, which is already mid-redraw: redrawing from
+   in there would recurse through readControls and back into this function. */
+function leaveFocus(quiet) {
+  if (!focused) return;
+  focused = false; carving = false;
+  if (savedView) {
+    theta = savedView.theta; phi = savedView.phi; dist = savedView.dist;
+    panX = savedView.panX; panZ = savedView.panZ;
+    savedView = null;
+  }
+  $('focusSay').textContent = 'Back to the whole drawer.';
+  if (!quiet) { readControls(); drawLayerTabs(); drawMap(); refresh(); }
+}
+$('focusBin').addEventListener('click', enterFocus);
+$('focusExit').addEventListener('click', () => leaveFocus());
+$('focusUndo').addEventListener('click', () => undo());
+$('focusRedo').addEventListener('click', () => redo());
 
 function readControls() {
   const num = (id, d) => { const x = parseFloat($(id).value); return isFinite(x) ? x : d; };
@@ -394,6 +498,10 @@ function readControls() {
   const g = grid();
   if (document.activeElement !== $('gridX')) $('gridX').value = g.nx;
   if (document.activeElement !== $('gridY')) $('gridY').value = g.ny;
+  /* Last, so it sees the selection this pass settled on — and so the one class that
+     decides what focus hides is applied after every other visibility decision above,
+     rather than being quietly undone by one of them. */
+  applyFocus();
 }
 function writeControls(src) {
   $('u').value = src.u; $('v').value = src.v; $('hUnits').value = src.hUnits;
@@ -441,7 +549,76 @@ $('delLayer').addEventListener('click', () => {
 
 /* ---------- the map ------------------------------------------------------- */
 let drag = null;
+/* The focus map's cell size. Bigger than the drawer map's because it is showing one
+   bin instead of sixty-three cells, and the reason carving on the drawer map is
+   awkward is that a 1×1 bin there is a 40 px square. */
+const FS = 64;
+/* One bin's own cells, and nothing else. Absent unless you press Carve — asked for
+   that way, so the default focus view is the settings and the preview with nothing
+   between them. */
+function drawFocusMap() {
+  const svg = $('focusmap');
+  if (!svg) return;
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  if (!(focused && B()[selected])) return;
+  const b = B()[selected];
+  const W = b.u * FS, H = b.v * FS;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  /* Sized from the stage for the same reason the drawer map is: measuring its own
+     container, whose width this drawing helps decide, makes each depend on the other. */
+  const CAP = 88, stage = document.querySelector('.stage');
+  const availW = Math.max(160, (stage ? stage.clientWidth : 900) - 400);
+  const sc = Math.min(availW / W, 440 / H, CAP / FS);
+  svg.setAttribute('width', Math.round(W * sc));
+  svg.setAttribute('height', Math.round(H * sc));
+  const on = new Set(binCells(b).map(([x, y]) => x + ',' + y));
+  const el = (n, a) => { const e = document.createElementNS(SVGNS, n);
+    for (const k in a) e.setAttribute(k, a[k]); return e; };
+  for (let dy = 0; dy < b.v; dy++)
+    for (let dx = 0; dx < b.u; dx++) {
+      const here = on.has(dx + ',' + dy);
+      /* A gap the drawer will not give back, because another bin has taken the cell
+         since it was carved. Marked rather than left to a click that does nothing. */
+      const blocked = !here && !canPlace(b.x + dx, b.y + dy, 1, 1, selected);
+      const r = el('rect', {
+        class: 'fcell' + (here ? ' on' : blocked ? ' blocked' : ' off'),
+        /* dy 0 is the FRONT of the bin and is drawn at the bottom, the same way the
+           drawer map flips its rows — the two maps carry the same "▾ front" marker and
+           must not disagree about which end it points at. */
+        x: dx * FS, y: (b.v - dy - 1) * FS, width: FS, height: FS, rx: 4 });
+      if (!blocked)
+        r.addEventListener('click', () => {
+          if (carveToggle(b, dx, dy)) { readControls(); drawMap(); refresh(); }
+        });
+      svg.appendChild(r);
+    }
+  svg.setAttribute('aria-label',
+    `The ${b.u} by ${b.v} cells of this bin, ${plural(binCells(b).length, 'cell')} kept. ` +
+    'Click a cell to cut it out, click a gap to put it back.');
+  /* Hug the grid rather than stretch around it, the same way drawMap sizes its own
+     column. Without this the `auto` track grew to half the stage and a 2×3 bin sat as
+     six cells adrift in an empty card. applyFocus() clears this on every pass — which
+     is right, because the default focus view has no map at all — so it is re-stated
+     here, and only while carving. Asking the element how many tracks it actually got
+     keeps the 1280 px breakpoint in the stylesheet, where drawMap leaves it too. */
+  const top = document.querySelector('.stagetop');
+  if (top) {
+    top.style.gridTemplateColumns = '';
+    const twoCol = carving &&
+      getComputedStyle(top).gridTemplateColumns.trim().split(/\s+/).length > 1;
+    if (twoCol)
+      top.style.gridTemplateColumns = `${Math.round(W * sc) + 30}px minmax(320px, 1fr)`;
+  }
+}
 function drawMap() {
+  /* In focus there is no drawer map to draw, and drawing it would be worse than
+     doing nothing: the body of this function sizes .stagetop's columns from the map,
+     and doing that for a card that is hidden pins the preview to a column that is not
+     there. Delegating rather than returning empty keeps every existing drawMap() call
+     site — there are fourteen — correct in both modes without any of them asking
+     which mode it is in. */
+  if (focused) { drawFocusMap(); return; }
   const g = grid(), svg = $('fillmap');
   const W = g.nx * S, H = g.ny * S;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
@@ -658,14 +835,10 @@ function initMap() {
       const b = B()[selected];
       const dx = c.x - b.x, dy = c.y - b.y;
       if (dx >= 0 && dy >= 0 && dx < b.u && dy < b.v) {
-        const cells = binCells(b).slice();
-        const at = cells.findIndex(([a, o]) => a === dx && o === dy);
-        if (at >= 0) {
-          if (cells.length > 1) { pushUndo(); cells.splice(at, 1); b.cells = cells; }
-        } else if (canPlace(c.x, c.y, 1, 1, selected)) {
-          pushUndo(); cells.push([dx, dy]);
-          b.cells = cells.length === b.u * b.v ? null : cells;
-        }
+        carveToggle(b, dx, dy);
+        /* Redrawn whether or not it changed anything: a refused click still has to put
+           the map back, because the pointer-down that produced it may have started a
+           selection highlight. */
         readControls(); drawMap(); refresh();
         return;
       }
@@ -872,8 +1045,17 @@ function pushUndo() {
 }
 function applySnap(snap) {
   const o = JSON.parse(snap);
+  /* An undo inside focus must not throw you back to the drawer. Focus is defined by the
+     selection and clearSel() below drops it, so undoing a carve used to end the mode
+     the carve was performed in — which is the one place undo gets used most. The index
+     is stable across an undo because the snapshot restores the same bin list; if the
+     bin genuinely is not there any more, focus falls away as it should. */
+  const keep = focused ? selected : -1;
   layers = o.layers; cur = Math.min(o.cur, layers.length - 1);
   clearSel();
+  if (keep >= 0 && B()[keep]) {
+    selected = keep; B()[keep].sel = true; writeControls(B()[keep]);
+  }
   readControls(); drawLayerTabs(); drawMap(); refresh();
 }
 function undo() {
@@ -891,6 +1073,9 @@ function redo() {
 function updateUndoButtons() {
   $('undoBtn').disabled = !undoStack.length;
   $('redoBtn').disabled = !redoStack.length;
+  // the focus bar carries its own pair, because the card holding those two is hidden
+  $('focusUndo').disabled = !undoStack.length;
+  $('focusRedo').disabled = !redoStack.length;
 }
 
 /* ---------- splitting an oversized bin ------------------------------------
@@ -1036,6 +1221,19 @@ function stackHeight() {
 }
 function warnings() {
   const g = grid(), out = [];
+  /* Focus asks about one bin, so the checks answer about one bin. The stack total and
+     the "no bins yet" prompt belong to the drawer and would be noise here. Everything
+     binIssues says stays, INCLUDING what it says about where the bin sits and what
+     holds it up — those are facts about this bin, and dropping them would make focus a
+     place where an unprintable bin looks fine. */
+  if (focused && B()[selected]) {
+    const b = B()[selected];
+    for (const it of binIssues(b, cur)) {
+      const x = typeof it === 'string' ? { err: true, t: it } : it;
+      out.push({ err: !x.note, note: x.note, t: `This bin ${x.t}.` });
+    }
+    return out;
+  }
   const tot = stackHeight();
   if (tot > g.avail + 0.001)
     out.push({ err: true, t: `The tallest stack is ${tot.toFixed(1)} mm but only ${g.avail.toFixed(1)} mm is available above the baseplate.` });
@@ -1151,8 +1349,11 @@ const dividerName = (d) =>
 
 function types() {
   const m = new Map();
-  for (const { b } of allBins()) {
-    if (b.done) continue;
+  for (const { b } of scoped()) {
+    /* "Printed" is a queue fact: it drops a bin off the plates because it is already
+       sitting in the drawer. In focus you are looking AT one bin and asking for its
+       STL, and filtering it out there answers with an empty table and no download. */
+    if (b.done && !focused) continue;
     const k = typeKey(b);
     if (!m.has(k)) m.set(k, { key: k, b, qty: 0, notes: [] });
     const t = m.get(k);
@@ -1220,13 +1421,18 @@ function refresh() {
   /* Two counts once anything is marked: what is in the drawer, and what is still to
      come off the printer. Reporting only the second would make the drawer look
      half-designed; only the first would quote filament for bins already sitting in it. */
-  const doneN = allBins().filter(({ b }) => b.done).length;
-  $('totals').textContent = allBins().length
-    ? `${plural(allBins().length, 'bin')}` +
-      (doneN ? ` · ${plural(allBins().length - doneN, 'bin')} still to print` : '') +
+  const inScope = scoped();
+  /* Not counted in focus: types() deliberately keeps a printed bin there, so a "still
+     to print" figure computed the drawer's way would contradict the table above it.
+     What is worth saying instead is that the one bin on screen carries the mark. */
+  const doneN = focused ? 0 : inScope.filter(({ b }) => b.done).length;
+  $('totals').textContent = inScope.length
+    ? `${plural(inScope.length, 'bin')}` +
+      (doneN ? ` · ${plural(inScope.length - doneN, 'bin')} still to print` : '') +
       ` · ${plural(ts.length, 'distinct type')} · ` +
       `≈ ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g PLA at ${state.infill}% infill` +
-      (doneN ? ' for those' : '')
+      (doneN ? ' for those' : '') +
+      (focused && B()[selected] && B()[selected].done ? ' · this one is marked printed' : '')
     : '—';
 
   drawWarnings();
@@ -1491,6 +1697,12 @@ const DRAWER_FLOOR_T = 3;
    0.4 mm at this scale; everybody can see z-fighting. */
 const DRAWER_FLOOR_GAP = 0.4;
 let drawerMat = null, drawerEdgeMat = null, drawerKey = '';
+/* Read instead of state.showDrawer everywhere the shell is decided. Focus draws one
+   bin on a baseplate its own size, and a drawer around that would be a drawer around
+   nothing — but the toggle's value has to survive the mode, so it is suppressed here
+   rather than switched off. showScene and syncDrawer must agree, and did not once:
+   leaving syncDrawer reading the raw flag left the shell standing around a bin. */
+const shellOn = () => !!state.showDrawer && !focused;
 
 function drawerBox() {
   const g = grid();
@@ -1508,7 +1720,7 @@ function drawerBox() {
 
 function syncDrawer() {
   const b = drawerBox();
-  const key = state.showDrawer ? [b.W, b.D, b.side, b.front, b.floor].join('/') : '';
+  const key = shellOn() ? [b.W, b.D, b.side, b.front, b.floor].join('/') : '';
   // Built when its inputs change and never otherwise: render() runs on every drag
   // frame and every pinch, and showScene() runs on every edit to a bin.
   if (key === drawerKey) return;
@@ -1568,8 +1780,8 @@ function showScene() {
      panel in every direction — it looks like the renderer has failed rather than like an
      empty drawer. Say so instead. The drawer shell is exempt: if you have turned it on
      you have asked to look at the drawer, and an empty one is a real answer. */
-  const empty = allBins().length === 0;
-  const shell = !!state.showDrawer;
+  const empty = scoped().length === 0;
+  const shell = shellOn();
   /* The canvas stays visible and simply has nothing in it. Hiding it seemed tidier
      and broke the touch gestures: a hidden canvas takes no pointer events, so pinch
      and rotate had nothing to act on before the first bin was placed. */
@@ -1585,6 +1797,33 @@ function showScene() {
      it is what sizes the drawing buffer to the canvas and points the camera. */
   $('three').setAttribute('aria-label', sceneLabel(empty, shell, g));
   if (empty && !shell) { syncDrawer(); render(); return; }
+
+  /* One bin, centred, on a baseplate of exactly its own footprint. The drawer's plate
+     is drawn from the grid, so reusing it would put a 1×1 bin in the corner of a 7×9
+     slab — and the other sixty-two cells are precisely what focus exists to stop
+     showing you. */
+  if (focused && B()[selected]) {
+    const b = B()[selected];
+    const plate1 = new THREE.Mesh(
+      new THREE.BoxGeometry(b.u * SPEC.pitch, state.plateH, b.v * SPEC.pitch),
+      new THREE.MeshLambertMaterial({ color: 0x2b3947 }));
+    plate1.position.set(0, -state.plateH / 2, 0);
+    group.add(plate1);
+    if (!matCache[cur]) matCache[cur] = new THREE.MeshLambertMaterial({
+      color: MATS[cur % MATS.length], side: THREE.DoubleSide, flatShading: true });
+    /* Fading is about what is stacked ABOVE the layer being edited. Nothing is stacked
+       here, so the material has to be put back to solid — it is cached per layer and
+       would otherwise arrive still carrying the transparency the drawer view gave it,
+       which reads as a bin drawn wrong rather than as a bin drawn faded. */
+    const mat = matCache[cur];
+    mat.transparent = false; mat.opacity = 1; mat.depthWrite = true; mat.needsUpdate = true;
+    const one = new THREE.Mesh(geoOf(b), mat);
+    one.userData.bin = b; one.userData.layer = cur;
+    group.add(one);
+    syncDrawer();
+    render();
+    return;
+  }
 
   const plate = new THREE.Mesh(new THREE.BoxGeometry(gw, state.plateH, gd),
     new THREE.MeshLambertMaterial({ color: 0x2b3947 }));
@@ -1619,6 +1858,11 @@ function showScene() {
    The empty case quotes #threeempty rather than paraphrasing it, so the sentence a
    screen reader gets and the sentence on the screen cannot drift apart. */
 function sceneLabel(empty, shell, g) {
+  if (focused && B()[selected]) {
+    const b = B()[selected];
+    return `3D preview: one ${b.u} by ${b.v} bin, ${b.hUnits} units tall, ` +
+           'on a baseplate of its own size.';
+  }
   if (empty && !shell)
     return `3D preview: empty. ${$('threeempty').textContent.trim()}`;
   if (empty)
@@ -1674,6 +1918,32 @@ function downloadType(t) {
 function layoutReadme() {
   const g = grid(), ts = types();
   const L = [];
+  /* A focus download contains one bin. The drawer header, the per-layer maps and the
+     assembly instructions would all be describing thirty bins that are not in the ZIP —
+     and a README that disagrees with the files beside it is worse than no README,
+     because it is read at the printer with the parts in hand. */
+  if (focused && B()[selected]) {
+    const b = B()[selected], gm = geomFor(b);
+    L.push('GRIDFINITY BIN — generated by Drawerforge');
+    L.push('=========================================');
+    L.push('https://drawerforge.co.uk');
+    L.push('');
+    L.push(`Bin: ${b.u}x${b.v}x${b.hUnits}` + (b.note ? `  — ${b.note}` : ''));
+    L.push(`Size: ${gm.meta.W.toFixed(1)} x ${gm.meta.D.toFixed(1)} x ${gm.meta.totalH.toFixed(1)} mm incl. lip`);
+    if (b.divX || b.divY) L.push(`Compartments: ${(b.divX + 1) * (b.divY + 1)}` +
+      (b.divRemovable ? '  (removable divider plates, printed loose)' : ''));
+    if (b.lid) L.push('Lid: yes — prints upside down, no supports.');
+    L.push(`Material: about ${(gm.vol / 1000 * PLA_DENSITY).toFixed(0)} g of PLA at ${state.infill}% infill.`);
+    L.push('');
+    L.push(`It belongs at column ${b.x + 1}, row ${b.y + 1} of a ${g.nx} x ${g.ny} grid` +
+           (layers.length > 1 ? `, on layer ${cur + 1}.` : '.'));
+    L.push('');
+    L.push('PRINTING: flat as oriented, no supports. Check it seats in your baseplate');
+    L.push('before printing the rest of the drawer.');
+    L.push('');
+    L.push('Layout link: ' + designLink());
+    return L.join('\n');
+  }
   L.push('GRIDFINITY BINS — generated by Drawerforge');
   L.push('==========================================');
   L.push('https://drawerforge.co.uk');
@@ -1695,7 +1965,7 @@ function layoutReadme() {
       `${t.notes && t.notes.length ? `  — ${t.notes.join(', ')}` : ''}`);
   }
   L.push('');
-  L.push(`Total: ${plural(allBins().length, 'bin')}, about ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g of PLA.`);
+  L.push(`Total: ${plural(scoped().length, 'bin')}, about ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g of PLA.`);
   L.push('');
   layers.forEach((Ly, k) => {
     L.push(`LAYER ${k + 1} (front of the drawer at the bottom):`);
@@ -1768,7 +2038,7 @@ async function downloadAllPlates() {
                 `drawerforge-bin-plates-x${good.length}.zip`);
 }
 async function downloadBinZip() {
-  if (!allBins().length) return;
+  if (!scoped().length) return;
   const zip = new JSZip();
   for (const t of types())
     zip.file(typeName(t) + '.stl', G.stlBinary(geomFor(t.b).polys, 'bin'));
@@ -1822,7 +2092,7 @@ const exRow = (name, meta, label, onClick, attrs) =>
 
 function bedFitText() {
   const bed = `${state.bedW} × ${state.bedD} mm bed`;
-  const bins = allBins().map(({ b }) => b);
+  const bins = scoped().map(({ b }) => b);
   if (!bins.length) return { cls: 'wait', t: 'No bins placed yet — drag across the drawer map to place one.' };
   const wide = bins.filter((b) => !fitsBed(b.u, b.v));
   const tall = bins.filter((b) => {
@@ -1845,10 +2115,18 @@ function bedFitText() {
 }
 
 function renderExport() {
-  const g = grid(), ts = types(), n = allBins().length;
+  const g = grid(), ts = types(), n = scoped().length;
   let vol = 0;
   for (const t of ts) vol += geomFor(t.b).vol * t.qty;
-  $('exDesign').textContent = n
+  /* In focus the dialog is about one bin, and saying "7 × 9 cell grid" over a single
+     STL is the same disagreement the README has to avoid. */
+  const fb = focused && B()[selected] ? B()[selected] : null;
+  $('exDesign').textContent = fb
+    ? `One bin — ${fb.u} × ${fb.v} × ${fb.hUnits}` + (fb.note ? ` — ${fb.note}` : '') + '\n' +
+      `from column ${fb.x + 1}, row ${fb.y + 1} of your drawer` +
+      (layers.length > 1 ? `, layer ${cur + 1}` : '') + '\n' +
+      `about ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g of PLA at ${state.infill}% infill`
+    : n
     ? `${g.nx} × ${g.ny} cell grid in a ${state.drawerW} × ${state.drawerD} mm drawer\n` +
       `${plural(n, 'bin')} of ${plural(ts.length, 'distinct type')} over ${plural(layers.length, 'layer')}\n` +
       `about ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g of PLA at ${state.infill}% infill`
@@ -1892,7 +2170,7 @@ function renderExport() {
   }
 }
 function updateExportTail() {
-  const n = allBins().length, p = goodPlates().length;
+  const n = scoped().length, p = goodPlates().length;
   $('exportTail').textContent = n
     ? plural(n, 'bin') + (p ? ` · ${plural(p, 'plate')}` : '')
     : '';
@@ -1925,12 +2203,18 @@ const KEYS = { w: 'drawerW', d: 'drawerD', dh: 'drawerH', ph: 'plateH',
    The README ships inside the download, so anything that reaches it turns a view
    toggle into a changed exported byte, and the drawer shell is not allowed to change
    one. See designLink(). */
-const VIEW_KEYS = ['dv', 'dfh'];
+/* 'bf' joins them: which bin you have open on its own is how the design is being
+   LOOKED at, not what it is. It travels in a shared link — sending someone a bin and
+   having the page open on the drawer would defeat the point of sending it — and, like
+   the drawer shell, it is struck out of the link the README carries, so a view can
+   never change an exported byte. */
+const VIEW_KEYS = ['dv', 'dfh', 'bf'];
 // packing lives in bin.js so it can be tested headlessly
 function descriptor() {
   const o = Object.assign({}, hashExtras, { v: 2 });
   for (const [k, id] of Object.entries(KEYS)) o[k] = state[id];
   o.dv = state.showDrawer ? 1 : 0;
+  if (focused && B()[selected]) o.bf = `${cur}.${selected}`;
   o.bl = packLayers(layers);
   o.bseg = state.arcSegs;
   o.bdt = state.divT; o.bdc = state.divClr;
@@ -2031,6 +2315,7 @@ function loadFromHash(src) {
     // a checkbox, so it cannot ride the generic .value path below
     if (k === 'dv') { $('showDrawer').checked = val === '1'; continue; }
     if (k === 'bnotes') { pendingNotes = val; continue; }
+    if (k === 'bf') { pendingFocus = val; continue; }
     const id = KEYS[k];
     if (!id) { hashExtras[k] = val; continue; }
     if ($(id)) $(id).value = val;
@@ -2126,6 +2411,9 @@ document.addEventListener('keydown', (e) => {
   if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
   if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateSelected(); return; }
   if (e.key === 'Escape' && carving) { e.preventDefault(); carving = false; readControls(); drawMap(); return; }
+  /* Carving first, focus second — so Escape backs out one layer at a time rather than
+     dropping you all the way to the drawer from inside the carve grid. */
+  if (e.key === 'Escape' && focused) { e.preventDefault(); leaveFocus(); return; }
   if (selected < 0) return;
   const b = B()[selected];
   if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -2170,6 +2458,20 @@ drawLayerTabs();
 drawMap();
 refresh();
 updateUndoButtons();
+
+/* A link or a saved layout that was focused on a bin opens focused on that bin. The
+   alternative — landing in the drawer after a refresh — is a small thing that happens
+   at the worst moment, since the reason to be in focus is that the drawer is the part
+   you did not want to look at. Indices are safe to trust here because the same hash
+   carried the layout they point into. */
+if (pendingFocus) {
+  const [lk, ix] = String(pendingFocus).split('.').map(Number);
+  if (layers[lk] && layers[lk].bins[ix]) {
+    cur = lk; clearSel(); selected = ix; layers[lk].bins[ix].sel = true;
+    drawLayerTabs();
+    enterFocus();
+  }
+}
 
 /* Applied straight to the selection rather than through readControls, for the reason
    given where doneRow is hidden: readControls also writes `state`, the template for the
@@ -2243,6 +2545,10 @@ function openMenu(clientX, clientY, layerIdx, idx) {
     $('note').focus(); $('note').select();
     drawMap(); refresh();
   }));
+  /* The other way in. The button in panel 03 needs the bin selected and that panel
+     open; this is the one you reach from the bin itself, on the map or in the preview —
+     which is where you are standing when you decide you want it on its own. */
+  m.appendChild(menuItem('Edit on its own', () => { pick(); enterFocus(); }));
   m.appendChild(menuItem('Duplicate', () => { pick(); duplicateSelected(); }));
 
   /* Moving between layers. Only the layers it actually fits in are offered — a bin

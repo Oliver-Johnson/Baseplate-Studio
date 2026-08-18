@@ -524,3 +524,56 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   .kofi{transition:none}
   .kofi:hover{transform:none}
 }
+
+/* ---- single-bin focus (bins page) ---------------------------------------
+   Everything focus mode hides is listed HERE, once, and switched by one class on
+   <body>. It was tempting to do it in readControls() beside the other visibility
+   work, and that is exactly the mistake: that function already makes twenty-five
+   show/hide decisions, and a mode whose restore is twenty-five assignments in the
+   other direction is a mode that eventually half-restores. A class cannot forget
+   half its rules. body.previewlock set the precedent.
+
+   The bins page owns these ids; on the baseplates page the selectors simply match
+   nothing, which costs it a few bytes and no behaviour. */
+/* Off the screen, still in the accessibility tree — the same trick .skip uses to sit
+   out of the way until it is wanted. */
+.offscreen{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+#focusbar{display:none}
+body.binfocus #focusbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;
+  grid-column:1/-1;padding:10px 16px;border-bottom:1px solid var(--line);
+  background:var(--panel2)}
+body.binfocus #focusbar .fbwhat{display:flex;gap:9px;align-items:baseline;
+  font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+body.binfocus #focusbar .fbwhat b{font-family:var(--mono);font-size:13px;color:var(--cyan);
+  letter-spacing:0;text-transform:none}
+body.binfocus #focusbar .fbwhat span{font-family:var(--mono);font-size:11px;color:var(--dim);
+  letter-spacing:0;text-transform:none}
+body.binfocus #focusbar .fbacts{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
+/* On a phone .app is a flex column and the stage is ordered below the rail, so an
+   unordered bar would land under forty controls — past the point of being an exit. */
+@media(max-width:980px){body.binfocus #focusbar{order:0}}
+
+/* What the drawer owns, and focus therefore does not show. */
+body.binfocus #s-drawer,
+body.binfocus #s-layout,
+body.binfocus #applyAll,
+body.binfocus #markAllDone,
+body.binfocus #markNoneDone,
+body.binfocus .cardhead .tog.inline{display:none}
+
+/* The map card is gone, so the preview takes the whole stage. This has to beat the
+   inline grid-template-columns drawMap() writes — see applyFocus(), which clears it. */
+body.binfocus .stagetop{grid-template-columns:1fr}
+#s-focuscarve{display:none}
+body.binfocus.focuscarve #s-focuscarve{display:flex;flex-direction:column}
+body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
+@media(max-width:1280px){body.binfocus.focuscarve .stagetop{grid-template-columns:1fr}}
+#focusmapwrap{padding:12px 14px 4px;overflow-x:auto;display:flex;justify-content:center}
+#focusmap .fcell{fill:var(--panel2);stroke:var(--line);stroke-width:1;cursor:pointer}
+#focusmap .fcell.on{fill:var(--cyan);fill-opacity:.30;stroke:var(--cyan)}
+#focusmap .fcell.on:hover{fill-opacity:.46}
+#focusmap .fcell.off:hover{fill:var(--cyan);fill-opacity:.12}
+/* A gap the drawer cannot give back: another bin is on that cell now. Saying so with
+   a cursor and a colour beats a click that silently does nothing. */
+#focusmap .fcell.blocked{fill:var(--panel);stroke-dasharray:3 3;cursor:not-allowed}
+#focusmap .fcell:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
