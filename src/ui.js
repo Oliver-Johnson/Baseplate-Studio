@@ -911,7 +911,18 @@ function meshMaterial(polys) {
   raw = Math.abs(raw);
   /* The infill only ever reaches what the shell does not already fill, which on a
      baseplate is a small share — hence the estimate moving little with it. */
-  /* Deliberately NOT blended with the infill here. This is called once per piece at
+  /* How good is this? An upper bound, and worth saying so where the number is used.
+     Shell is summed per triangle as area x thickness, which is exactly right for a flat
+     slab — two faces at 0.8 mm over a thickness T give a solid fraction of 2t/T — but
+     it over-counts wherever faces meet, at every rib, rim and socket cone. On a 4.25 mm
+     plate that sum comes out ABOVE the whole volume, so the part is reported as printed
+     solid and the infill reaches nothing. A real slice of one does show a little sparse
+     infill, so the true figure is somewhat under what this reports. Fixing it properly
+     means eroding the mesh by the shell thickness and measuring what survives, which is
+     a different piece of work from a per-triangle sum; until then the number is honest
+     about being a ceiling rather than quietly pretending otherwise.
+
+     Deliberately NOT blended with the infill here. This is called once per piece at
      build time and cached, and geometry does not change when the infill does — so a
      figure folded in at this point is stale the moment the control is touched, which is
      exactly how the estimate came to ignore it. Shape in, shape out; filamentOf does
@@ -935,7 +946,8 @@ function infillNote() {
   const core = !layout ? 0 : layout.pieces.reduce(
     (a, pc) => a + (builds[pc.id] ? builds[pc.id].mat.core : 0), 0);
   return core > 1 ? `at ${state.infill}% infill`
-                  : '— all shell, so infill does not change it';
+                  : `— mostly shell, so ${state.infill}% infill barely moves it, ` +
+                    'and this is an over-estimate';
 }
 const massText = (g) => g >= 1000 ? `${(g / 1000).toFixed(1)} kg` : `${Math.round(g)} g`;
 /* Null until every piece exists. Half a total is a number people would act on, and the

@@ -371,7 +371,7 @@ test('the filament estimate follows the infill, and says when it cannot', async 
                        (t.includes(' kg') ? 1000 : 1);
 
   // open-bottomed: all shell, and the page should say so rather than quote a percentage
-  expect(await estimate()).toMatch(/all shell, so infill does not change it/);
+  expect(await estimate()).toMatch(/mostly shell, so 15% infill barely moves it/);
 
   // a solid pad gives the infill something to reach
   await set('bottomPad', '2.8');

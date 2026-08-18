@@ -97,5 +97,42 @@ console.log('\nsitemap covers every page');
   }
 }
 
+/* Title length, and the three places a title is written.
+ *
+ * Bing's site scan flagged /guide/ at 76 characters and /guide/split/ at 78 as "title
+ * too long", while /bins/ at 71 passed — so the line it draws sits between the two, and
+ * a title over it is truncated in the result with the brand cut off the end. 65 leaves
+ * room without being so tight that a useful phrase cannot fit.
+ *
+ * The og: and twitter: copies are checked against the real <title> too, because they are
+ * what a link preview shows and nothing else compares them — three hand-kept copies of
+ * one sentence is exactly the shape of thing that drifts.
+ */
+console.log('\ntitles fit, and their social copies agree');
+{
+  const LIMIT = 65;
+  const unesc = (t) => t.replace(/&amp;/g, '&');
+  for (const rel of PAGES) {
+    const html = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    const title = unesc((html.match(/<title>([^<]*)<\/title>/) || [, ''])[1]);
+    say(`${rel} title, ${title.length} chars`.padEnd(2), title.length > 0 && title.length <= LIMIT,
+        `over ${LIMIT}: Bing truncates it and the brand falls off the end`);
+    for (const [what, re] of [['og:title', /property="og:title" content="([^"]*)"/],
+                              ['twitter:title', /name="twitter:title" content="([^"]*)"/]]) {
+      const m = html.match(re);
+      if (!m) continue;                       // not every page carries both
+      /* The brand suffix is optional here: og:site_name already carries it and the
+         guide pages deliberately drop it, so requiring an exact match would fail a
+         convention rather than a mistake. The WORDING has to agree — that is what
+         drifted when the titles were shortened and these were left behind. */
+      const bare = title.replace(/\s+—\s+Drawerforge$/, '');
+      const got = unesc(m[1]);
+      say(`${rel} ${what} agrees with the title`, got === title || got === bare,
+          `says ${JSON.stringify(got)} where the title says ${JSON.stringify(title)}`);
+    }
+  }
+}
+
+
 console.log(bad ? `\n${bad} check(s) FAILED` : '\nstructured data is sound');
 process.exit(bad ? 1 : 0);
