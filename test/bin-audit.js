@@ -37,6 +37,10 @@ const CASES = [
   { name: '1x1x3-solid', u: 1, v: 1, hUnits: 3, solid: true },
   { name: '2x1x3-div', u: 2, v: 1, hUnits: 3, divX: 1 },
   { name: '3x2x5-div', u: 3, v: 2, hUnits: 5, divX: 2, divY: 1 },
+  /* Removable dividers build rails instead of a wall across the cavity — four small
+     prisms per divider, which is four more chances to leave a shell open. */
+  { name: '2x2x3-railed', u: 2, v: 2, hUnits: 3, divX: 1, divRemovable: true },
+  { name: '3x2x5-railed', u: 3, v: 2, hUnits: 5, divX: 2, divY: 1, divRemovable: true },
   { name: '1x1x1', u: 1, v: 1, hUnits: 1 },
   { name: '2x1x3-scoop', u: 2, v: 1, hUnits: 3, scoop: 8 },
   { name: '2x1x3-label', u: 2, v: 1, hUnits: 3, label: 12 },

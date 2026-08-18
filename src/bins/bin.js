@@ -33,6 +33,11 @@ const SPEC = {
 
 const BLOAT = 0.05;     // shell overlap; never rely on coincident faces
 
+/* Rails for a removable divider: how thick each rib is, and how far it stands proud of
+   the wall. 1.2 is two perimeters at a 0.4 nozzle, so a rib prints solid and stiff
+   rather than as two skins with a void between them. */
+const RAIL_T = 1.2, RAIL_D = 1.2;
+
 // Everything buildBin reaches for through G. The bins UI checks itself against this
 // at load; keep it in step when a new primitive is used.
 const REQUIRED_CORE = ['makePoly', 'triangulateRing', 'extrudePoly', 'clampZ', 'profilePrism',
@@ -44,6 +49,9 @@ const BIN_DEFAULTS = {
   wall: 1.2,            // side wall thickness
   floorT: 1.2,          // floor thickness above the top of the base
   divX: 0, divY: 0,     // interior dividers (cuts, not compartments)
+  divRemovable: false,  // dividers as loose plates in rails, rather than printed in
+  divT: 1.6,            // thickness of a loose divider plate
+  divClr: 0.25,         // slot clearance per side, so it slides rather than presses
   solid: false,         // no cavity at all
   arcSegs: 12,          // corner-arc segments; only affects the bin's own smoothness
   shrink: 0,            // extra clearance per side, on top of the spec's 0.25
@@ -705,6 +713,38 @@ function carvedBody(G, c, mask, H, floorZ, zTop, lipSteps) {
 
 /* ---------- the bin ------------------------------------------------------- */
 
+/* The loose divider plate, for a bin built with removable dividers.
+ *
+ * Sized from the SAME numbers the rails are built from, so the two cannot drift: the
+ * rails leave a gap of divT + 2*divClr and the plate is divT, which is the clearance
+ * per side. The bin's own fit coupons exist because a joint whose two halves are
+ * derived separately is a joint that eventually stops fitting.
+ *
+ * `axis` is 'y' for the plate that stands at a fixed x — the one that divides the bin
+ * left from right — matching the rails() call in buildBin.
+ *
+ * A plain slab: no foot, no lip, nothing that has to stack. It prints flat on its side,
+ * which is also the orientation that puts its layers across the load rather than along
+ * the split.
+ */
+function dividerPart(G, cfg, axis) {
+  const c = Object.assign({}, BIN_DEFAULTS, cfg);
+  const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
+  const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
+  const iw = hw - c.wall, id = hd - c.wall;
+  const H = c.hUnits * SPEC.unitH;
+  const floorZ = SPEC.footH + c.floorT;
+  /* Spans wall to wall, less the clearance, so it drops in rather than having to be
+     forced. Its height stops short of the rim by the same amount: a plate standing
+     proud of the bin would foul anything stacked on top. */
+  const span = 2 * (axis === 'y' ? id : iw) - 2 * c.divClr;
+  const tall = (H - floorZ) - c.divClr;
+  const t = c.divT;
+  const rect = [[-span / 2, -t / 2], [span / 2, -t / 2], [span / 2, t / 2], [-span / 2, t / 2]];
+  return { polys: G.extrudePoly(rect, 0, tall),
+           meta: { span, tall, t, slot: t + 2 * c.divClr } };
+}
+
 function buildBin(G, cfg) {
   const c = Object.assign({}, BIN_DEFAULTS, cfg || {});
   const n = c.arcSegs;
@@ -802,16 +842,47 @@ function buildBin(G, cfg) {
       if (d > 0.05) polys.push(...labelPrism(G, iw, id, H, d, c.labelT));
     }
 
-    /* dividers — separate overlapping shells, never unioned */
+    /* Dividers — separate overlapping shells, never unioned.
+     *
+     * Two kinds. A fixed divider is one prism straight across the cavity, printed as
+     * part of the bin. A REMOVABLE one is not built at all: what is built is two pairs
+     * of rails, one pair on each of the facing walls, and the plate that slides down
+     * between them is exported as its own part. That way a bin can be re-divided after
+     * it is printed instead of being reprinted.
+     *
+     * Rails rather than a slot cut into the wall, and that is not a stylistic choice:
+     * this file builds everything additively because the hand-rolled BSP is fragile
+     * near the foot cones (ENGINE.md), and a slot is a subtraction. Two ribs with a gap
+     * between them are the same slot made out of added material.
+     */
     const t = c.wall / 2;
+    const rails = (centre, along) => {
+      /* `along` is the axis the divider plane runs along: 'y' for a divider standing at
+         a fixed x. The rails sit on the two walls that face each other across it. */
+      const half = c.divT / 2 + c.divClr;          // inner face of each rail
+      const outer = half + RAIL_T;
+      const ends = along === 'y' ? [[-id, -id + RAIL_D], [id - RAIL_D, id]]
+                                 : [[-iw, -iw + RAIL_D], [iw - RAIL_D, iw]];
+      for (const [a, b] of ends)
+        for (const [lo, hi] of [[-outer, -half], [half, outer]]) {
+          const rect = along === 'y'
+            ? [[centre + lo, a - BLOAT], [centre + hi, a - BLOAT],
+               [centre + hi, b], [centre + lo, b]]
+            : [[a - BLOAT, centre + lo], [b, centre + lo],
+               [b, centre + hi], [a - BLOAT, centre + hi]];
+          polys.push(...G.extrudePoly(rect, floorZ - BLOAT, H));
+        }
+    };
     for (let k = 1; k <= c.divX; k++) {
       const x = -iw + (2 * iw) * k / (c.divX + 1);
+      if (c.divRemovable) { rails(x, 'y'); continue; }
       polys.push(...G.extrudePoly(
         [[x - t, -id - BLOAT], [x + t, -id - BLOAT], [x + t, id + BLOAT], [x - t, id + BLOAT]],
         floorZ - BLOAT, H));
     }
     for (let k = 1; k <= c.divY; k++) {
       const y = -id + (2 * id) * k / (c.divY + 1);
+      if (c.divRemovable) { rails(y, 'x'); continue; }
       polys.push(...G.extrudePoly(
         [[-iw - BLOAT, y - t], [iw + BLOAT, y - t], [iw + BLOAT, y + t], [-iw - BLOAT, y + t]],
         floorZ - BLOAT, H));
@@ -916,7 +987,7 @@ const unpackLayers = (s) => (s || '').split(SEP.layer)
   .map((ls) => ({ bins: ls.split(SEP.bin).filter(Boolean).map(unpackBin) }));
 
 if (typeof module !== 'undefined') {
-  module.exports = { buildBin, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
+  module.exports = { buildBin, dividerPart, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
     lipHeight, REQUIRED_CORE,
     maskOf, maskCheck, isFullRect, cellKey, maskBits, bitsToCells,
     packBin, unpackBin, packLayers, unpackLayers };
