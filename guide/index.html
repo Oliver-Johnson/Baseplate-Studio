@@ -571,6 +571,16 @@ body.binfocus #focusbar .fbacts{display:flex;gap:8px;margin-left:auto;flex-wrap:
    unordered bar would land under forty controls — past the point of being an exit. */
 @media(max-width:980px){body.binfocus #focusbar{order:0}}
 
+/* A loose bin has no place in a drawer, so the controls that talk about one go: where
+   it sits, whether it has been printed, and the way "back" to somewhere it never was. */
+#scratchAdd,#scratchDrop,#scratchWhy{display:none}
+body.binscratch #focusExit{display:none}
+body.binscratch #scratchAdd,body.binscratch #scratchDrop{display:inline-block}
+body.binscratch #scratchWhy{display:block;flex-basis:100%;font-size:11px;color:var(--dim)}
+body.binscratch #scratchWhy.no{color:var(--red)}
+body.binscratch #doneRow,body.binscratch #doneHint,body.binscratch #splitFit,
+body.binscratch #splitHint{display:none}
+
 /* What the drawer owns, and focus therefore does not show. */
 body.binfocus #s-drawer,
 body.binfocus #s-layout,

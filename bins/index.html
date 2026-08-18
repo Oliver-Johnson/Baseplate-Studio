@@ -581,6 +581,16 @@ body.binfocus #focusbar .fbacts{display:flex;gap:8px;margin-left:auto;flex-wrap:
    unordered bar would land under forty controls — past the point of being an exit. */
 @media(max-width:980px){body.binfocus #focusbar{order:0}}
 
+/* A loose bin has no place in a drawer, so the controls that talk about one go: where
+   it sits, whether it has been printed, and the way "back" to somewhere it never was. */
+#scratchAdd,#scratchDrop,#scratchWhy{display:none}
+body.binscratch #focusExit{display:none}
+body.binscratch #scratchAdd,body.binscratch #scratchDrop{display:inline-block}
+body.binscratch #scratchWhy{display:block;flex-basis:100%;font-size:11px;color:var(--dim)}
+body.binscratch #scratchWhy.no{color:var(--red)}
+body.binscratch #doneRow,body.binscratch #doneHint,body.binscratch #splitFit,
+body.binscratch #splitHint{display:none}
+
 /* What the drawer owns, and focus therefore does not show. */
 body.binfocus #s-drawer,
 body.binfocus #s-layout,
@@ -653,7 +663,14 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
     <button type="button" class="ghost" id="focusUndo">Undo</button>
     <button type="button" class="ghost" id="focusRedo">Redo</button>
     <button type="button" class="act" id="focusExit">Back to the drawer</button>
+    <!-- A loose bin has no drawer to go "back" to, so it gets the two answers it
+         actually has. Where it would land is written beside them and worked out on
+         every draw, so you know before you press rather than after — and the button
+         is disabled with the reason when there is nowhere for it to go. -->
+    <button type="button" class="act" id="scratchAdd">Add to the drawer</button>
+    <button type="button" class="ghost" id="scratchDrop">Discard</button>
   </div>
+  <div id="scratchWhy" class="mono"></div>
 </div>
 <div class="rail">
 
@@ -800,6 +817,12 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
       </select></label>
     <button class="act" id="splitFit" style="display:none">Split this bin to fit the bed</button>
     <div class="hint" id="splitHint" style="display:none">Splits it into the fewest pieces that each fit, covering the same cells. They sit side by side on the baseplate, so nothing is lost but the wall between them — and if you want one continuous compartment, set the facing walls of the new bins to Open.</div>
+    <!-- The same slot as the focus button, which is only offered with a bin selected.
+         With nothing selected this panel is called "New bins" and holds the size you
+         have just typed, so it is the honest place to say "make that, and nothing
+         else". -->
+    <button class="act" id="scratchBin" style="display:none">Design one bin on its own</button>
+    <div class="hint" id="scratchBinHint" style="display:none">For when you want a single bin and not a drawer of them. Opens the same uncluttered page, with no grid to place it on and no drawer measurements to fill in — just the bin, its preview and its download. You can drop it into the drawer at the end, or never.</div>
     <button class="act" id="focusBin" style="display:none">Edit this bin on its own</button>
     <div class="hint" id="focusBinHint" style="display:none">Hides the drawer, the layers and the map, and gives this one bin the whole page. Everything here still works and the bin stays exactly where it is — this only changes what you are shown.</div>
     <button class="act" id="carveMode" style="display:none">Carve this bin into a shape</button>
@@ -847,9 +870,13 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
     <div class="exfit bad" id="mapChecks" style="display:none"><div id="mapChecksList"></div></div>
     <div class="mono" id="coverage">—</div>
     <div class="hint">Drag across empty cells to place a bin. Click one to select it, drag it to move it, or pull a corner grip to resize. A ⚠ marks a bin that will not sit properly where it is — <span class="haskeys">hover it</span><span class="hastouch">tap it</span> for the reason. It stays put either way, in case you are about to place the thing that fixes it. <b>Alt-click</b> a cell inside the selected bin to carve it out, or alt-click a gap to put it back — that is how you make an L or a U.</div>
-    <div class="row">
+    <div class="row3">
       <button class="ghost" id="fillRest">Fill the rest with <span id="fillSize">1×1</span></button>
       <button class="ghost" id="clearAll">Clear all</button>
+      <!-- Duplicated from panel 03 on purpose. That panel loads closed, and somebody
+           who came here for one bin has no reason to open a panel called "New bins"
+           before finding out the tool will do it. This is where their eye already is. -->
+      <button class="ghost" id="scratchBinMap">Just one bin</button>
     </div>
     <div class="row3" style="margin-top:8px">
       <button class="ghost" id="undoBtn">Undo</button>
@@ -4528,11 +4555,18 @@ let carving = false;
    name a bin. What the mode HIDES lives in one class on <body>; see applyFocus() and
    the block it points at in style.css. */
 let focused = false;
+/* A bin being designed with no drawer around it. It is NOT in `layers`, which is the
+   whole point: somebody who wants one 2x3x6 bin should not have to lay out a drawer
+   and drag on a grid to get it. Everything downstream reaches the focused bin through
+   fBin() rather than through B()[selected], so a loose bin and a placed one are the
+   same object to the piece table, the plan, the preview and the export. */
+let scratch = null;
 let savedView = null;       // the drawer's camera, put back when focus is left
 let selExtra = new Set();   // ctrl-clicked companions, edited together with it
 let hashExtras = {};
 let pendingNotes = null;
 let pendingFocus = null;    // "layer.index" from the hash, applied once the layout exists
+let pendingScratch = null;  // a packed loose bin from the hash
 const geoCache = new Map();
 
 const B = () => layers[cur].bins;
@@ -4540,6 +4574,8 @@ const B = () => layers[cur].bins;
 const selAll = () => (selected < 0 ? []
   : [selected, ...selExtra].filter((v, i, a) => a.indexOf(v) === i && B()[v]));
 const clearSel = () => { selected = -1; selExtra.clear(); };
+/* The bin focus is pointed at, whichever kind it is. Null whenever focus is off. */
+const fBin = () => (!focused ? null : scratch || (selected >= 0 ? B()[selected] : null));
 const LIP_H = lipHeight(0.55);
 
 /* ---------- model --------------------------------------------------------- */
@@ -4684,7 +4720,10 @@ function carveToggle(b, dx, dy) {
     pushUndo(); cells.splice(at, 1); b.cells = cells;
     return true;
   }
-  if (!canPlace(b.x + dx, b.y + dy, 1, 1, selected)) return false;
+  /* A loose bin can always take a cell back — there is no drawer, so there is nothing
+     for it to collide with. Asking canPlace anyway would consult the grid at 0,0 and
+     refuse cells that a bin sitting in the corner of the drawer happens to own. */
+  if (b !== scratch && !canPlace(b.x + dx, b.y + dy, 1, 1, selected)) return false;
   pushUndo(); cells.push([dx, dy]);
   b.cells = cells.length === b.u * b.v ? null : cells;
   return true;
@@ -4696,7 +4735,7 @@ const allBins = () => layers.flatMap((L, k) => L.bins.map((b) => ({ b, k })));
    reads through types(), and types() reads through here. So focus narrows all of them
    at one line rather than at eight call sites, each of which could be forgotten
    separately and only one of which anybody would notice. */
-const scoped = () => (focused && B()[selected] ? [{ b: B()[selected], k: cur }] : allBins());
+const scoped = () => { const b = fBin(); return b ? [{ b, k: scratch ? 0 : cur }] : allBins(); };
 
 /* ---------- geometry + volume --------------------------------------------- */
 function geomFor(b) {
@@ -4804,20 +4843,41 @@ let hadErrors = false;
    none of them has to remember to, and the mode falls away instead of pointing at a
    bin that is gone. */
 function applyFocus() {
-  if (focused && !(selected >= 0 && B()[selected])) leaveFocus(true);
+  if (focused && !fBin()) leaveFocus(true);
   const on = focused;
   document.body.classList.toggle('binfocus', on);
+  document.body.classList.toggle('binscratch', !!scratch);
   document.body.classList.toggle('focuscarve', on && carving);
   const one = selAll().length === 1;
   $('focusBin').style.display = !on && one ? '' : 'none';
   $('focusBinHint').style.display = !on && one ? '' : 'none';
-  $('focusUndo').disabled = !undoStack.length;
-  $('focusRedo').disabled = !redoStack.length;
+  /* Offered with nothing selected, which is when panel 03 describes the next bin you
+     would draw rather than one that exists. With a bin selected the slot belongs to
+     the focus button above. */
+  const none = !on && selAll().length === 0;
+  $('scratchBin').style.display = none ? '' : 'none';
+  $('scratchBinHint').style.display = none ? '' : 'none';
+  /* Both pairs of undo buttons, every pass. There are two histories now and switching
+     between them changes what the buttons should say without touching either stack —
+     so leaving it to the callers meant discardScratch, which clears the loose bin's
+     stack and hands the page back to the drawer's, left the drawer's Undo greyed out
+     with a full stack behind it. Nothing has to remember to call this any more. */
+  updateUndoButtons();
   if (!on) return;
-  const b = B()[selected];
+  const b = fBin();
   $('focusName').textContent = `${b.u}×${b.v}×${b.hUnits}` + (b.note ? ` — ${b.note}` : '');
-  $('focusWhere').textContent =
-    `column ${b.x + 1}, row ${b.y + 1}` + (layers.length > 1 ? `, layer ${cur + 1}` : '');
+  $('focusWhere').textContent = scratch ? 'not in the drawer'
+    : `column ${b.x + 1}, row ${b.y + 1}` + (layers.length > 1 ? `, layer ${cur + 1}` : '');
+  /* Worked out every draw, so the answer is on the button before you press it rather
+     than in a message after. A bin that cannot land says why, and the reason changes
+     as you change the size — which is the thing that would fix it. */
+  if (scratch) {
+    const spot = scratchLanding();
+    $('scratchAdd').disabled = !!spot.why;
+    $('scratchWhy').classList.toggle('no', !!spot.why);
+    $('scratchWhy').textContent = spot.why ||
+      `goes in at column ${spot.x + 1}, row ${spot.y + 1} of layer ${cur + 1}`;
+  }
   /* drawMap() writes an inline grid-template-columns on .stagetop sized to the map,
      and an inline style beats the class rule that widens the preview — the same trap
      its own comment describes for the mobile breakpoint. The map card is gone here, so
@@ -4826,18 +4886,50 @@ function applyFocus() {
   const top = document.querySelector('.stagetop');
   if (top) { top.style.gridTemplateColumns = ''; top.classList.remove('wide'); }
 }
-function enterFocus() {
-  if (!(selected >= 0 && B()[selected])) return;
-  selExtra.clear();          // focus is one bin; a companion selection means nothing here
-  focused = true; carving = false;
-  const b = B()[selected];
-  savedView = { theta, phi, dist, panX, panZ };
-  /* Frame the bin, not the drawer. dist is sized for a 300 mm layout, which would put a
-     1×1 bin in the middle distance as a speck — the mode looking broken at the exact
-     moment it opens. */
+/* Frame the bin, not the drawer. dist is sized for a 300 mm layout, which would put a
+   1×1 bin in the middle distance as a speck — the mode looking broken at the exact
+   moment it opens. */
+function restoreView() {
+  if (!savedView) return;
+  theta = savedView.theta; phi = savedView.phi; dist = savedView.dist;
+  panX = savedView.panX; panZ = savedView.panZ;
+  savedView = null;
+}
+function frameBin(b) {
+  savedView = savedView || { theta, phi, dist, panX, panZ };
   panX = 0; panZ = 0;
   dist = Math.max(150, 2.4 * Math.max(b.u * SPEC.pitch, b.v * SPEC.pitch,
                                       b.hUnits * SPEC.unitH + LIP_H));
+}
+/* Where a loose bin would go if you added it now: the first free spot on the layer you
+   were last editing, scanned front-left first because that is the corner the map draws
+   at its origin and the one people fill first. Returns the reason instead when there
+   is nowhere — the two failures are different and want different sentences. */
+function scratchLanding() {
+  const b = scratch, g = grid();
+  if (!b) return { why: 'no bin' };
+  if (b.u > g.nx || b.v > g.ny)
+    return { why: `a ${b.u}×${b.v} bin does not fit the ${g.nx}×${g.ny} grid — make it smaller, or the drawer bigger` };
+  const sup = support(cur);
+  for (let y = 0; y <= g.ny - b.v; y++)
+    for (let x = 0; x <= g.nx - b.u; x++) {
+      if (!canPlace(x, y, b.u, b.v, -1)) continue;
+      /* Upper layers need level, continuous support underneath, the same rule the
+         drag-to-place path applies — a bin dropped onto a step would rock. */
+      if (cur > 0) {
+        const st = seat({ x, y, u: b.u, v: b.v }, cur);
+        if (!st.flat || !st.solidBelow) continue;
+      }
+      return { x, y };
+    }
+  return { why: `no free ${b.u}×${b.v} space on layer ${cur + 1} — clear some cells, or add a layer` };
+}
+function enterFocus() {
+  if (!(selected >= 0 && B()[selected])) return;
+  selExtra.clear();          // focus is one bin; a companion selection means nothing here
+  focused = true; carving = false; scratch = null;
+  const b = B()[selected];
+  frameBin(b);
   setPanel('s-bin', true);
   $('focusSay').textContent =
     `Editing the ${b.u} by ${b.v} bin on its own. The drawer, the layers and the map are hidden.`;
@@ -4848,16 +4940,70 @@ function enterFocus() {
    in there would recurse through readControls and back into this function. */
 function leaveFocus(quiet) {
   if (!focused) return;
+  /* A loose bin has nowhere to go back TO. Leaving would have to either place it or
+     throw it away, and guessing which is not a choice worth making on somebody's
+     behalf — so the two explicit buttons are the only ways out and this refuses. */
+  if (scratch) return;
   focused = false; carving = false;
-  if (savedView) {
-    theta = savedView.theta; phi = savedView.phi; dist = savedView.dist;
-    panX = savedView.panX; panZ = savedView.panZ;
-    savedView = null;
-  }
+  restoreView();
   $('focusSay').textContent = 'Back to the whole drawer.';
   if (!quiet) { readControls(); drawLayerTabs(); drawMap(); refresh(); }
 }
+/* Design one bin, with no drawer around it.
+ *
+ * Born from the "New bins" settings rather than from the tool's defaults: that panel is
+ * where you have just said what you want, and starting over from 1×1×3 would throw it
+ * away. x and y are zeroes it never reads — they exist so the bin is the same SHAPE of
+ * object as a placed one, which is what lets the preview, the piece table, the plan and
+ * the export take it without knowing which kind it is. */
+function startScratch() {
+  clearSel();
+  scratch = { x: 0, y: 0, u: state.u, v: state.v, hUnits: state.hUnits,
+              wall: state.wall, floorT: state.floorT,
+              divX: state.divX, divY: state.divY, solid: state.solid,
+              scoop: state.scoop, label: state.label, note: '',
+              edges: Object.assign({}, state.edges) };
+  sUndoStack.length = 0; sRedoStack.length = 0;
+  focused = true; carving = false;
+  frameBin(scratch);
+  setPanel('s-bin', true);
+  $('focusSay').textContent =
+    `Designing a ${scratch.u} by ${scratch.v} bin on its own. There is no drawer and no map.`;
+  writeControls(scratch);
+  readControls(); drawMap(); refresh();
+}
+/* Put it in the drawer after all. The bin stops being loose BEFORE the undo is pushed,
+   so the snapshot is the drawer's and lands on the drawer's stack — pushing it while
+   scratch was still set would file "the drawer without this bin" under the loose bin's
+   history, where the drawer's undo button would never find it. */
+function addScratchToDrawer() {
+  const spot = scratchLanding();
+  if (spot.why) return;                       // the button is disabled, but not only here
+  const b = Object.assign({}, scratch, { x: spot.x, y: spot.y });
+  scratch = null;
+  sUndoStack.length = 0; sRedoStack.length = 0;
+  pushUndo();
+  B().push(b);
+  focused = false; carving = false;
+  restoreView();
+  selected = B().length - 1; B()[selected].sel = true;
+  $('focusSay').textContent =
+    `Added to the drawer at column ${spot.x + 1}, row ${spot.y + 1}.`;
+  writeControls(B()[selected]);
+  readControls(); drawLayerTabs(); drawMap(); refresh();
+}
+function discardScratch() {
+  scratch = null;
+  sUndoStack.length = 0; sRedoStack.length = 0;
+  focused = false; carving = false;
+  restoreView();
+  $('focusSay').textContent = 'Discarded. Back to the whole drawer.';
+  readControls(); drawLayerTabs(); drawMap(); refresh();
+}
 $('focusBin').addEventListener('click', enterFocus);
+for (const id of ['scratchBin', 'scratchBinMap']) $(id).addEventListener('click', startScratch);
+$('scratchAdd').addEventListener('click', addScratchToDrawer);
+$('scratchDrop').addEventListener('click', discardScratch);
 $('focusExit').addEventListener('click', () => leaveFocus());
 $('focusUndo').addEventListener('click', () => undo());
 $('focusRedo').addEventListener('click', () => redo());
@@ -4909,7 +5055,9 @@ function readControls() {
      have every bin drawn after a mark born already printed. print-queue.spec.js fails
      on exactly that pair of changes. */
   const sel = selAll();
-  $('doneRow').style.display = sel.length ? '' : 'none';
+  /* Whether a bin has been printed is a fact about one sitting in the drawer. A loose
+     bin is not in a drawer, so the question does not arise. */
+  $('doneRow').style.display = sel.length && !scratch ? '' : 'none';
   const anyDiv = t.divX > 0 || t.divY > 0;
   $('divRemovableRow').style.display = anyDiv ? '' : 'none';
   $('divRemovableHint').style.display = anyDiv && $('divRemovable').checked ? '' : 'none';
@@ -4919,7 +5067,16 @@ function readControls() {
   $('lidRow').style.display = t.solid ? 'none' : '';
   $('lidNoLip').style.display = !t.solid && !lipOk && $('lid').checked ? '' : 'none';
   $('lidHint').style.display = !t.solid && lipOk && $('lid').checked ? '' : 'none';
-  if (sel.length) {
+  if (scratch) {
+    /* No drawer, so nothing to collide with: a loose bin's footprint is limited only by
+       the bed, and the checks say so rather than the field silently refusing the digit
+       you typed. u and v still go through setFootprint, because a carved shape has to
+       reconcile its mask whichever kind of bin it is. */
+    const nu = t.u, nv = t.v; delete t.u; delete t.v;
+    Object.assign(scratch, t, { edges: Object.assign({}, t.edges) });
+    if (nu !== undefined && (nu !== scratch.u || nv !== scratch.v))
+      setFootprint(scratch, nu, nv);
+  } else if (sel.length) {
     // size only applies to a single bin; several at once would have to overlap
     const b = B()[selected];
     if (sel.length > 1) {
@@ -4953,7 +5110,10 @@ function readControls() {
   $('presetTray').style.display = t.solid ? 'none' : '';
   $('selActions').style.display = selected >= 0 ? '' : 'none';
   $('sizeRow').style.display = selAll().length > 1 ? 'none' : '';
-  const one = selAll().length === 1;
+  /* Carving needs exactly one bin to carve. A loose bin IS exactly one bin — it just
+     is not a selection, so counting the selection would have hidden the Carve button
+     in the one mode built around a single bin. */
+  const one = !!scratch || selAll().length === 1;
   if (!one) carving = false;
   $('carveMode').style.display = one ? '' : 'none';
   $('carveHint').style.display = one && carving ? '' : 'none';
@@ -4971,7 +5131,8 @@ function readControls() {
     $('splitFit').textContent = `Split into ${sp.text} to fit the bed`;
   }
   const nSel = selAll().length;
-  $('binPanelTitle').textContent = nSel > 1 ? `${plural(nSel, 'bin')} selected`
+  $('binPanelTitle').textContent = scratch ? 'This bin'
+    : nSel > 1 ? `${plural(nSel, 'bin')} selected`
     : nSel === 1 ? 'Selected bin' : 'New bins';
   /* The panel ships closed, so selecting a bin has to open it or its settings are
      behind a click that nothing asks you to make. */
@@ -5047,8 +5208,8 @@ function drawFocusMap() {
   const svg = $('focusmap');
   if (!svg) return;
   while (svg.firstChild) svg.removeChild(svg.firstChild);
-  if (!(focused && B()[selected])) return;
-  const b = B()[selected];
+  const b = fBin();
+  if (!b) return;
   const W = b.u * FS, H = b.v * FS;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
@@ -5066,8 +5227,13 @@ function drawFocusMap() {
     for (let dx = 0; dx < b.u; dx++) {
       const here = on.has(dx + ',' + dy);
       /* A gap the drawer will not give back, because another bin has taken the cell
-         since it was carved. Marked rather than left to a click that does nothing. */
-      const blocked = !here && !canPlace(b.x + dx, b.y + dy, 1, 1, selected);
+         since it was carved. Marked rather than left to a click that does nothing.
+         A loose bin is never blocked: it is not in the drawer, so consulting the grid
+         at 0,0 would grey out whatever a bin in that corner happens to own — and the
+         cell would then get no click handler either, which is a carve grid that
+         silently refuses half its cells. The same test guards carveToggle. */
+      const blocked = !here && b !== scratch &&
+        !canPlace(b.x + dx, b.y + dy, 1, 1, selected);
       const r = el('rect', {
         class: 'fcell' + (here ? ' on' : blocked ? ' blocked' : ' off'),
         /* dy 0 is the FRONT of the bin and is drawn at the bottom, the same way the
@@ -5520,18 +5686,35 @@ $('applyAll').addEventListener('click', () => {
    change, not after, and deduplicated so a drag that ends where it started is not
    an undo step. */
 const undoStack = [], redoStack = [];
+/* A loose bin is a separate document and gets a separate history. One shared stack
+   would mean an undo taken inside the loose bin restoring a drawer that knows nothing
+   about it — and an undo taken in the drawer, later, wiping a bin that was never in
+   the drawer to be restored to. Which stack is in play follows which document is on
+   screen, so neither ever sees the other's states. */
+const sUndoStack = [], sRedoStack = [];
+const uStack = () => (scratch ? sUndoStack : undoStack);
+const rStack = () => (scratch ? sRedoStack : redoStack);
 const UNDO_MAX = 60;
-const snapshot = () => JSON.stringify({ layers, cur });
+const snapshot = () => (scratch ? JSON.stringify({ scratch })
+                                : JSON.stringify({ layers, cur }));
 function pushUndo() {
-  const snap = snapshot();
-  if (undoStack.length && undoStack[undoStack.length - 1] === snap) return;
-  undoStack.push(snap);
-  if (undoStack.length > UNDO_MAX) undoStack.shift();
-  redoStack.length = 0;
+  const snap = snapshot(), U = uStack(), R = rStack();
+  if (U.length && U[U.length - 1] === snap) return;
+  U.push(snap);
+  if (U.length > UNDO_MAX) U.shift();
+  R.length = 0;
   updateUndoButtons();
 }
 function applySnap(snap) {
   const o = JSON.parse(snap);
+  /* A loose bin's history holds only the bin. Nothing about the drawer is restored,
+     because nothing about the drawer was captured — that is the separation working. */
+  if (o.scratch) {
+    scratch = o.scratch;
+    writeControls(scratch);
+    readControls(); drawMap(); refresh();
+    return;
+  }
   /* An undo inside focus must not throw you back to the drawer. Focus is defined by the
      selection and clearSel() below drops it, so undoing a carve used to end the mode
      the carve was performed in — which is the one place undo gets used most. The index
@@ -5546,23 +5729,26 @@ function applySnap(snap) {
   readControls(); drawLayerTabs(); drawMap(); refresh();
 }
 function undo() {
-  if (!undoStack.length) return;
-  redoStack.push(snapshot());
-  applySnap(undoStack.pop());
+  const U = uStack(), R = rStack();
+  if (!U.length) return;
+  R.push(snapshot());
+  applySnap(U.pop());
   updateUndoButtons();
 }
 function redo() {
-  if (!redoStack.length) return;
-  undoStack.push(snapshot());
-  applySnap(redoStack.pop());
+  const U = uStack(), R = rStack();
+  if (!R.length) return;
+  U.push(snapshot());
+  applySnap(R.pop());
   updateUndoButtons();
 }
 function updateUndoButtons() {
-  $('undoBtn').disabled = !undoStack.length;
-  $('redoBtn').disabled = !redoStack.length;
+  const U = uStack(), R = rStack();
+  $('undoBtn').disabled = !U.length;
+  $('redoBtn').disabled = !R.length;
   // the focus bar carries its own pair, because the card holding those two is hidden
-  $('focusUndo').disabled = !undoStack.length;
-  $('focusRedo').disabled = !redoStack.length;
+  $('focusUndo').disabled = !U.length;
+  $('focusRedo').disabled = !R.length;
 }
 
 /* ---------- splitting an oversized bin ------------------------------------
@@ -5605,13 +5791,19 @@ function describeSplit(u, v) {
    about to fill in the thing that fixes it. */
 function binIssues(b, k) {
   const g = grid(), out = [];
-  if (b.x + b.u > g.nx || b.y + b.v > g.ny) {
+  /* A loose bin is not in the drawer, so the questions the drawer asks — does it fit
+     the grid, what holds it up, does the stack clear the lid — have no answer here,
+     and answering them anyway would report a 10-wide bin as "outside the grid" when
+     the grid is not where it lives. What still bites is the printer: the bed, the Z
+     height, the wall thickness, and whether a carved shape holds together. */
+  const loose = b === scratch;
+  if (!loose && (b.x + b.u > g.nx || b.y + b.v > g.ny)) {
     out.push('sits outside the drawer grid');
     return out;
   }
-  const st = seat(b, k);
+  const st = loose ? { z: 0, flat: true, solidBelow: true } : seat(b, k);
   // layer 0 sits on the baseplate, which every bin fits; the rest sit on other bins
-  if (k > 0) {
+  if (!loose && k > 0) {
     const occB = occupancyOf(k - 1);
     // Where the bin below reaches each of this bin's four edges. Support does not
     // have to be continuous: a bin bridging a gap between two others is a plank on
@@ -5684,7 +5876,7 @@ function binIssues(b, k) {
     out.push(`is ${fw.toFixed(0)} × ${fd.toFixed(0)} mm, too big for your ${state.bedW} × ${state.bedD} mm bed in either orientation` +
       (sp ? ` — split it into ${sp.text}` : ''));
   }
-  if (st.z + b.hUnits * SPEC.unitH + LIP_H > g.avail + 0.001)
+  if (!loose && st.z + b.hUnits * SPEC.unitH + LIP_H > g.avail + 0.001)
     out.push(`reaches ${(st.z + b.hUnits * SPEC.unitH + LIP_H).toFixed(1)} mm, past the ${g.avail.toFixed(1)} mm available`);
   if (!b.solid && b.wall < 0.8)
     out.push(`${b.wall} mm walls are thinner than two perimeters at a 0.4 mm nozzle`);
@@ -5713,9 +5905,9 @@ function warnings() {
      binIssues says stays, INCLUDING what it says about where the bin sits and what
      holds it up — those are facts about this bin, and dropping them would make focus a
      place where an unprintable bin looks fine. */
-  if (focused && B()[selected]) {
-    const b = B()[selected];
-    for (const it of binIssues(b, cur)) {
+  if (fBin()) {
+    const b = fBin();
+    for (const it of binIssues(b, scratch ? 0 : cur)) {
       const x = typeof it === 'string' ? { err: true, t: it } : it;
       out.push({ err: !x.note, note: x.note, t: `This bin ${x.t}.` });
     }
@@ -5753,12 +5945,17 @@ function warnings() {
  * the map, where the baseplates page has always put them and where your eye already is;
  * and the panel opening itself the moment a sound layout stops being one.
  */
+const focusedAllClear = () => (fBin()
+  ? '<div class="hint">This bin is sound and fits your printer.</div>'
+  : '<div class="hint">Layout is sound and everything fits.</div>');
 function drawWarnings() {
   const w = warnings();
   const errs = w.filter((x) => x.err);
   $('warnings').innerHTML = w.length
     ? w.map((x) => `<div class="w${x.err ? ' err' : ''}"><span>${x.t}</span></div>`).join('')
-    : '<div class="hint">Layout is sound and everything fits.</div>';
+    /* 'Layout' is the drawer's word. Focus is looking at one bin, and a loose one
+       has no layout at all to be sound. */
+    : focusedAllClear();
 
   // errors only in the stage: the panel keeps the notes and the all-clear, and a
   // second copy of "this is a carved shape" beside the map would be noise
@@ -5864,7 +6061,7 @@ function refresh() {
   $('gridSummary').textContent =
     `Grid: ${g.nx} × ${g.ny} cells · ${g.avail.toFixed(1)} mm above the baseplate · ` +
     `tallest single bin ${capUnits} units (${capUnits * SPEC.unitH} mm + lip), limited by ${capBy}`;
-  const src = selected >= 0 && B()[selected] ? B()[selected] : state;
+  const src = scratch || (selected >= 0 && B()[selected] ? B()[selected] : state);
   $('binSizeHint').textContent =
     `${(src.u * SPEC.pitch - 0.5).toFixed(1)} × ${(src.v * SPEC.pitch - 0.5).toFixed(1)} × ${(src.hUnits * SPEC.unitH).toFixed(1)} mm (+${LIP_H.toFixed(2)} lip)`;
 
@@ -5919,7 +6116,7 @@ function refresh() {
       ` · ${plural(ts.length, 'distinct type')} · ` +
       `≈ ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g PLA at ${state.infill}% infill` +
       (doneN ? ' for those' : '') +
-      (focused && B()[selected] && B()[selected].done ? ' · this one is marked printed' : '')
+      (fBin() && fBin().done ? ' · this one is marked printed' : '')
     : '—';
 
   drawWarnings();
@@ -6289,8 +6486,8 @@ function showScene() {
      is drawn from the grid, so reusing it would put a 1×1 bin in the corner of a 7×9
      slab — and the other sixty-two cells are precisely what focus exists to stop
      showing you. */
-  if (focused && B()[selected]) {
-    const b = B()[selected];
+  if (fBin()) {
+    const b = fBin();
     const plate1 = new THREE.Mesh(
       new THREE.BoxGeometry(b.u * SPEC.pitch, state.plateH, b.v * SPEC.pitch),
       new THREE.MeshLambertMaterial({ color: 0x2b3947 }));
@@ -6345,8 +6542,8 @@ function showScene() {
    The empty case quotes #threeempty rather than paraphrasing it, so the sentence a
    screen reader gets and the sentence on the screen cannot drift apart. */
 function sceneLabel(empty, shell, g) {
-  if (focused && B()[selected]) {
-    const b = B()[selected];
+  if (fBin()) {
+    const b = fBin();
     return `3D preview: one ${b.u} by ${b.v} bin, ${b.hUnits} units tall, ` +
            'on a baseplate of its own size.';
   }
@@ -6409,8 +6606,8 @@ function layoutReadme() {
      assembly instructions would all be describing thirty bins that are not in the ZIP —
      and a README that disagrees with the files beside it is worse than no README,
      because it is read at the printer with the parts in hand. */
-  if (focused && B()[selected]) {
-    const b = B()[selected], gm = geomFor(b);
+  if (fBin()) {
+    const b = fBin(), gm = geomFor(b);
     L.push('GRIDFINITY BIN — generated by Drawerforge');
     L.push('=========================================');
     L.push('https://drawerforge.co.uk');
@@ -6422,8 +6619,10 @@ function layoutReadme() {
     if (b.lid) L.push('Lid: yes — prints upside down, no supports.');
     L.push(`Material: about ${(gm.vol / 1000 * PLA_DENSITY).toFixed(0)} g of PLA at ${state.infill}% infill.`);
     L.push('');
-    L.push(`It belongs at column ${b.x + 1}, row ${b.y + 1} of a ${g.nx} x ${g.ny} grid` +
-           (layers.length > 1 ? `, on layer ${cur + 1}.` : '.'));
+    L.push(scratch
+      ? 'Designed on its own. It is not placed in a drawer.'
+      : `It belongs at column ${b.x + 1}, row ${b.y + 1} of a ${g.nx} x ${g.ny} grid` +
+        (layers.length > 1 ? `, on layer ${cur + 1}.` : '.'));
     L.push('');
     L.push('PRINTING: flat as oriented, no supports. Check it seats in your baseplate');
     L.push('before printing the rest of the drawer.');
@@ -6607,11 +6806,12 @@ function renderExport() {
   for (const t of ts) vol += geomFor(t.b).vol * t.qty;
   /* In focus the dialog is about one bin, and saying "7 × 9 cell grid" over a single
      STL is the same disagreement the README has to avoid. */
-  const fb = focused && B()[selected] ? B()[selected] : null;
+  const fb = fBin();
   $('exDesign').textContent = fb
     ? `One bin — ${fb.u} × ${fb.v} × ${fb.hUnits}` + (fb.note ? ` — ${fb.note}` : '') + '\n' +
-      `from column ${fb.x + 1}, row ${fb.y + 1} of your drawer` +
-      (layers.length > 1 ? `, layer ${cur + 1}` : '') + '\n' +
+      (scratch ? 'designed on its own, not placed in a drawer'
+               : `from column ${fb.x + 1}, row ${fb.y + 1} of your drawer` +
+                 (layers.length > 1 ? `, layer ${cur + 1}` : '')) + '\n' +
       `about ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g of PLA at ${state.infill}% infill`
     : n
     ? `${g.nx} × ${g.ny} cell grid in a ${state.drawerW} × ${state.drawerD} mm drawer\n` +
@@ -6701,7 +6901,13 @@ function descriptor() {
   const o = Object.assign({}, hashExtras, { v: 2 });
   for (const [k, id] of Object.entries(KEYS)) o[k] = state[id];
   o.dv = state.showDrawer ? 1 : 0;
-  if (focused && B()[selected]) o.bf = `${cur}.${selected}`;
+  /* Not a VIEW key, unlike bf beside it: a loose bin is not a way of looking at the
+     design, it IS the design while it is open, and it is what the download contains.
+     So it travels in the link the README carries too. Packed with the same packBin the
+     layers use — one serialisation to keep right rather than a second that can
+     disagree with it, and hash-roundtrip.js already proves that one. */
+  if (scratch) o.bs = packLayers([{ bins: [scratch] }]);
+  else if (focused && fBin()) o.bf = `${cur}.${selected}`;
   o.bl = packLayers(layers);
   o.bseg = state.arcSegs;
   o.bdt = state.divT; o.bdc = state.divClr;
@@ -6803,6 +7009,7 @@ function loadFromHash(src) {
     if (k === 'dv') { $('showDrawer').checked = val === '1'; continue; }
     if (k === 'bnotes') { pendingNotes = val; continue; }
     if (k === 'bf') { pendingFocus = val; continue; }
+    if (k === 'bs') { pendingScratch = val; continue; }
     const id = KEYS[k];
     if (!id) { hashExtras[k] = val; continue; }
     if ($(id)) $(id).value = val;
@@ -6951,7 +7158,18 @@ updateUndoButtons();
    at the worst moment, since the reason to be in focus is that the drawer is the part
    you did not want to look at. Indices are safe to trust here because the same hash
    carried the layout they point into. */
-if (pendingFocus) {
+if (pendingScratch) {
+  const ls = unpackLayers(pendingScratch);
+  const b = ls[0] && ls[0].bins[0];
+  if (b) {
+    scratch = b;
+    focused = true;
+    frameBin(scratch);
+    setPanel('s-bin', true);
+    writeControls(scratch);
+    readControls(); drawMap(); refresh();
+  }
+} else if (pendingFocus) {
   const [lk, ix] = String(pendingFocus).split('.').map(Number);
   if (layers[lk] && layers[lk].bins[ix]) {
     cur = lk; clearSel(); selected = ix; layers[lk].bins[ix].sel = true;

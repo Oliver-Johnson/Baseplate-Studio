@@ -76,7 +76,14 @@
     <button type="button" class="ghost" id="focusUndo">Undo</button>
     <button type="button" class="ghost" id="focusRedo">Redo</button>
     <button type="button" class="act" id="focusExit">Back to the drawer</button>
+    <!-- A loose bin has no drawer to go "back" to, so it gets the two answers it
+         actually has. Where it would land is written beside them and worked out on
+         every draw, so you know before you press rather than after — and the button
+         is disabled with the reason when there is nowhere for it to go. -->
+    <button type="button" class="act" id="scratchAdd">Add to the drawer</button>
+    <button type="button" class="ghost" id="scratchDrop">Discard</button>
   </div>
+  <div id="scratchWhy" class="mono"></div>
 </div>
 <div class="rail">
 
@@ -223,6 +230,12 @@
       </select></label>
     <button class="act" id="splitFit" style="display:none">Split this bin to fit the bed</button>
     <div class="hint" id="splitHint" style="display:none">Splits it into the fewest pieces that each fit, covering the same cells. They sit side by side on the baseplate, so nothing is lost but the wall between them — and if you want one continuous compartment, set the facing walls of the new bins to Open.</div>
+    <!-- The same slot as the focus button, which is only offered with a bin selected.
+         With nothing selected this panel is called "New bins" and holds the size you
+         have just typed, so it is the honest place to say "make that, and nothing
+         else". -->
+    <button class="act" id="scratchBin" style="display:none">Design one bin on its own</button>
+    <div class="hint" id="scratchBinHint" style="display:none">For when you want a single bin and not a drawer of them. Opens the same uncluttered page, with no grid to place it on and no drawer measurements to fill in — just the bin, its preview and its download. You can drop it into the drawer at the end, or never.</div>
     <button class="act" id="focusBin" style="display:none">Edit this bin on its own</button>
     <div class="hint" id="focusBinHint" style="display:none">Hides the drawer, the layers and the map, and gives this one bin the whole page. Everything here still works and the bin stays exactly where it is — this only changes what you are shown.</div>
     <button class="act" id="carveMode" style="display:none">Carve this bin into a shape</button>
@@ -270,9 +283,13 @@
     <div class="exfit bad" id="mapChecks" style="display:none"><div id="mapChecksList"></div></div>
     <div class="mono" id="coverage">—</div>
     <div class="hint">Drag across empty cells to place a bin. Click one to select it, drag it to move it, or pull a corner grip to resize. A ⚠ marks a bin that will not sit properly where it is — <span class="haskeys">hover it</span><span class="hastouch">tap it</span> for the reason. It stays put either way, in case you are about to place the thing that fixes it. <b>Alt-click</b> a cell inside the selected bin to carve it out, or alt-click a gap to put it back — that is how you make an L or a U.</div>
-    <div class="row">
+    <div class="row3">
       <button class="ghost" id="fillRest">Fill the rest with <span id="fillSize">1×1</span></button>
       <button class="ghost" id="clearAll">Clear all</button>
+      <!-- Duplicated from panel 03 on purpose. That panel loads closed, and somebody
+           who came here for one bin has no reason to open a panel called "New bins"
+           before finding out the tool will do it. This is where their eye already is. -->
+      <button class="ghost" id="scratchBinMap">Just one bin</button>
     </div>
     <div class="row3" style="margin-top:8px">
       <button class="ghost" id="undoBtn">Undo</button>
