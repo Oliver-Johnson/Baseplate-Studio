@@ -954,7 +954,8 @@ function packBin(b) {
     .concat(PACK_EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1)))
     /* `done` last, so a link written before it existed still reads: an absent field 17
        is undefined, and a bin nobody has marked is one nobody has printed. */
-    .concat([b.scoop || 0, b.label || 0, maskBits(b) || 0, b.done ? 1 : 0]);
+    .concat([b.scoop || 0, b.label || 0, maskBits(b) || 0, b.done ? 1 : 0,
+             b.divRemovable ? 1 : 0]);
   for (const v of f)
     if (String(v).includes(SEP.field) || String(v).includes(SEP.bin) || String(v).includes(SEP.layer))
       throw new Error(`bin field ${v} contains a separator — packing would corrupt it`);
@@ -979,7 +980,7 @@ function unpackBin(t) {
            divX: numAt(p, 7, 0), divY: numAt(p, 8, 0), solid: !!p[9],
            edges, scoop: numAt(p, 14, 0), label: numAt(p, 15, 0),
            cells: bitsToCells(raw[16] && raw[16] !== '0' ? raw[16] : '', u, v),
-           done: !!p[17] };
+           done: !!p[17], divRemovable: !!p[18] };
 }
 const packLayers = (layers) =>
   layers.map((L) => L.bins.map(packBin).join(SEP.bin)).join(SEP.layer);

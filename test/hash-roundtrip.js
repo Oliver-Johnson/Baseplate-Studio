@@ -67,7 +67,7 @@ console.log('\nseparators cannot appear inside a value');
   try { packBin(bin({ wall: -1 })); } catch (e) { threw = true; }
   console.log(`  a negative field is rejected           ${threw ? 'guarded' : 'NOT GUARDED'}`);
   if (!threw) bad++;
-  /* 18 since bins can be marked already-printed: position IS the format, so this
+  /* 19 since a bin can carry removable dividers: position IS the format, so this
      number is deliberate and changing it changes what every link means. Update it on
      purpose or not at all.
      It went 17 -> 18 by APPENDING, which is the only safe direction — see the
@@ -75,8 +75,8 @@ console.log('\nseparators cannot appear inside a value');
      conventional. */
   const packed = packBin(bin({}));
   const fieldCount = packed.split('-').length;
-  console.log(`  field count is stable                  ${fieldCount === 18 ? '18, correct' : fieldCount + ' — WRONG'}`);
-  if (fieldCount !== 18) bad++;
+  console.log(`  field count is stable                  ${fieldCount === 19 ? '19, correct' : fieldCount + ' — WRONG'}`);
+  if (fieldCount !== 19) bad++;
 
   /* A link written before the field existed. Nobody has one yet, but the reason to
      handle it is the same reason to append rather than insert: the day the format grows
@@ -85,7 +85,8 @@ console.log('\nseparators cannot appear inside a value');
      NaN, and not as true, which would hide it from the plates it belongs on. */
   const short = packed.split('-').slice(0, 17).join('-');
   const old = unpackBin(short);
-  const okOld = old.done === false && old.u === 1 && old.hUnits === 3;
+  const okOld = old.done === false && old.divRemovable === false &&
+                old.u === 1 && old.hUnits === 3;
   console.log(`  a link from before the field still reads ${okOld ? 'as unprinted' : 'WRONG: ' + JSON.stringify(old.done)}`);
   if (!okOld) bad++;
 
@@ -93,6 +94,13 @@ console.log('\nseparators cannot appear inside a value');
   const round = unpackBin(packBin(bin({ done: true })));
   console.log(`  a printed mark survives the trip       ${round.done === true ? 'intact' : 'LOST'}`);
   if (round.done !== true) bad++;
+
+  /* Removable dividers change what the bin IS — rails and a loose plate rather than a
+     wall across it — so a link that dropped the flag would hand someone a different
+     part while looking identical. */
+  const rem = unpackBin(packBin(bin({ divX: 1, divRemovable: true })));
+  console.log(`  removable dividers survive the trip   ${rem.divRemovable === true ? 'intact' : 'LOST'}`);
+  if (rem.divRemovable !== true) bad++;
 }
 
 /* A hash is in the address bar, so it gets hand-edited, truncated by a chat client and

@@ -161,3 +161,75 @@ test('two bins of one shape with different notes list both against the one STL',
   await expect(dlg).toContainText('drill bits');
   await page.locator('#exportClose').click();
 });
+
+/* Removable dividers, from the control to the part you can download.
+ *
+ * The geometry landed first and nothing reached it: no control, and typeKey did not
+ * know the difference, so a railed bin and a fixed-divider bin of the same size would
+ * have shared one STL and you would have printed the wrong one.
+ */
+test('removable dividers reach the bin, the type key and the download list', async ({ page }) => {
+  await H.openBins(page);
+  await H.dragCells(page, [0, 0], [1, 1]);
+  await settle(page);
+  await H.clickCell(page, 0, 0);
+  await settle(page);
+
+  // nothing to make removable yet, so the control stays out of the way
+  await expect(page.locator('#divRemovableRow')).toBeHidden();
+  await page.fill('#divX', '1');
+  await settle(page);
+  await expect(page.locator('#divRemovableRow')).toBeVisible();
+
+  await page.check('#divRemovable');
+  await settle(page);
+  expect(await page.evaluate(() => B()[0].divRemovable), 'the flag reaches the bin').toBe(true);
+
+  await page.click('#openExport');
+  await page.waitForTimeout(900);
+  const dlg = page.locator('#exportDlg');
+  await expect(dlg, 'the plate is a part you can print').toContainText('Divider');
+  await expect(dlg, 'and it says what slot it drops into').toContainText('mm slot');
+  await page.locator('#exportClose').click();
+});
+
+/* A railed bin and a fixed-divider bin of one size are different parts. If typeKey
+   cannot tell them apart they share an STL, and half of what you print is wrong. */
+test('a railed bin and a fixed-divider bin do not share an STL', async ({ page }) => {
+  await H.openBins(page);
+  await H.dragCells(page, [0, 0], [1, 1]);
+  await settle(page);
+  await H.clickCell(page, 0, 0);
+  await settle(page);
+  await page.fill('#divX', '1');
+  await settle(page);
+
+  await H.dragCells(page, [3, 3], [4, 4]);
+  await settle(page);
+  await H.clickCell(page, 3, 3);
+  await settle(page);
+  await page.fill('#divX', '1');
+  await settle(page);
+  await page.check('#divRemovable');
+  await settle(page);
+
+  const keys = await page.evaluate(() => types().map((t) => t.key));
+  expect(new Set(keys).size, `two distinct parts, got ${JSON.stringify(keys)}`).toBe(2);
+});
+
+test('the removable flag survives a reload', async ({ page }) => {
+  await H.openBins(page);
+  await H.dragCells(page, [0, 0], [1, 1]);
+  await settle(page);
+  await H.clickCell(page, 0, 0);
+  await settle(page);
+  await page.fill('#divX', '1');
+  await settle(page);
+  await page.check('#divRemovable');
+  await settle(page);
+
+  await page.reload();
+  await page.waitForFunction(() => typeof THREE !== 'undefined');
+  await settle(page);
+  expect(await page.evaluate(() => B()[0].divRemovable)).toBe(true);
+});

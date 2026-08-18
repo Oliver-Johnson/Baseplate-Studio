@@ -59,12 +59,19 @@ const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
                          floorT: b.floorT, divX: b.divX, divY: b.divY,
                          solid: b.solid, edges: b.edges,
                          scoop: b.scoop, label: b.label, cells: b.cells,
+                         /* Rail sizing is a printer setting, not a per-bin one, so it
+                            rides state like arcSegs. Whether a bin HAS removable
+                            dividers is per bin, so that comes off b. */
+                         divRemovable: b.divRemovable, divT: state.divT, divClr: state.divClr,
                          arcSegs: state.arcSegs });
 const edgeSig = (b) => EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1)).join(',');
 const allFullEdges = (b) => EDGES.every((k) => !b.edges || b.edges[k] === undefined || b.edges[k] >= 1);
 const typeKey = (b) => `${b.u}x${b.v}x${b.hUnits}` +
   (b.solid ? '-solid' : `-w${b.wall}-f${b.floorT}` +
-   (b.divX || b.divY ? `-d${b.divX}.${b.divY}` : '') +
+   /* A railed bin and a fixed-divider bin of the same size are DIFFERENT parts — one
+      has a wall across it and the other has rails and a loose plate. Without this they
+      would share a type, and therefore one STL, and you would print the wrong one. */
+   (b.divX || b.divY ? `-d${b.divX}.${b.divY}${b.divRemovable ? `r${state.divT}.${state.divClr}` : ''}` : '') +
    (allFullEdges(b) ? '' : `-e${edgeSig(b)}`)) +
   (b.scoop ? `-s${b.scoop}` : '') + (b.label ? `-L${b.label}` : '') +
   (b.cells ? `-c${maskBits(b)}` : '');
@@ -275,6 +282,11 @@ function readControls() {
   state.drawerFrontH = num('drawerFrontH', 0);
   state.arcSegs = int('arcSegs', 12);
   state.infill = num('infill', 15);
+  /* Page-level, not per bin: how thick a divider plate is and how much slack its slot
+     leaves are properties of your printer, the same as arcSegs. Which bins HAVE
+     removable dividers is per bin and rides `t` above. */
+  state.divT = Math.max(0.8, Math.min(5, num('divT', 1.6)));
+  state.divClr = Math.max(0, Math.min(1, num('divClr', 0.25)));
   state.bedW = num('bedW', 256);
   state.bedD = num('bedD', 256);
   state.bedH = num('bedH', 256);
@@ -288,6 +300,7 @@ function readControls() {
     solid: $('solid').checked,
     scoop: Math.max(0, num('scoop', 0)), label: Math.max(0, num('label', 0)),
     note: $('note').value.slice(0, 28),
+    divRemovable: $('divRemovable').checked,
     edges: { f: parseFloat($('edgeF').value), b: parseFloat($('edgeB').value),
              l: parseFloat($('edgeL').value), r: parseFloat($('edgeR').value) },
   };
@@ -303,6 +316,9 @@ function readControls() {
      on exactly that pair of changes. */
   const sel = selAll();
   $('doneRow').style.display = sel.length ? '' : 'none';
+  const anyDiv = t.divX > 0 || t.divY > 0;
+  $('divRemovableRow').style.display = anyDiv ? '' : 'none';
+  $('divRemovableHint').style.display = anyDiv && $('divRemovable').checked ? '' : 'none';
   if (sel.length) {
     // size only applies to a single bin; several at once would have to overlap
     const b = B()[selected];
@@ -377,6 +393,7 @@ function writeControls(src) {
   $('solid').checked = !!src.solid;
   $('scoop').value = src.scoop || 0; $('label').value = src.label || 0;
   $('done').checked = !!src.done;
+  $('divRemovable').checked = !!src.divRemovable;
   $('note').value = src.note || '';
   for (const [k, id] of [['f', 'edgeF'], ['b', 'edgeB'], ['l', 'edgeL'], ['r', 'edgeR']])
     $(id).value = String(src.edges && src.edges[k] !== undefined ? src.edges[k] : 1);
@@ -1068,9 +1085,34 @@ function drawWarnings() {
 /* How a type reads in a list: its shape, and what you said goes in it. Distinct from
    typeName further down, which builds the STL FILENAME and must stay stable and
    filesystem-safe — a note with a slash in it has no business in a filename. */
+const B_DIV = (b, axis) => dividerPart(G, binCfg(b), axis);
 const typeLabel = (t) => `${t.b.u}×${t.b.v}×${t.b.hUnits}` +
   (t.b.solid ? ' solid' : '') + (t.qty > 1 ? ` × ${t.qty}` : '') +
   (t.notes && t.notes.length ? ` — ${t.notes.join(', ')}` : '');
+
+/* The loose divider plates a layout needs.
+ *
+ * Grouped by the plate itself rather than by the bin, because two different bins that
+ * happen to want the same size of divider want the same part — and because what you
+ * carry to the printer is "six of these", not "two for that bin and four for this one".
+ * Only bins with removable dividers contribute; a fixed divider is part of its bin.
+ */
+function dividerParts() {
+  const m = new Map();
+  for (const t of types()) {
+    if (!t.b.divRemovable) continue;
+    for (const [axis, n] of [['y', t.b.divX || 0], ['x', t.b.divY || 0]]) {
+      if (!n) continue;
+      const d = B_DIV(t.b, axis);
+      const key = `${d.meta.span.toFixed(1)}x${d.meta.tall.toFixed(1)}x${d.meta.t}`;
+      if (!m.has(key)) m.set(key, { key, axis, b: t.b, meta: d.meta, qty: 0 });
+      m.get(key).qty += n * t.qty;
+    }
+  }
+  return [...m.values()].sort((a, b) => b.qty - a.qty);
+}
+const dividerName = (d) =>
+  `divider-${d.meta.span.toFixed(1)}x${d.meta.tall.toFixed(1)}x${d.meta.t}mm`;
 
 function types() {
   const m = new Map();
@@ -1674,6 +1716,10 @@ async function downloadBinZip() {
   const zip = new JSZip();
   for (const t of types())
     zip.file(typeName(t) + '.stl', G.stlBinary(geomFor(t.b).polys, 'bin'));
+  /* The dividers go in the same ZIP. A bin with rails and no plate is not a divided
+     bin, and the ZIP is what someone downloads when they want the whole job. */
+  for (const d of dividerParts())
+    zip.file(dividerName(d) + '.stl', G.stlBinary(B_DIV(d.b, d.axis).polys, 'divider'));
   zip.file('README.txt', layoutReadme());
   saveBlobAsync(await zip.generateAsync({ type: 'blob' }),
                 `drawerforge-bins-${grid().nx}x${grid().ny}.zip`);
@@ -1771,6 +1817,11 @@ function renderExport() {
     exGroup('Meshes');
     exRow('Every bin type, with a README', `${plural(ts.length, 'STL file')} + README.txt · ZIP`,
           'Download', downloadBinZip, { 'data-ex': 'zip' });
+    for (const d of dividerParts())
+      exRow(`Divider ${d.meta.span.toFixed(1)} × ${d.meta.tall.toFixed(1)} × ${d.meta.t} mm × ${d.qty}`,
+            `slides into a ${d.meta.slot.toFixed(2)} mm slot · STL`, 'STL',
+            () => saveBlob(G.stlBinary(B_DIV(d.b, d.axis).polys, 'divider'),
+                           dividerName(d) + '.stl'), { 'data-ex': 'divider' });
     for (const t of ts)
       exRow(typeLabel(t),
             `${DF.bytes(DF.stlBytes(geomFor(t.b).polys))} · STL`, 'STL',
@@ -1819,6 +1870,7 @@ function descriptor() {
   o.dv = state.showDrawer ? 1 : 0;
   o.bl = packLayers(layers);
   o.bseg = state.arcSegs;
+  o.bdt = state.divT; o.bdc = state.divClr;
   const notes = layers.map((L) => L.bins.map((b) => b.note || ''));
   if (notes.some((L) => L.some((n) => n))) o.bnotes = JSON.stringify(notes);
   return o;
@@ -1911,6 +1963,8 @@ function loadFromHash(src) {
     if (k === 'v') continue;
     if (k === 'bl') { const ls = unpackLayers(val); if (ls.length) layers = ls; continue; }
     if (k === 'bseg') { $('arcSegs').value = val; continue; }
+    if (k === 'bdt') { $('divT').value = val; continue; }
+    if (k === 'bdc') { $('divClr').value = val; continue; }
     // a checkbox, so it cannot ride the generic .value path below
     if (k === 'dv') { $('showDrawer').checked = val === '1'; continue; }
     if (k === 'bnotes') { pendingNotes = val; continue; }
@@ -1942,9 +1996,10 @@ const schedule = () => { clearTimeout(timer); timer = setTimeout(() => {
 for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'bedW', 'bedD', 'bedH', 'gap',
                   'u', 'v', 'hUnits',
                   'wall', 'floorT', 'divX', 'divY', 'solid', 'arcSegs',
-                  'edgeF', 'edgeB', 'edgeL', 'edgeR', 'scoop', 'label', 'note'])
+                  'edgeF', 'edgeB', 'edgeL', 'edgeR', 'scoop', 'label', 'note',
+                  'divRemovable', 'divT', 'divClr'])
   $(id).addEventListener('input', schedule);
-for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR'])
+for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR', 'divRemovable'])
   $(id).addEventListener('change', schedule);
 $('presetTray').addEventListener('click', () => {
   for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR']) $(id).value = '0';
