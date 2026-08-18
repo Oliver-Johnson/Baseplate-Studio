@@ -301,6 +301,9 @@ function readControls() {
     scoop: Math.max(0, num('scoop', 0)), label: Math.max(0, num('label', 0)),
     note: $('note').value.slice(0, 28),
     divRemovable: $('divRemovable').checked,
+    lid: $('lid').checked,
+    lidSides: { f: $('lidF').checked, b: $('lidB').checked,
+                l: $('lidL').checked, r: $('lidR').checked },
     edges: { f: parseFloat($('edgeF').value), b: parseFloat($('edgeB').value),
              l: parseFloat($('edgeL').value), r: parseFloat($('edgeR').value) },
   };
@@ -319,6 +322,12 @@ function readControls() {
   const anyDiv = t.divX > 0 || t.divY > 0;
   $('divRemovableRow').style.display = anyDiv ? '' : 'none';
   $('divRemovableHint').style.display = anyDiv && $('divRemovable').checked ? '' : 'none';
+  /* A lid needs a lip to grip, and a lowered wall takes the lip away. Say which it is
+     rather than hiding the control, or ticking it and getting nothing looks like a bug. */
+  const lipOk = EDGES.every((k) => !t.edges || !isFinite(t.edges[k]) || t.edges[k] >= 1);
+  $('lidRow').style.display = t.solid ? 'none' : '';
+  $('lidNoLip').style.display = !t.solid && !lipOk && $('lid').checked ? '' : 'none';
+  $('lidHint').style.display = !t.solid && lipOk && $('lid').checked ? '' : 'none';
   if (sel.length) {
     // size only applies to a single bin; several at once would have to overlap
     const b = B()[selected];
@@ -394,6 +403,9 @@ function writeControls(src) {
   $('scoop').value = src.scoop || 0; $('label').value = src.label || 0;
   $('done').checked = !!src.done;
   $('divRemovable').checked = !!src.divRemovable;
+  $('lid').checked = !!src.lid;
+  for (const [id, k] of [['lidF', 'f'], ['lidB', 'b'], ['lidL', 'l'], ['lidR', 'r']])
+    $(id).checked = !src.lidSides || src.lidSides[k] !== false;
   $('note').value = src.note || '';
   for (const [k, id] of [['f', 'edgeF'], ['b', 'edgeB'], ['l', 'edgeL'], ['r', 'edgeR']])
     $(id).value = String(src.edges && src.edges[k] !== undefined ? src.edges[k] : 1);
@@ -1097,6 +1109,29 @@ const typeLabel = (t) => `${t.b.u}×${t.b.v}×${t.b.hUnits}` +
  * carry to the printer is "six of these", not "two for that bin and four for this one".
  * Only bins with removable dividers contribute; a fixed divider is part of its bin.
  */
+/* The lids a layout needs, grouped by the part rather than by the bin: two bins of the
+   same footprint wanting the same skirt want the same lid, and what you carry to the
+   printer is "three of these".
+
+   A lid can only grip a bin that still HAS a lip, and lowering any wall drops the lip
+   from all four — so a bin with a lowered edge is skipped here rather than offered a lid
+   that could not attach. binHasLip is the same test buildBin uses to decide. */
+const binHasLip = (b) => !b.solid &&
+  EDGES.every((k) => !b.edges || b.edges[k] === undefined || b.edges[k] >= 1);
+const L_LID = (b) => lidPart(G, Object.assign({}, binCfg(b), { lidSides: b.lidSides }));
+function lidParts() {
+  const m = new Map();
+  for (const t of types()) {
+    if (!t.b.lid || !binHasLip(t.b)) continue;
+    const L = L_LID(t.b);
+    const key = `${t.b.u}x${t.b.v}:${L.meta.sides.join('')}`;
+    if (!m.has(key)) m.set(key, { key, b: t.b, meta: L.meta, qty: 0 });
+    m.get(key).qty += t.qty;
+  }
+  return [...m.values()].sort((a, b) => b.qty - a.qty);
+}
+const lidName = (d) => `lid-${d.b.u}x${d.b.v}-${d.meta.sides.join('')}`;
+
 function dividerParts() {
   const m = new Map();
   for (const t of types()) {
@@ -1218,6 +1253,9 @@ function computePlan() {
   })).concat(dividerParts().map((d) => ({
     key: 'div:' + d.key, b: null, qty: d.qty, divider: d,
     meta: d.meta, polys: () => B_DIV(d.b, d.axis).polys,
+  }))).concat(lidParts().map((d) => ({
+    key: 'lid:' + d.key, b: null, qty: d.qty,
+    meta: d.meta, polys: () => L_LID(d.b).polys,
   })));
   const items = parts.map((t) => ({
     id: t.key, w: t.meta.W, d: t.meta.D, h: t.meta.totalH, qty: t.qty, ids: [t.key],
@@ -1229,9 +1267,10 @@ function computePlan() {
    would be a small lie in the one place someone checks what they are about to print. */
 function countOf(placed) {
   const divs = placed.filter((p) => String(p.id).startsWith('div:')).length;
-  const bins = placed.length - divs;
-  return [bins ? plural(bins, 'bin') : '', divs ? plural(divs, 'divider') : '']
-    .filter(Boolean).join(' + ') || '0 bins';
+  const lids = placed.filter((p) => String(p.id).startsWith('lid:')).length;
+  const bins = placed.length - divs - lids;
+  return [bins ? plural(bins, 'bin') : '', divs ? plural(divs, 'divider') : '',
+          lids ? plural(lids, 'lid') : ''].filter(Boolean).join(' + ') || '0 bins';
 }
 function drawPlan() {
   computePlan();
@@ -1737,6 +1776,8 @@ async function downloadBinZip() {
      bin, and the ZIP is what someone downloads when they want the whole job. */
   for (const d of dividerParts())
     zip.file(dividerName(d) + '.stl', G.stlBinary(B_DIV(d.b, d.axis).polys, 'divider'));
+  for (const d of lidParts())
+    zip.file(lidName(d) + '.stl', G.stlBinary(L_LID(d.b).polys, 'lid'));
   zip.file('README.txt', layoutReadme());
   saveBlobAsync(await zip.generateAsync({ type: 'blob' }),
                 `drawerforge-bins-${grid().nx}x${grid().ny}.zip`);
@@ -1827,13 +1868,18 @@ function renderExport() {
        and it is what you want when a print fails, or when you are only doing one
        plate's worth this evening. */
     good.forEach(([pl], k) => exRow(`Plate ${k + 1}`,
-      `${plural(pl.placed.length, 'bin')} on a ${state.bedW} × ${state.bedD} mm bed · 3MF`, 'Download',
+      `${countOf(pl.placed)} on a ${state.bedW} × ${state.bedD} mm bed · 3MF`, 'Download',
       () => downloadPlate(k), { 'data-ex': 'plate' }));
   }
   if (ts.length) {
     exGroup('Meshes');
     exRow('Every bin type, with a README', `${plural(ts.length, 'STL file')} + README.txt · ZIP`,
           'Download', downloadBinZip, { 'data-ex': 'zip' });
+    for (const d of lidParts())
+      exRow(`Lid ${d.b.u}×${d.b.v}${d.meta.sides.length < 4 ? ` (${d.meta.sides.join('')} sides)` : ''} × ${d.qty}`,
+            `${d.meta.totalH.toFixed(1)} mm tall, prints upside down · STL`, 'STL',
+            () => saveBlob(G.stlBinary(L_LID(d.b).polys, 'lid'), lidName(d) + '.stl'),
+            { 'data-ex': 'lid' });
     for (const d of dividerParts())
       exRow(`Divider ${d.meta.span.toFixed(1)} × ${d.meta.tall.toFixed(1)} × ${d.meta.t} mm × ${d.qty}`,
             `slides into a ${d.meta.slot.toFixed(2)} mm slot · STL`, 'STL',
@@ -2014,9 +2060,11 @@ for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'bedW', '
                   'u', 'v', 'hUnits',
                   'wall', 'floorT', 'divX', 'divY', 'solid', 'arcSegs',
                   'edgeF', 'edgeB', 'edgeL', 'edgeR', 'scoop', 'label', 'note',
-                  'divRemovable', 'divT', 'divClr'])
+                  'divRemovable', 'divT', 'divClr',
+                  'lid', 'lidF', 'lidB', 'lidL', 'lidR'])
   $(id).addEventListener('input', schedule);
-for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR', 'divRemovable'])
+for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR', 'divRemovable',
+                  'lid', 'lidF', 'lidB', 'lidL', 'lidR'])
   $(id).addEventListener('change', schedule);
 $('presetTray').addEventListener('click', () => {
   for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR']) $(id).value = '0';

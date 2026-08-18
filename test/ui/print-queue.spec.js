@@ -292,3 +292,78 @@ test('every part on a plate can be resolved back to a mesh', async ({ page }) =>
   expect(unresolved, 'a placed part with no mesh would silently vanish from the 3MF')
     .toEqual([]);
 });
+
+/* A lid for a bin.
+ *
+ * Measured off four reference lids before any of it was written, which changed the
+ * design: none used clips, all used a skirt mirroring the lip's inner funnel. What the
+ * page has to get right is narrower — that the part is offered only where it can
+ * actually attach, and that it reaches the plate rather than stopping at a checkbox.
+ */
+test('a lid becomes a part, on the plate and in the download list', async ({ page }) => {
+  await H.openBins(page);
+  await H.dragCells(page, [0, 0], [1, 1]);
+  await settle(page);
+  await H.clickCell(page, 0, 0);
+  await settle(page);
+
+  await page.check('#lid');
+  await page.waitForTimeout(1400);
+  expect(await page.evaluate(() => B()[0].lid)).toBe(true);
+
+  // on the plate, and counted as a lid rather than folded in with the bins
+  await expect(page.locator('#plateSummary')).toContainText('1 lid');
+  const ids = await page.evaluate(() =>
+    printPlan.plates.flatMap((pl) => pl.placed.map((x) => String(x.id))));
+  expect(ids.filter((i) => i.startsWith('lid:')).length).toBe(1);
+
+  await page.click('#openExport');
+  await page.waitForTimeout(800);
+  await expect(page.locator('#exportDlg')).toContainText('Lid 2×2');
+  await page.locator('#exportClose').click();
+});
+
+/* The one rule the geometry cannot enforce: a lid grips the stacking lip, and lowering
+   any wall drops the lip from all four. Offering one anyway would hand someone a part
+   that cannot attach to the bin it was made for. */
+test('a bin with a lowered wall is refused a lid, with the reason', async ({ page }) => {
+  await H.openBins(page);
+  await H.dragCells(page, [0, 0], [1, 1]);
+  await settle(page);
+  await H.clickCell(page, 0, 0);
+  await settle(page);
+  await page.check('#lid');
+  await page.waitForTimeout(1400);
+  await expect(page.locator('#plateSummary')).toContainText('lid');
+
+  await page.selectOption('#edgeF', '0.5');
+  await page.waitForTimeout(1400);
+  await expect(page.locator('#lidNoLip'), 'say why, rather than silently doing nothing')
+    .toBeVisible();
+  await expect(page.locator('#plateSummary')).not.toContainText('lid');
+});
+
+test('leaving a side off the lid changes the part, and survives a reload', async ({ page }) => {
+  await H.openBins(page);
+  await H.dragCells(page, [0, 0], [1, 1]);
+  await settle(page);
+  await H.clickCell(page, 0, 0);
+  await settle(page);
+  await page.check('#lid');
+  await page.waitForTimeout(1200);
+  await page.uncheck('#lidF');
+  await page.waitForTimeout(1400);
+
+  expect(await page.evaluate(() => B()[0].lidSides.f)).toBe(false);
+  await page.click('#openExport');
+  await page.waitForTimeout(800);
+  await expect(page.locator('#exportDlg'), 'the part names the sides it actually has')
+    .toContainText('sides');
+  await page.locator('#exportClose').click();
+
+  await page.reload();
+  await page.waitForFunction(() => typeof THREE !== 'undefined');
+  await settle(page);
+  expect(await page.evaluate(() => B()[0].lid)).toBe(true);
+  expect(await page.evaluate(() => B()[0].lidSides.f)).toBe(false);
+});

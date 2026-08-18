@@ -67,7 +67,7 @@ console.log('\nseparators cannot appear inside a value');
   try { packBin(bin({ wall: -1 })); } catch (e) { threw = true; }
   console.log(`  a negative field is rejected           ${threw ? 'guarded' : 'NOT GUARDED'}`);
   if (!threw) bad++;
-  /* 19 since a bin can carry removable dividers: position IS the format, so this
+  /* 21 since a bin can carry a lid and the sides its skirt sits on: position IS the format, so this
      number is deliberate and changing it changes what every link means. Update it on
      purpose or not at all.
      It went 17 -> 18 by APPENDING, which is the only safe direction — see the
@@ -75,8 +75,8 @@ console.log('\nseparators cannot appear inside a value');
      conventional. */
   const packed = packBin(bin({}));
   const fieldCount = packed.split('-').length;
-  console.log(`  field count is stable                  ${fieldCount === 19 ? '19, correct' : fieldCount + ' — WRONG'}`);
-  if (fieldCount !== 19) bad++;
+  console.log(`  field count is stable                  ${fieldCount === 21 ? '21, correct' : fieldCount + ' — WRONG'}`);
+  if (fieldCount !== 21) bad++;
 
   /* A link written before the field existed. Nobody has one yet, but the reason to
      handle it is the same reason to append rather than insert: the day the format grows
@@ -86,7 +86,7 @@ console.log('\nseparators cannot appear inside a value');
   const short = packed.split('-').slice(0, 17).join('-');
   const old = unpackBin(short);
   const okOld = old.done === false && old.divRemovable === false &&
-                old.u === 1 && old.hUnits === 3;
+                old.lid === false && old.u === 1 && old.hUnits === 3;
   console.log(`  a link from before the field still reads ${okOld ? 'as unprinted' : 'WRONG: ' + JSON.stringify(old.done)}`);
   if (!okOld) bad++;
 
@@ -101,6 +101,14 @@ console.log('\nseparators cannot appear inside a value');
   const rem = unpackBin(packBin(bin({ divX: 1, divRemovable: true })));
   console.log(`  removable dividers survive the trip   ${rem.divRemovable === true ? 'intact' : 'LOST'}`);
   if (rem.divRemovable !== true) bad++;
+
+  /* A lid and, separately, WHICH sides its skirt sits on. A lid that came back with
+     four skirts when three were asked for would not fit the bin it was made for. */
+  const lid = unpackBin(packBin(bin({ lid: true, lidSides: { f: false, b: true, l: true, r: true } })));
+  const sidesOk = lid.lid === true && lid.lidSides.f === false &&
+                  lid.lidSides.b && lid.lidSides.l && lid.lidSides.r;
+  console.log(`  a lid and its chosen sides survive    ${sidesOk ? 'intact' : 'LOST: ' + JSON.stringify(lid.lidSides)}`);
+  if (!sidesOk) bad++;
 }
 
 /* A hash is in the address bar, so it gets hand-edited, truncated by a chat client and

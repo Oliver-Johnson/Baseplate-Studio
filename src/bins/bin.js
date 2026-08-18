@@ -770,6 +770,21 @@ function dividerPart(G, cfg, axis) {
  * from the straights, and a segment that tried to follow the arc would be a swept ring
  * again with none of the per-side freedom.
  */
+/* Which sides carry a skirt, packed into one number. All four by default — an absent
+   or unreadable field means every side, which is the shape someone gets if they tick
+   "lid" and change nothing. */
+const LID_SIDES = ['f', 'b', 'l', 'r'];
+function lidSideBits(sides) {
+  if (!sides) return 15;
+  return LID_SIDES.reduce((n, k, i) => n | (sides[k] === false ? 0 : 1 << i), 0);
+}
+function lidSidesFrom(n) {
+  const bits = isFinite(n) ? n : 15;
+  const out = {};
+  LID_SIDES.forEach((k, i) => { out[k] = !!(bits & (1 << i)); });
+  return out;
+}
+
 function lidPart(G, cfg) {
   const c = Object.assign({}, BIN_DEFAULTS, { lidT: 1.2, lidClr: 0.2, lidSkirt: 3.0,
                                               lidSides: null }, cfg);
@@ -1036,7 +1051,11 @@ function packBin(b) {
     /* `done` last, so a link written before it existed still reads: an absent field 17
        is undefined, and a bin nobody has marked is one nobody has printed. */
     .concat([b.scoop || 0, b.label || 0, maskBits(b) || 0, b.done ? 1 : 0,
-             b.divRemovable ? 1 : 0]);
+             b.divRemovable ? 1 : 0,
+             /* A lid, and which of its four sides carry a skirt, as a bitmask. One
+                field rather than four: the sides are only meaningful when there is a
+                lid, and the format is positional so every field costs every link. */
+             b.lid ? 1 : 0, lidSideBits(b.lidSides)]);
   for (const v of f)
     if (String(v).includes(SEP.field) || String(v).includes(SEP.bin) || String(v).includes(SEP.layer))
       throw new Error(`bin field ${v} contains a separator — packing would corrupt it`);
@@ -1061,7 +1080,8 @@ function unpackBin(t) {
            divX: numAt(p, 7, 0), divY: numAt(p, 8, 0), solid: !!p[9],
            edges, scoop: numAt(p, 14, 0), label: numAt(p, 15, 0),
            cells: bitsToCells(raw[16] && raw[16] !== '0' ? raw[16] : '', u, v),
-           done: !!p[17], divRemovable: !!p[18] };
+           done: !!p[17], divRemovable: !!p[18],
+           lid: !!p[19], lidSides: lidSidesFrom(p[20]) };
 }
 const packLayers = (layers) =>
   layers.map((L) => L.bins.map(packBin).join(SEP.bin)).join(SEP.layer);
@@ -1069,7 +1089,7 @@ const unpackLayers = (s) => (s || '').split(SEP.layer)
   .map((ls) => ({ bins: ls.split(SEP.bin).filter(Boolean).map(unpackBin) }));
 
 if (typeof module !== 'undefined') {
-  module.exports = { buildBin, dividerPart, lidPart, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
+  module.exports = { buildBin, dividerPart, lidPart, lidSideBits, lidSidesFrom, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
     lipHeight, REQUIRED_CORE,
     maskOf, maskCheck, isFullRect, cellKey, maskBits, bitsToCells,
     packBin, unpackBin, packLayers, unpackLayers };

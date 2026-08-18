@@ -702,6 +702,20 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
     </div>
     Clearance is per side. 0.25 slides; tighten it to 0.15 if your dividers rattle, loosen it if they bind.</div>
     <div class="hint" id="featureHint">A scoop fills the front inside corner with a curve so you can sweep contents out — try 8 mm. The label shelf juts in from the top of the back wall with a 45° underside, so it prints without support; 12 mm suits a printed label. Both need their wall to exist.</div>
+    <!-- A lid grips the bin's stacking lip, so it is only offered on a bin that still
+         has one — lowering any wall drops the lip from all four. -->
+    <div class="row" id="lidRow">
+      <label class="tog"><input id="lid" type="checkbox"> Lid for this bin</label>
+    </div>
+    <div class="hint" id="lidHint" style="display:none">A flat plate with a skirt that seats inside the bin&rsquo;s lip. Prints upside down, so the plate is the first layer and there are no feet to print — a fraction of the filament a bin costs. Untick a side to leave its skirt off, for an edge you want to reach past.
+      <div class="row" style="margin-top:6px">
+        <label class="tog"><input id="lidF" type="checkbox" checked> Front</label>
+        <label class="tog"><input id="lidB" type="checkbox" checked> Back</label>
+        <label class="tog"><input id="lidL" type="checkbox" checked> Left</label>
+        <label class="tog"><input id="lidR" type="checkbox" checked> Right</label>
+      </div>
+    </div>
+    <div class="hint" id="lidNoLip" style="display:none;color:var(--red)">This bin has a lowered wall, so it has no stacking lip for a lid to grip. Set every wall to full height to give it one.</div>
     <div class="hint" id="edgeHint">Front is the front of the drawer, matching the map. Corner posts stay full height and a lowered wall ramps up to meet them, so the side walls keep their ends — a wall that stopped square against the post snapped off there. The ramp is 8.5 mm at each end whatever the bin&rsquo;s footprint, so a wider bin keeps the same corner and gains a longer flat opening. Lowering any wall removes the stacking lip — nothing can sit on it.</div>
     <button class="ghost" id="presetTray" style="margin-top:8px">Make this a flat tray / lid</button>
     <label class="f"><b>Corner smoothness</b>
@@ -4056,6 +4070,21 @@ function dividerPart(G, cfg, axis) {
  * from the straights, and a segment that tried to follow the arc would be a swept ring
  * again with none of the per-side freedom.
  */
+/* Which sides carry a skirt, packed into one number. All four by default — an absent
+   or unreadable field means every side, which is the shape someone gets if they tick
+   "lid" and change nothing. */
+const LID_SIDES = ['f', 'b', 'l', 'r'];
+function lidSideBits(sides) {
+  if (!sides) return 15;
+  return LID_SIDES.reduce((n, k, i) => n | (sides[k] === false ? 0 : 1 << i), 0);
+}
+function lidSidesFrom(n) {
+  const bits = isFinite(n) ? n : 15;
+  const out = {};
+  LID_SIDES.forEach((k, i) => { out[k] = !!(bits & (1 << i)); });
+  return out;
+}
+
 function lidPart(G, cfg) {
   const c = Object.assign({}, BIN_DEFAULTS, { lidT: 1.2, lidClr: 0.2, lidSkirt: 3.0,
                                               lidSides: null }, cfg);
@@ -4322,7 +4351,11 @@ function packBin(b) {
     /* `done` last, so a link written before it existed still reads: an absent field 17
        is undefined, and a bin nobody has marked is one nobody has printed. */
     .concat([b.scoop || 0, b.label || 0, maskBits(b) || 0, b.done ? 1 : 0,
-             b.divRemovable ? 1 : 0]);
+             b.divRemovable ? 1 : 0,
+             /* A lid, and which of its four sides carry a skirt, as a bitmask. One
+                field rather than four: the sides are only meaningful when there is a
+                lid, and the format is positional so every field costs every link. */
+             b.lid ? 1 : 0, lidSideBits(b.lidSides)]);
   for (const v of f)
     if (String(v).includes(SEP.field) || String(v).includes(SEP.bin) || String(v).includes(SEP.layer))
       throw new Error(`bin field ${v} contains a separator — packing would corrupt it`);
@@ -4347,7 +4380,8 @@ function unpackBin(t) {
            divX: numAt(p, 7, 0), divY: numAt(p, 8, 0), solid: !!p[9],
            edges, scoop: numAt(p, 14, 0), label: numAt(p, 15, 0),
            cells: bitsToCells(raw[16] && raw[16] !== '0' ? raw[16] : '', u, v),
-           done: !!p[17], divRemovable: !!p[18] };
+           done: !!p[17], divRemovable: !!p[18],
+           lid: !!p[19], lidSides: lidSidesFrom(p[20]) };
 }
 const packLayers = (layers) =>
   layers.map((L) => L.bins.map(packBin).join(SEP.bin)).join(SEP.layer);
@@ -4355,7 +4389,7 @@ const unpackLayers = (s) => (s || '').split(SEP.layer)
   .map((ls) => ({ bins: ls.split(SEP.bin).filter(Boolean).map(unpackBin) }));
 
 if (typeof module !== 'undefined') {
-  module.exports = { buildBin, dividerPart, lidPart, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
+  module.exports = { buildBin, dividerPart, lidPart, lidSideBits, lidSidesFrom, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
     lipHeight, REQUIRED_CORE,
     maskOf, maskCheck, isFullRect, cellKey, maskBits, bitsToCells,
     packBin, unpackBin, packLayers, unpackLayers };
@@ -4664,6 +4698,9 @@ function readControls() {
     scoop: Math.max(0, num('scoop', 0)), label: Math.max(0, num('label', 0)),
     note: $('note').value.slice(0, 28),
     divRemovable: $('divRemovable').checked,
+    lid: $('lid').checked,
+    lidSides: { f: $('lidF').checked, b: $('lidB').checked,
+                l: $('lidL').checked, r: $('lidR').checked },
     edges: { f: parseFloat($('edgeF').value), b: parseFloat($('edgeB').value),
              l: parseFloat($('edgeL').value), r: parseFloat($('edgeR').value) },
   };
@@ -4682,6 +4719,12 @@ function readControls() {
   const anyDiv = t.divX > 0 || t.divY > 0;
   $('divRemovableRow').style.display = anyDiv ? '' : 'none';
   $('divRemovableHint').style.display = anyDiv && $('divRemovable').checked ? '' : 'none';
+  /* A lid needs a lip to grip, and a lowered wall takes the lip away. Say which it is
+     rather than hiding the control, or ticking it and getting nothing looks like a bug. */
+  const lipOk = EDGES.every((k) => !t.edges || !isFinite(t.edges[k]) || t.edges[k] >= 1);
+  $('lidRow').style.display = t.solid ? 'none' : '';
+  $('lidNoLip').style.display = !t.solid && !lipOk && $('lid').checked ? '' : 'none';
+  $('lidHint').style.display = !t.solid && lipOk && $('lid').checked ? '' : 'none';
   if (sel.length) {
     // size only applies to a single bin; several at once would have to overlap
     const b = B()[selected];
@@ -4757,6 +4800,9 @@ function writeControls(src) {
   $('scoop').value = src.scoop || 0; $('label').value = src.label || 0;
   $('done').checked = !!src.done;
   $('divRemovable').checked = !!src.divRemovable;
+  $('lid').checked = !!src.lid;
+  for (const [id, k] of [['lidF', 'f'], ['lidB', 'b'], ['lidL', 'l'], ['lidR', 'r']])
+    $(id).checked = !src.lidSides || src.lidSides[k] !== false;
   $('note').value = src.note || '';
   for (const [k, id] of [['f', 'edgeF'], ['b', 'edgeB'], ['l', 'edgeL'], ['r', 'edgeR']])
     $(id).value = String(src.edges && src.edges[k] !== undefined ? src.edges[k] : 1);
@@ -5460,6 +5506,29 @@ const typeLabel = (t) => `${t.b.u}×${t.b.v}×${t.b.hUnits}` +
  * carry to the printer is "six of these", not "two for that bin and four for this one".
  * Only bins with removable dividers contribute; a fixed divider is part of its bin.
  */
+/* The lids a layout needs, grouped by the part rather than by the bin: two bins of the
+   same footprint wanting the same skirt want the same lid, and what you carry to the
+   printer is "three of these".
+
+   A lid can only grip a bin that still HAS a lip, and lowering any wall drops the lip
+   from all four — so a bin with a lowered edge is skipped here rather than offered a lid
+   that could not attach. binHasLip is the same test buildBin uses to decide. */
+const binHasLip = (b) => !b.solid &&
+  EDGES.every((k) => !b.edges || b.edges[k] === undefined || b.edges[k] >= 1);
+const L_LID = (b) => lidPart(G, Object.assign({}, binCfg(b), { lidSides: b.lidSides }));
+function lidParts() {
+  const m = new Map();
+  for (const t of types()) {
+    if (!t.b.lid || !binHasLip(t.b)) continue;
+    const L = L_LID(t.b);
+    const key = `${t.b.u}x${t.b.v}:${L.meta.sides.join('')}`;
+    if (!m.has(key)) m.set(key, { key, b: t.b, meta: L.meta, qty: 0 });
+    m.get(key).qty += t.qty;
+  }
+  return [...m.values()].sort((a, b) => b.qty - a.qty);
+}
+const lidName = (d) => `lid-${d.b.u}x${d.b.v}-${d.meta.sides.join('')}`;
+
 function dividerParts() {
   const m = new Map();
   for (const t of types()) {
@@ -5581,6 +5650,9 @@ function computePlan() {
   })).concat(dividerParts().map((d) => ({
     key: 'div:' + d.key, b: null, qty: d.qty, divider: d,
     meta: d.meta, polys: () => B_DIV(d.b, d.axis).polys,
+  }))).concat(lidParts().map((d) => ({
+    key: 'lid:' + d.key, b: null, qty: d.qty,
+    meta: d.meta, polys: () => L_LID(d.b).polys,
   })));
   const items = parts.map((t) => ({
     id: t.key, w: t.meta.W, d: t.meta.D, h: t.meta.totalH, qty: t.qty, ids: [t.key],
@@ -5592,9 +5664,10 @@ function computePlan() {
    would be a small lie in the one place someone checks what they are about to print. */
 function countOf(placed) {
   const divs = placed.filter((p) => String(p.id).startsWith('div:')).length;
-  const bins = placed.length - divs;
-  return [bins ? plural(bins, 'bin') : '', divs ? plural(divs, 'divider') : '']
-    .filter(Boolean).join(' + ') || '0 bins';
+  const lids = placed.filter((p) => String(p.id).startsWith('lid:')).length;
+  const bins = placed.length - divs - lids;
+  return [bins ? plural(bins, 'bin') : '', divs ? plural(divs, 'divider') : '',
+          lids ? plural(lids, 'lid') : ''].filter(Boolean).join(' + ') || '0 bins';
 }
 function drawPlan() {
   computePlan();
@@ -6100,6 +6173,8 @@ async function downloadBinZip() {
      bin, and the ZIP is what someone downloads when they want the whole job. */
   for (const d of dividerParts())
     zip.file(dividerName(d) + '.stl', G.stlBinary(B_DIV(d.b, d.axis).polys, 'divider'));
+  for (const d of lidParts())
+    zip.file(lidName(d) + '.stl', G.stlBinary(L_LID(d.b).polys, 'lid'));
   zip.file('README.txt', layoutReadme());
   saveBlobAsync(await zip.generateAsync({ type: 'blob' }),
                 `drawerforge-bins-${grid().nx}x${grid().ny}.zip`);
@@ -6190,13 +6265,18 @@ function renderExport() {
        and it is what you want when a print fails, or when you are only doing one
        plate's worth this evening. */
     good.forEach(([pl], k) => exRow(`Plate ${k + 1}`,
-      `${plural(pl.placed.length, 'bin')} on a ${state.bedW} × ${state.bedD} mm bed · 3MF`, 'Download',
+      `${countOf(pl.placed)} on a ${state.bedW} × ${state.bedD} mm bed · 3MF`, 'Download',
       () => downloadPlate(k), { 'data-ex': 'plate' }));
   }
   if (ts.length) {
     exGroup('Meshes');
     exRow('Every bin type, with a README', `${plural(ts.length, 'STL file')} + README.txt · ZIP`,
           'Download', downloadBinZip, { 'data-ex': 'zip' });
+    for (const d of lidParts())
+      exRow(`Lid ${d.b.u}×${d.b.v}${d.meta.sides.length < 4 ? ` (${d.meta.sides.join('')} sides)` : ''} × ${d.qty}`,
+            `${d.meta.totalH.toFixed(1)} mm tall, prints upside down · STL`, 'STL',
+            () => saveBlob(G.stlBinary(L_LID(d.b).polys, 'lid'), lidName(d) + '.stl'),
+            { 'data-ex': 'lid' });
     for (const d of dividerParts())
       exRow(`Divider ${d.meta.span.toFixed(1)} × ${d.meta.tall.toFixed(1)} × ${d.meta.t} mm × ${d.qty}`,
             `slides into a ${d.meta.slot.toFixed(2)} mm slot · STL`, 'STL',
@@ -6377,9 +6457,11 @@ for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'bedW', '
                   'u', 'v', 'hUnits',
                   'wall', 'floorT', 'divX', 'divY', 'solid', 'arcSegs',
                   'edgeF', 'edgeB', 'edgeL', 'edgeR', 'scoop', 'label', 'note',
-                  'divRemovable', 'divT', 'divClr'])
+                  'divRemovable', 'divT', 'divClr',
+                  'lid', 'lidF', 'lidB', 'lidL', 'lidR'])
   $(id).addEventListener('input', schedule);
-for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR', 'divRemovable'])
+for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR', 'divRemovable',
+                  'lid', 'lidF', 'lidB', 'lidL', 'lidR'])
   $(id).addEventListener('change', schedule);
 $('presetTray').addEventListener('click', () => {
   for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR']) $(id).value = '0';
