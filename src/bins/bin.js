@@ -740,9 +740,14 @@ function dividerPart(G, cfg, axis) {
   const span = 2 * (axis === 'y' ? id : iw) - 2 * c.divClr;
   const tall = (H - floorZ) - c.divClr;
   const t = c.divT;
-  const rect = [[-span / 2, -t / 2], [span / 2, -t / 2], [span / 2, t / 2], [-span / 2, t / 2]];
-  return { polys: G.extrudePoly(rect, 0, tall),
-           meta: { span, tall, t, slot: t + 2 * c.divClr } };
+  /* Built LYING DOWN — span x tall on the bed, t thick — because that is how it prints
+     and how the plate packer has to place it. It was built standing up first, which
+     matched neither: a 1.6 mm wide tower is not a thing anyone prints, and the packer
+     rotates about z only, so it could never have been laid flat afterwards. */
+  const rect = [[-span / 2, -tall / 2], [span / 2, -tall / 2],
+                [span / 2, tall / 2], [-span / 2, tall / 2]];
+  return { polys: G.extrudePoly(rect, 0, t),
+           meta: { span, tall, t, slot: t + 2 * c.divClr, W: span, D: tall, totalH: t } };
 }
 
 function buildBin(G, cfg) {

@@ -1208,12 +1208,30 @@ let printPlan = null;
 function computePlan() {
   const ts = types();
   if (!ts.length) { printPlan = null; return; }
-  const items = ts.map((t) => {
-    const m = geomFor(t.b).meta;
-    return { id: t.key, w: m.W, d: m.D, h: m.totalH, qty: t.qty, ids: [t.key] };
-  });
+  /* Bins AND the loose divider plates. A plate of bins with no dividers on it is not
+     the job: you would print the whole drawer and then have to come back for the parts
+     that divide it. Both are just rectangles with a height as far as the packer is
+     concerned, so they go in the same list rather than getting a pass of their own. */
+  const parts = ts.map((t) => ({
+    key: t.key, b: t.b, qty: t.qty,
+    meta: geomFor(t.b).meta, polys: () => geomFor(t.b).polys,
+  })).concat(dividerParts().map((d) => ({
+    key: 'div:' + d.key, b: null, qty: d.qty, divider: d,
+    meta: d.meta, polys: () => B_DIV(d.b, d.axis).polys,
+  })));
+  const items = parts.map((t) => ({
+    id: t.key, w: t.meta.W, d: t.meta.D, h: t.meta.totalH, qty: t.qty, ids: [t.key],
+  }));
   printPlan = { plates: packPlates(items, state.bedW, state.bedD, state.gap,
-                                   { stack: false }), types: ts };
+                                   { stack: false }), types: parts };
+}
+/* Bins and divider plates are both on the plate now, so counting them all as "bins"
+   would be a small lie in the one place someone checks what they are about to print. */
+function countOf(placed) {
+  const divs = placed.filter((p) => String(p.id).startsWith('div:')).length;
+  const bins = placed.length - divs;
+  return [bins ? plural(bins, 'bin') : '', divs ? plural(divs, 'divider') : '']
+    .filter(Boolean).join(' + ') || '0 bins';
 }
 function drawPlan() {
   computePlan();
@@ -1257,13 +1275,12 @@ function drawPlan() {
     }
     svg += '</svg>';
     return `<div style="display:grid;gap:4px;justify-items:center">${svg}` +
-           `<div class="hint">plate ${i + 1} — ${plural(pl.placed.length, 'bin')}</div></div>`;
+           `<div class="hint">plate ${i + 1} — ${countOf(pl.placed)}</div></div>`;
   }).join('');
-  const total = good.reduce((a, p) => a + p.placed.length, 0);
   $('plateSummary').textContent =
     `${plural(good.length, 'plate')} on a ${state.bedW} × ${state.bedD} mm bed · ` +
-    `${plural(total, 'bin')} packed` +
-    (over.length ? ` · ${plural(over.length, 'bin')} TOO BIG for the bed` : '');
+    `${countOf(good.flatMap((p) => p.placed))} packed` +
+    (over.length ? ` · ${plural(over.length, 'part')} TOO BIG for the bed` : '');
 }
 
 /* ---------- three.js preview ---------------------------------------------- */
@@ -1673,7 +1690,7 @@ function platePolysAndItems(idx) {
     const t = printPlan.types.find((x) => x.key === p.id);
     if (!t) continue;
     // bins are modelled centred on the origin; packPlates gives a corner
-    objs.push({ name: p.id, polys: geomFor(t.b).polys,
+    objs.push({ name: p.id, polys: t.polys(),
                 tx: p.x + p.w / 2, ty: p.y + p.d / 2, tz: 0, rot: p.rot });
   }
   return objs;

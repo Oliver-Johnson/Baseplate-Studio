@@ -233,3 +233,62 @@ test('the removable flag survives a reload', async ({ page }) => {
   await settle(page);
   expect(await page.evaluate(() => B()[0].divRemovable)).toBe(true);
 });
+
+/* The last gap: dividers on the print plates.
+ *
+ * The plates were built from bin types only, so a layout with removable dividers gave
+ * you a plate of bins and nothing to divide them with — you would print the whole
+ * drawer and then have to come back for the parts that make it work. The plate is also
+ * what the 3MF carries, so a divider missing here is missing from the file people
+ * actually feed their slicer.
+ */
+test('divider plates are packed onto the print plates, and counted as dividers', async ({ page }) => {
+  await H.openBins(page);
+  await H.dragCells(page, [0, 0], [1, 1]);
+  await settle(page);
+  await H.clickCell(page, 0, 0);
+  await settle(page);
+  await page.fill('#divX', '2');
+  await settle(page);
+
+  await page.check('#divRemovable');
+  await page.waitForTimeout(1400);
+  const ids = await page.evaluate(() =>
+    printPlan.plates.flatMap((pl) => pl.placed.map((x) => String(x.id))));
+  expect(ids.filter((i) => i.startsWith('div:')).length,
+    'two dividers on the bin means two plates to print').toBe(2);
+
+  // and they are named as what they are, not counted in with the bins
+  await expect(page.locator('#plateSummary')).toContainText('2 dividers');
+  await expect(page.locator('#plateSummary')).toContainText('1 bin');
+
+  // turning it off takes them away again
+  await page.uncheck('#divRemovable');
+  await page.waitForTimeout(1400);
+  await expect(page.locator('#plateSummary')).not.toContainText('divider');
+});
+
+/* A plate is only useful if the 3MF carries the same parts the picture showed. */
+test('every part on a plate can be resolved back to a mesh', async ({ page }) => {
+  await H.openBins(page);
+  await H.dragCells(page, [0, 0], [1, 1]);
+  await settle(page);
+  await H.clickCell(page, 0, 0);
+  await settle(page);
+  await page.fill('#divX', '1');
+  await settle(page);
+  await page.check('#divRemovable');
+  await page.waitForTimeout(1400);
+
+  const unresolved = await page.evaluate(() => {
+    const out = [];
+    for (const pl of printPlan.plates)
+      for (const p of pl.placed) {
+        const t = printPlan.types.find((x) => x.key === p.id);
+        if (!t || !t.polys || !t.polys().length) out.push(String(p.id));
+      }
+    return out;
+  });
+  expect(unresolved, 'a placed part with no mesh would silently vanish from the 3MF')
+    .toEqual([]);
+});
