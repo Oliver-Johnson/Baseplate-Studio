@@ -104,10 +104,18 @@ test('the checks panel opens itself when something first goes wrong, and stays s
   });
 
 /* On a phone the first screen was Width, Depth, Height, Wall, Floor and Dividers — for
-   a bin nobody had placed — and the drawer map was 1600 px down the page. */
+   a bin nobody had placed — and the drawer map was 1600 px down the page.
+ *
+ * beforeEach has already loaded the page once, so this is the second arrival, and by
+ * then the 400 ms save debounce may or may not have written a layout for it to restore.
+ * Whichever way that lands changes the answer — the #restored banner is ~88 px of
+ * viewport — so without forgetSaved this case measured a different page from run to run
+ * and failed only under load, which reads as a broken suite. Arriving fresh is also the
+ * case the prose is about: a drawer nobody has touched. */
 test('the first screen is the drawer, not the settings for a bin nobody has placed',
   async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
+    await H.forgetSaved(page);
     await H.openBins(page);
 
     await expect(page.locator('#s-bin')).toHaveClass(/closed/);
