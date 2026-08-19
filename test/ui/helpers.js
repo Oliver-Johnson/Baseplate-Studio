@@ -41,6 +41,24 @@ async function openPlates(page) {
   return errors;
 }
 
+/* Both tools save the layout to localStorage behind a 400 ms debounce and, on a load
+   that finds one, show the #restored banner. A test that opens the page a second time
+   therefore gets one of two different pages depending on whether that timer beat the
+   navigation — which is a coin toss, and has already been flaky in on-screen.spec.js:
+   the banner is ~88 px tall and pushes the map down the phone viewport.
+
+   This makes the second arrival a genuinely fresh one. It clears the key before any
+   page script runs on EVERY subsequent navigation, rather than deleting it once and
+   hoping the outgoing page's timer does not fire in the gap. Opt-in on purpose:
+   persist.spec.js exists to drive the restore, so the helpers must not clear it for
+   everybody. */
+const SAVE_KEYS = ['drawerforge:bins:v1', 'drawerforge:plates:v1'];
+async function forgetSaved(page) {
+  await page.addInitScript((keys) => {
+    for (const k of keys) { try { localStorage.removeItem(k); } catch (err) { /* private mode */ } }
+  }, SAVE_KEYS);
+}
+
 /* Viewport coordinates of the centre of grid cell (gx, gy). Front of the drawer is
    the bottom of the map, so grid y counts up from there while SVG y counts down. */
 async function cellPoint(page, gx, gy) {
@@ -108,4 +126,4 @@ const setField = async (page, id, value) => {
 };
 
 module.exports = { openBins, openPlates, cellPoint, dragCells, clickCell, bins, setField,
-                   BINS_URL, PLATES_URL, CELL, ROOT };
+                   forgetSaved, SAVE_KEYS, BINS_URL, PLATES_URL, CELL, ROOT };

@@ -1053,6 +1053,10 @@ function initMap() {
       const x = Math.min(drag.x0, drag.x1), y = Math.min(drag.y0, drag.y1);
       const u = Math.abs(drag.x1 - drag.x0) + 1, v = Math.abs(drag.y1 - drag.y0) + 1;
       if (canPlace(x, y, u, v, -1)) {
+        /* Snapshot here rather than at pointerdown: a drag that ends across an
+           occupied cell places nothing, and an entry filed for it would make the
+           next Undo spend itself on a layout that never changed. */
+        pushUndo();
         B().push({ x, y, u, v, hUnits: state.hUnits, wall: state.wall,
                    floorT: state.floorT, divX: state.divX, divY: state.divY,
                    solid: state.solid, scoop: state.scoop, label: state.label,
