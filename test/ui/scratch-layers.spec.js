@@ -60,10 +60,13 @@ test('adding a layer from here clears a refusal that had no answer on this page'
   async ({ page }) => {
     await openBins(page);
     const g = await page.evaluate(() => { const q = grid(); return { nx: q.nx, ny: q.ny }; });
-    /* Layer 1 covered edge to edge by ONE bin. Full coverage is what makes adding a layer
-       the remedy: an upper layer needs level, continuous support (seat().flat and
-       .solidBelow), so a half-empty layer 1 refuses layer 2 just as firmly -- adding a
-       layer is not a universal answer, and this is the case where it genuinely is one. */
+    /* Layer 1 covered edge to edge by ONE bin, so a landing spot on layer 2 is certain
+       wherever the loose bin ends up. That is the only reason for full coverage here --
+       NOT that a partial layer would refuse the bin. Support is judged per bin: seat(b, k)
+       walks the new bin's own footprint and nothing else, so a mostly-empty layer below
+       takes a bin quite happily as long as the cells directly under it are covered on
+       every layer beneath and come out level. A footprint larger than the support under
+       it is what gets refused. */
     await dragCells(page, [0, 0], [g.nx - 1, g.ny - 1]);
     expect((await bins(page)).length).toBe(1);
 
